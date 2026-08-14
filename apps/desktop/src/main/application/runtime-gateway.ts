@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { existsSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import type {
   RuntimeEventObserver,
   RuntimePromptRequest,
@@ -8,6 +8,7 @@ import type {
   RuntimeStatus,
 } from '@telos/runtime-contracts'
 import { DshRuntimeAdapter } from '@telos/runtime-dsh'
+import { resolveDshSourceRoot } from './dsh-runtime-paths.js'
 
 interface RuntimePaths {
   sourceRoot: string
@@ -15,19 +16,6 @@ interface RuntimePaths {
   workspacePath: string
   sessionRoot: string
   carrierPath: string
-}
-
-function developmentRepositoryRoot(): string {
-  const configured = process.env.TELOS_REPOSITORY_ROOT
-  const candidates = [
-    configured,
-    resolve(app.getAppPath(), '../..'),
-    process.cwd(),
-  ].filter((candidate): candidate is string => candidate !== undefined && candidate.length > 0)
-
-  return candidates.find((candidate) => existsSync(join(candidate, 'third_party/deepseek-harness/package.json')))
-    ?? candidates[0]
-    ?? process.cwd()
 }
 
 function runtimePaths(): RuntimePaths {
@@ -42,10 +30,10 @@ function runtimePaths(): RuntimePaths {
     }
   }
 
-  const repositoryRoot = developmentRepositoryRoot()
+  const sourceRoot = resolveDshSourceRoot()
   return {
-    sourceRoot: join(repositoryRoot, 'third_party/deepseek-harness'),
-    profilePath: join(repositoryRoot, 'integrations/dsh/profiles/telos-default/cordis.yml'),
+    sourceRoot,
+    profilePath: join(sourceRoot, '../../integrations/dsh/profiles/telos-default/cordis.yml'),
     workspacePath: join(userData, 'runtime/dsh/workspace'),
     sessionRoot: join(userData, 'runtime/dsh/sessions'),
     carrierPath: join(userData, 'runtime/dsh/carrier'),

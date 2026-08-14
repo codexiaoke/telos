@@ -19,7 +19,8 @@ export interface DshWebSnapshot {
 export interface DshWebSupervisorOptions {
   sourceRoot: string
   dshHome: string
-  executablePath?: string
+  /** Standalone Node.js executable; Electron's embedded Node is not a supported DSH host. */
+  executablePath: string
   environment?: NodeJS.ProcessEnv
   startupTimeoutMs?: number
   shutdownTimeoutMs?: number
@@ -143,7 +144,7 @@ export class DshWebSupervisor {
     this.output.length = 0
 
     const child = spawn(
-      this.options.executablePath ?? process.execPath,
+      this.options.executablePath,
       [cliPath, 'web', '--port', '0'],
       {
         cwd: this.options.sourceRoot,
@@ -152,7 +153,6 @@ export class DshWebSupervisor {
           ...this.options.environment,
           DSH_HOME: this.options.dshHome,
           DSH_TELEMETRY_DISABLED: '1',
-          ELECTRON_RUN_AS_NODE: '1',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       },

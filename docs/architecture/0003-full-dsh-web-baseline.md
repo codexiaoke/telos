@@ -89,7 +89,9 @@ ADR 0002 and lives on an explicit fork branch with provenance.
 The Electron main process will own one DSH Web supervisor per application
 instance:
 
-1. Resolve development or packaged DSH source-built artifacts.
+1. Resolve development or packaged DSH source-built artifacts and a compatible
+   standalone Node.js runtime; release packages include that runtime and do not
+   depend on a system installation or Electron's embedded Node;
 2. Give DSH a TELOS-owned `DSH_HOME` under Electron application data.
 3. launch the built DSH CLI with loopback-only binding and an OS-assigned port;
 4. capture bounded stdout and stderr for diagnostics;

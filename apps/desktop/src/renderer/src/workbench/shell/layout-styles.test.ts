@@ -28,4 +28,11 @@ describe('TELOS_LAYOUT_CSS', () => {
     expect(TELOS_LAYOUT_CSS).toContain('visibility: hidden;')
     expect(TELOS_LAYOUT_CSS).toContain('.telos-sidebar-reopen')
   })
+
+  it('re-seats the workspace toolbar through its stable slot anchor', () => {
+    expect(TELOS_LAYOUT_CSS).toContain("[data-slot='sidebar.workspaces'] > div > div:first-child")
+    expect(TELOS_LAYOUT_CSS).toContain('-webkit-app-region: no-drag;')
+    expect(TELOS_LAYOUT_CSS).toMatch(/button:last-of-type\s*\{\s*display: none;/)
+    expect(TELOS_LAYOUT_CSS).toContain('div:first-of-type > button:last-of-type')
+  })
 })

@@ -38,6 +38,44 @@ export const TELOS_LAYOUT_CSS = `
   border-right: 1px solid var(--dsw-alias-border-l1);
 }
 
+/* ui-workspace keeps ownership of search, ordering and add-workspace behavior.
+   TELOS only re-seats its stable sidebar.workspaces header in the productive
+   desktop titlebar, alongside the sidebar fold control. */
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div > div:first-child {
+  position: absolute;
+  z-index: 6;
+  top: 12px;
+  right: 24px;
+  left: max(160px, calc(var(--telos-titlebar-left-safe, 88px) + 72px));
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  -webkit-app-region: no-drag;
+}
+
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div > div:first-child > span:first-child {
+  display: none;
+}
+
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div > div:first-child button,
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div > div:first-child input {
+  -webkit-app-region: no-drag;
+}
+
+/* Workspace selection already lives in the composer. Keep the WorkBuddy-like
+   fold/search/filter trio here and remove the duplicated Add Workspace entry. */
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div > div:first-child > div:nth-of-type(2) > button:last-of-type {
+  display: none;
+}
+
+/* In DSH's collapsed rail the workspace actions become the first div in the
+   section header. Hide the same duplicated action there without touching the
+   separate search control rendered below the header. */
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div > div:first-child > div:first-of-type > button:last-of-type {
+  display: none;
+}
+
 .telos-workbench-center {
   display: flex;
   flex-direction: column;

@@ -4,13 +4,15 @@
   "commit": "47f943859bef60e4160492346772ded9b24f765a",
   "source": "packages/client/ui-sidebar/lib/client.js",
   "sourceSha256": "7e5487b06251b6b82d2c6da3c2fc838a84eb7ed64daf2a372526275f27ce5ea6",
-  "generatedSha256": "647af7b63d482278456b3cfcd16fed49ad9252355f9b0dcc9468dad8af27c43e",
+  "generatedSha256": "f33928d1ae807787b3afed5fce763a5d823d408336f5ef0afdf4ae9da450c6e5",
   "transformations": [
     "replace module id",
+    "adopt compact WorkBuddy-style sidebar spacing",
     "add host-controlled expanded and collapsed sidebar top insets",
-    "turn the expanded logo row into a platform-aware draggable titlebar",
+    "turn the expanded logo row into a productive draggable titlebar",
     "keep sidebar titlebar controls interactive",
-    "replace expanded wordmark",
+    "replace the new-session card with a flat navigation row",
+    "replace the expanded wordmark button with product metadata",
     "replace collapsed mark"
   ]
 }

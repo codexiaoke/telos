@@ -33,7 +33,9 @@ describe('TELOS_DSH_THEME_CSS', () => {
       resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar/lib/client.js'),
       'utf8',
     )
-    expect(sidebarBundle).toContain('var(--telos-titlebar-left-safe,16px)')
+    expect(sidebarBundle).toContain('--dsh-sidebar-inline-padding:16px')
+    expect(sidebarBundle).toContain('height:82px')
+    expect(sidebarBundle).toContain('TELOS v0.1.0')
   })
 
   it('reserves only the top-right native caption rectangle on Windows', () => {

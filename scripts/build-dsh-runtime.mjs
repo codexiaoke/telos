@@ -27,5 +27,6 @@ run(['--config.verify-deps-before-run=false', 'rebuild', 'esbuild', 'node-pty', 
 run(['--config.verify-deps-before-run=false', 'run', 'build:lib:host'])
 
 accessSync(resolve(dshRoot, 'packages/sdk/client/lib/index.js'))
-accessSync(resolve(dshRoot, 'packages/examples/jsonrpc-demo/lib/packaged-bin.js'))
+accessSync(resolve(dshRoot, 'packages/examples/jsonrpc-demo/lib/bin.js'))
+accessSync(resolve(dshRoot, 'python/sdk-runtime/node_modules/@deepseek-ai/dsh-sdk-jsonrpc-server'))
 process.stdout.write('DSH source runtime is built and ready.\n')

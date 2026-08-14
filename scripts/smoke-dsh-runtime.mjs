@@ -21,6 +21,7 @@ const adapter = new DshRuntimeAdapter({
   profilePath: resolve(repositoryRoot, 'integrations/dsh/profiles/telos-default/cordis.yml'),
   workspacePath: resolve(smokeRoot, 'workspace'),
   sessionRoot: resolve(smokeRoot, 'sessions'),
+  carrierPath: resolve(smokeRoot, 'carrier'),
   route: { provider: 'deepseek-official', model: 'deepseek-v4-pro' },
   maxTokens: 512,
 })

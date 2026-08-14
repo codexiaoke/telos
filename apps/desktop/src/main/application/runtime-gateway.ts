@@ -14,6 +14,7 @@ interface RuntimePaths {
   profilePath: string
   workspacePath: string
   sessionRoot: string
+  carrierPath: string
 }
 
 function developmentRepositoryRoot(): string {
@@ -37,6 +38,7 @@ function runtimePaths(): RuntimePaths {
       profilePath: join(process.resourcesPath, 'dsh-profiles/telos-default/cordis.yml'),
       workspacePath: join(userData, 'runtime/dsh/workspace'),
       sessionRoot: join(userData, 'runtime/dsh/sessions'),
+      carrierPath: join(userData, 'runtime/dsh/carrier'),
     }
   }
 
@@ -46,6 +48,7 @@ function runtimePaths(): RuntimePaths {
     profilePath: join(repositoryRoot, 'integrations/dsh/profiles/telos-default/cordis.yml'),
     workspacePath: join(userData, 'runtime/dsh/workspace'),
     sessionRoot: join(userData, 'runtime/dsh/sessions'),
+    carrierPath: join(userData, 'runtime/dsh/carrier'),
   }
 }
 
@@ -73,7 +76,8 @@ export function createRuntimeGateway(): RuntimeGateway {
       }
       if (
         !existsSync(join(paths.sourceRoot, 'packages/sdk/client/lib/index.js'))
-        || !existsSync(join(paths.sourceRoot, 'packages/examples/jsonrpc-demo/lib/packaged-bin.js'))
+        || !existsSync(join(paths.sourceRoot, 'packages/examples/jsonrpc-demo/lib/bin.js'))
+        || !existsSync(join(paths.sourceRoot, 'python/sdk-runtime/node_modules'))
       ) {
         return {
           descriptor: runtime.descriptor,

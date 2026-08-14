@@ -28,7 +28,7 @@ The TELOS build wrapper restores the DSH workspace with lifecycle scripts disabl
 
 ## Runtime boundary
 
-The `@telos/runtime-dsh` adapter launches a DSH runtime built from the pinned source as a child process. It uses DSH's existing SDK client, JSON-RPC server, and newline-delimited stdio protocol instead of the DSH Web UI or internal Cordis services. The adapter loads the built SDK entry from the Submodule at runtime, so the TELOS workspace does not install DSH from the npm registry.
+The `@telos/runtime-dsh` adapter launches a DSH runtime built from the pinned source as a child process. It uses DSH's existing SDK client, JSON-RPC server, and newline-delimited stdio protocol instead of the DSH Web UI or internal Cordis services. The adapter loads the built SDK entry from the Submodule at runtime, so the TELOS workspace does not install DSH from the npm registry. In development it creates a TELOS-owned runtime carrier under local application data: the carrier copies the selected Profile and links DSH's source-installed SDK runtime dependency closure, allowing DSH's generic external-config launcher to resolve plugins without writing into the Submodule.
 
 The communication path is:
 

@@ -1,5 +1,5 @@
-import { access, mkdir } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { access, copyFile, lstat, mkdir, readlink, symlink } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type {
   AgentRuntime,
@@ -66,6 +66,7 @@ export interface DshRuntimeAdapterOptions {
   profilePath: string
   workspacePath: string
   sessionRoot: string
+  carrierPath: string
   nodeBinary?: string
   route?: RuntimeRoute
   maxTokens?: number
@@ -89,6 +90,33 @@ async function requireFile(path: string, label: string): Promise<void> {
   } catch {
     throw new Error(`${label} is missing at ${path}; run pnpm dsh:build from the TELOS repository root`)
   }
+}
+
+async function ensureDirectoryLink(linkPath: string, targetPath: string): Promise<void> {
+  try {
+    const stat = await lstat(linkPath)
+    if (!stat.isSymbolicLink()) {
+      throw new Error(`DSH runtime carrier path is not a symbolic link: ${linkPath}`)
+    }
+    const currentTarget = resolve(dirname(linkPath), await readlink(linkPath))
+    if (currentTarget !== resolve(targetPath)) {
+      throw new Error(`DSH runtime carrier points to ${currentTarget}, expected ${resolve(targetPath)}`)
+    }
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
+      await symlink(targetPath, linkPath, 'junction')
+      return
+    }
+    throw error
+  }
+}
+
+async function prepareRuntimeCarrier(carrierPath: string, profilePath: string, dependencyRoot: string): Promise<string> {
+  await mkdir(carrierPath, { recursive: true })
+  await ensureDirectoryLink(join(carrierPath, 'node_modules'), dependencyRoot)
+  const carriedProfile = join(carrierPath, 'cordis.yml')
+  await copyFile(profilePath, carriedProfile)
+  return carriedProfile
 }
 
 async function loadDshSdk(entryPath: string): Promise<DshSdkModule> {
@@ -123,30 +151,35 @@ export class DshRuntimeAdapter implements AgentRuntime {
 
     const sourceRoot = resolve(this.options.sourceRoot)
     const sdkEntry = join(sourceRoot, 'packages/sdk/client/lib/index.js')
-    const runtimeEntry = join(sourceRoot, 'packages/examples/jsonrpc-demo/lib/packaged-bin.js')
+    const runtimeEntry = join(sourceRoot, 'packages/examples/jsonrpc-demo/lib/bin.js')
+    const dependencyRoot = join(sourceRoot, 'python/sdk-runtime/node_modules')
     const profilePath = resolve(this.options.profilePath)
     const workspacePath = resolve(request.workspacePath ?? this.options.workspacePath)
     const sessionRoot = resolve(this.options.sessionRoot)
+    const carrierPath = resolve(this.options.carrierPath)
     let harness: DshHarnessInstance | undefined
 
     try {
       await Promise.all([
         requireFile(sdkEntry, 'Built DSH SDK client'),
         requireFile(runtimeEntry, 'Built DSH JSON-RPC runtime'),
+        requireFile(dependencyRoot, 'Installed DSH runtime dependency closure'),
         requireFile(profilePath, 'TELOS DSH profile'),
         mkdir(workspacePath, { recursive: true }),
         mkdir(sessionRoot, { recursive: true }),
       ])
 
+      const carriedProfile = await prepareRuntimeCarrier(carrierPath, profilePath, dependencyRoot)
+
       const sdk = await loadDshSdk(sdkEntry)
       harness = new sdk.DeepSeekHarness({
         launch: {
           command: this.options.nodeBinary ?? 'node',
-          args: [runtimeEntry, profilePath],
+          args: [runtimeEntry, carriedProfile],
           cwd: sourceRoot,
           env: {
             ...(this.options.environment ?? process.env),
-            DSH_CORDIS_CONFIG: profilePath,
+            DSH_CORDIS_CONFIG: carriedProfile,
             DSH_CWD: workspacePath,
             DSH_SESSION_ROOT: sessionRoot,
             DSH_SYSTEM_PROMPT:

@@ -1,6 +1,6 @@
 # ADR 0002: DeepSeek Harness source integration
 
-- Status: Accepted
+- Status: Partially superseded by ADR 0003
 - Date: 2026-08-14
 
 ## Context
@@ -27,6 +27,11 @@ The nested DSH repository keeps its own package manager version, lockfile, patch
 The TELOS build wrapper restores the DSH workspace with lifecycle scripts disabled, then explicitly rebuilds the native packages admitted by the pinned DSH workspace before running the Host library build. This avoids DSH's contributor-only Git-hook `postinstall`, which cannot safely configure worktree-local hooks from a Submodule, without modifying the DSH checkout or silently skipping runtime native dependencies.
 
 ## Runtime boundary
+
+> Supersession note: ADR 0003 makes the complete `dsh web` runtime the primary
+> interactive desktop path. The SDK/JSON-RPC adapter described below remains a
+> valid headless integration and compatibility experiment, but it is no longer
+> the path used to claim DSH Web feature parity.
 
 The `@telos/runtime-dsh` adapter launches a DSH runtime built from the pinned source as a child process. It uses DSH's existing SDK client, JSON-RPC server, and newline-delimited stdio protocol instead of the DSH Web UI or internal Cordis services. The adapter loads the built SDK entry from the Submodule at runtime, so the TELOS workspace does not install DSH from the npm registry. In development it creates a TELOS-owned runtime carrier under local application data: the carrier copies the selected Profile and links DSH's source-installed SDK runtime dependency closure, allowing DSH's generic external-config launcher to resolve plugins without writing into the Submodule.
 

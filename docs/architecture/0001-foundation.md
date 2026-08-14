@@ -1,6 +1,6 @@
 # ADR 0001: Runnable desktop foundation
 
-- Status: Accepted for the first milestone
+- Status: Partially superseded by ADR 0003
 - Date: 2026-08-14
 
 ## Decision
@@ -10,6 +10,12 @@ TELOS starts as a pnpm monorepo with an Electron desktop application and a React
 The initial application is a personal workspace, not a chat client. Its first visible shell has three resizable regions: conversations on the left, the current workspace in the center, and observable Agent activity on the right. Goals, projects, memory, knowledge, automations, and runs will enter this shell as product objects rather than being reduced to chat messages.
 
 The renderer uses React, TypeScript, React Aria Components, Tailwind CSS, Motion, Lucide icons, and `react-resizable-panels`. TELOS owns its components and design tokens; no DSH Web UI code is reused.
+
+> Supersession note: ADR 0003 replaces the last sentence for the DSH-first
+> milestone. TELOS now adopts the complete DSH Web application as its initial
+> functional baseline and changes presentation through out-of-tree overlays and
+> compatible client plugins. The Electron security boundary and the long-term
+> TELOS ownership boundaries in this ADR remain in force.
 
 ## Ownership boundaries
 

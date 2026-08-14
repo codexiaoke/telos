@@ -47,6 +47,8 @@ describe('DshWebSupervisor', () => {
       startupTimeoutMs: 2_000,
       shutdownTimeoutMs: 1_000,
     })
+    const states: string[] = []
+    const unsubscribe = supervisor.subscribe(snapshot => states.push(snapshot.state))
 
     const url = await supervisor.start()
     expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/)
@@ -54,6 +56,35 @@ describe('DshWebSupervisor', () => {
 
     await supervisor.stop()
     expect(supervisor.getSnapshot()).toMatchObject({ state: 'stopped' })
+    expect(states).toEqual(['idle', 'starting', 'ready', 'stopping', 'stopped'])
+    unsubscribe()
+  })
+
+  it('can restart a ready workbench as a fresh managed process', async () => {
+    const paths = fixture(`
+      const http = require('node:http')
+      const server = http.createServer((_request, response) => response.end('ready'))
+      server.listen(0, '127.0.0.1', () => {
+        const address = server.address()
+        process.stdout.write('dsh web: http://127.0.0.1:' + address.port + '\\n')
+      })
+      process.on('SIGTERM', () => server.close(() => process.exit(0)))
+    `)
+    const supervisor = new DshWebSupervisor({
+      ...paths,
+      executablePath: process.execPath,
+      startupTimeoutMs: 2_000,
+      shutdownTimeoutMs: 1_000,
+    })
+    const states: string[] = []
+    supervisor.subscribe(snapshot => states.push(snapshot.state))
+
+    await supervisor.start()
+    await supervisor.restart()
+
+    expect(states.filter(state => state === 'ready')).toHaveLength(2)
+    expect(states).toContain('stopping')
+    await supervisor.stop()
   })
 
   it('reports process output when startup exits early', async () => {

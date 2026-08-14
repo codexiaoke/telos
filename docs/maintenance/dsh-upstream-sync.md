@@ -12,7 +12,10 @@ Submodule.
 - The parent repository gitlink records the exact accepted DSH commit.
 - `third_party/deepseek-harness` must remain clean during ordinary TELOS work.
 - `integrations/dsh/plugins/telos-ui-sidebar/UPSTREAM.json` records the source
-  commit and hashes for the only current derived client component.
+  commit and hashes for the sidebar presentation derivative.
+- `integrations/dsh/plugins/telos-ui-layout/UPSTREAM.json` maps every
+  compatibility-bearing TELOS Renderer source file to the pinned upstream
+  `ui-layout` source and records source/generated hashes.
 - `integrations/dsh/plugins/telos-ui-sidebar/telos.web.patch.yml` is the exact
   plugin-roster delta consumed by Electron and the parity audit.
 - `THIRD_PARTY_NOTICES.md` records source and license provenance.
@@ -79,13 +82,18 @@ pnpm dsh:build
 ```
 
 The build compiles the complete DSH Host, client packages, CLI, and Web app,
-then regenerates the TELOS sidebar from the candidate DSH bundle. Its transforms
-use exact anchors and fail loudly when upstream presentation code moved. A
-failure is a required manual merge, not a reason to weaken or bypass the check.
+then regenerates the TELOS sidebar from the candidate DSH bundle and rebuilds
+the TELOS Renderer layout compatibility package. Sidebar transforms use exact
+anchors and fail loudly when upstream presentation code moved. Layout
+provenance checks fail whenever a mapped upstream or TELOS source changed
+without regeneration. A failure is a required manual merge, not a reason to
+weaken or bypass the check.
 
-Review the generated sidebar diff. Update `THIRD_PARTY_NOTICES.md` when the
-commit or upstream version changes. Do not hand-edit `UPSTREAM.json`; successful
-generation owns its commit and hashes.
+Review both generated bundles and their source mappings. Confirm that the
+layout bundle still externalizes React, `react/jsx-runtime`, and the DSH Client
+Runtime instead of shipping private copies. Update `THIRD_PARTY_NOTICES.md`
+when the commit or upstream version changes. Do not hand-edit `UPSTREAM.json`;
+successful generation owns its commit and hashes.
 
 ## 4. Prove composition and repository integrity
 
@@ -102,8 +110,12 @@ pnpm build
 The parity audit dynamically obtains the candidate commit's default Web
 composition from DSH itself. It verifies that TELOS retains every default row
 unchanged, except for disabling `ui-sidebar`, and adds only the enabled
-`telos-ui-sidebar` compatibility package. This avoids maintaining a stale,
-handwritten copy of DSH's roster.
+`telos-ui-sidebar` compatibility package. The `ui-layout` row deliberately
+keeps its upstream package name and graph edges; a separate resolution audit
+proves that `profiles/web/node_modules` selects the private TELOS Renderer
+derivative before DSH's shared upstream fallback. This avoids maintaining a
+stale, handwritten copy of DSH's roster while still auditing the invisible
+package substitution.
 
 Structural parity is necessary but not sufficient. Run DSH tests for every
 changed or adapted package and perform a full Electron smoke check:
@@ -114,7 +126,8 @@ changed or adapted package and perform a full Electron smoke check:
    their prerequisites are present.
 3. With a locally configured credential, create a real Web session, stream one
    answer, resume the session, and observe activity/tool state.
-4. Verify startup failure, reload, and graceful application shutdown behavior.
+4. Verify the local animated bootstrap, startup failure message, in-window
+   retry, reload, and graceful application shutdown behavior.
 
 Record unavailable paid/provider/platform checks as `NOT_RUN` or `BLOCKED`;
 never turn a structural audit, Mock, or documentation claim into production

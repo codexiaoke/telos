@@ -5,9 +5,13 @@ import type {
   RuntimeRunResult,
   RuntimeStatus,
 } from '@telos/runtime-contracts'
+import type { DshWebSnapshot } from '../shared/dsh-web.js'
 
 const CHANNELS = {
   appInfo: 'telos:system:get-app-info',
+  dshWebStatus: 'telos:dsh-web:get-status',
+  dshWebRetry: 'telos:dsh-web:retry',
+  dshWebState: 'telos:dsh-web:state',
   runtimeStatus: 'telos:runtime:get-status',
   runtimeRun: 'telos:runtime:run',
   runtimeEvent: 'telos:runtime:event',
@@ -22,6 +26,15 @@ export interface AppInfo {
 const api = {
   system: {
     getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke(CHANNELS.appInfo),
+  },
+  dshWeb: {
+    getStatus: (): Promise<DshWebSnapshot> => ipcRenderer.invoke(CHANNELS.dshWebStatus),
+    retry: (): Promise<void> => ipcRenderer.invoke(CHANNELS.dshWebRetry),
+    onStatus: (observer: (snapshot: DshWebSnapshot) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, snapshot: DshWebSnapshot): void => observer(snapshot)
+      ipcRenderer.on(CHANNELS.dshWebState, listener)
+      return () => ipcRenderer.removeListener(CHANNELS.dshWebState, listener)
+    },
   },
   runtime: {
     getStatus: (): Promise<RuntimeStatus> => ipcRenderer.invoke(CHANNELS.runtimeStatus),

@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { App } from './App'
+import { BootstrapApp } from './bootstrap/BootstrapApp'
 import './styles.css'
 
 const root = document.getElementById('root')
@@ -11,6 +11,6 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <BootstrapApp />
   </StrictMode>
 )

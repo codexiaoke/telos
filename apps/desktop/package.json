@@ -20,7 +20,6 @@
     "react": "19.2.8",
     "react-aria-components": "1.20.0",
     "react-dom": "19.2.8",
-    "react-resizable-panels": "4.12.2",
     "tailwind-merge": "3.6.0"
   },
   "devDependencies": {

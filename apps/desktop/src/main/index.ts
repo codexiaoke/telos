@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { DshWebSupervisor } from './application/dsh-web-supervisor.js'
 import { prepareTelosDshWebPatch } from './application/dsh-web-overlay.js'
@@ -10,6 +10,8 @@ import {
   resolveTelosDshSidebarPackageRoot,
 } from './application/dsh-runtime-paths.js'
 import { createRuntimeGateway } from './application/runtime-gateway.js'
+import { IPC_CHANNELS } from './ipc/channels.js'
+import { registerDshWebHandlers } from './ipc/register-dsh-web-handlers.js'
 import { registerRuntimeHandlers } from './ipc/register-runtime-handlers.js'
 import { registerSystemHandlers } from './ipc/register-system-handlers.js'
 import { installApplicationMenu } from './shell/application-menu.js'
@@ -22,6 +24,12 @@ let shutdownStarted = false
 
 function openMainWindow(): BrowserWindow {
   const window = createMainWindow()
+  const unsubscribe = dshWeb?.subscribe((snapshot) => {
+    if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.dshWebState, snapshot)
+    }
+  })
+  window.once('closed', () => unsubscribe?.())
   const readyUrl = dshWeb?.getSnapshot().url
   if (readyUrl !== undefined) {
     void loadDshWeb(window, readyUrl).catch((error: unknown) => {
@@ -48,6 +56,21 @@ app.whenReady().then(() => {
     executablePath: resolveDshNodeExecutable(),
     patchPaths: [telosPatch],
   })
+  registerDshWebHandlers({
+    getSnapshot: () => dshWeb?.getSnapshot() ?? {
+      state: 'idle',
+      recentOutput: [],
+    },
+    retry: async (sender) => {
+      const window = BrowserWindow.fromWebContents(sender)
+      if (window === null || window.isDestroyed() || dshWeb === undefined) {
+        throw new Error('TELOS startup window is no longer available')
+      }
+      const url = await dshWeb.restart()
+      if (!window.isDestroyed()) await loadDshWeb(window, url)
+    },
+  })
+
   const window = openMainWindow()
   void dshWeb.start().then(
     async (url) => {
@@ -55,9 +78,7 @@ app.whenReady().then(() => {
     },
     (error: unknown) => {
       if (shutdownStarted) return
-      const detail = error instanceof Error ? error.message : String(error)
       console.error('Failed to start the complete DSH Web runtime', error)
-      dialog.showErrorBox('TELOS 无法启动 DSH', detail)
     },
   )
 

@@ -30,7 +30,7 @@ pnpm dsh:build
 pnpm dev
 ```
 
-`pnpm dsh:build` installs the pinned DSH source tree with its frozen lockfile, builds its Host, client-plugin bundles, complete Web app, and the small TELOS sidebar overlay. It skips DSH's contributor-only Git hook installer because a Submodule shares Git metadata with TELOS, while explicitly rebuilding the reviewed native dependencies needed by the runtime. For development, put `DEEPSEEK_API_KEY` in the ignored `.env.local` until TELOS owns a credential store.
+`pnpm dsh:build` installs the pinned DSH source tree with its frozen lockfile, builds its Host, client-plugin bundles and complete Web app, then generates the TELOS Renderer layout compatibility package and sidebar presentation overlay. It skips DSH's contributor-only Git hook installer because a Submodule shares Git metadata with TELOS, while explicitly rebuilding the reviewed native dependencies needed by the runtime. For development, put `DEEPSEEK_API_KEY` in the ignored `.env.local` until TELOS owns a credential store.
 
 Build and validate:
 
@@ -43,18 +43,20 @@ pnpm build
 ```
 
 `pnpm dsh:verify` proves that the checked-out Submodule, parent gitlink,
-provenance hashes, copied license, and generated overlay agree, then compares
+provenance hashes, copied licenses, and generated derivatives agree, then compares
 the effective TELOS plugin composition with DSH's pinned default Web
 composition. The only accepted roster delta is the documented sidebar
-presentation replacement. `pnpm dsh:upstream` additionally performs a
+presentation replacement; an additional resolution check proves that the
+unchanged `ui-layout` identity resolves to TELOS Renderer source inside the Web
+Profile. `pnpm dsh:upstream` additionally performs a
 read-only check of the canonical upstream `master` branch; it never fetches or
 moves the Submodule pointer.
 
 ## Current scope
 
 - Electron-supervised, loopback-only complete DSH Web Runtime lifecycle
-- DSH's full default three-column workbench and plugin roster
-- TELOS native window title, light/dark design-token palette, and generated sidebar brand overlay
+- DSH's full default workbench occupants and plugin roster
+- TELOS-owned source-level three-column frame, animated startup/recovery page, native window title, light/dark tokens, and generated sidebar brand overlay
 - DeepSeek Harness source pinned as an isolated Git Submodule
 - TELOS Runtime Contract and source-built DSH SDK adapter retained as a secondary headless path
 - Real Web conversation, streaming answer, workspace, session, settings, tool, and activity surfaces

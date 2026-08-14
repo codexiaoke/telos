@@ -3,18 +3,10 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { Readable } from 'node:stream'
+import type { DshWebSnapshot } from '../../shared/dsh-web.js'
 
 const READY_LINE = /^dsh web: (http:\/\/127\.0\.0\.1:\d+)(?:\s|$)/
 const MAX_DIAGNOSTIC_LINES = 80
-
-export type DshWebState = 'idle' | 'starting' | 'ready' | 'stopping' | 'stopped' | 'failed'
-
-export interface DshWebSnapshot {
-  state: DshWebState
-  url?: string
-  detail?: string
-  recentOutput: readonly string[]
-}
 
 export interface DshWebSupervisorOptions {
   sourceRoot: string
@@ -58,13 +50,14 @@ async function probeLocalWeb(url: string, timeoutMs: number): Promise<void> {
 }
 
 export class DshWebSupervisor {
-  private state: DshWebState = 'idle'
+  private state: DshWebSnapshot['state'] = 'idle'
   private url: string | undefined
   private detail: string | undefined
   private readonly output: string[] = []
   private child: ManagedChild | undefined
   private startPromise: Promise<string> | undefined
   private stopPromise: Promise<void> | undefined
+  private readonly observers = new Set<(snapshot: DshWebSnapshot) => void>()
 
   constructor(private readonly options: DshWebSupervisorOptions) {}
 
@@ -75,6 +68,17 @@ export class DshWebSupervisor {
       ...(this.detail === undefined ? {} : { detail: this.detail }),
       recentOutput: [...this.output],
     }
+  }
+
+  /** Observe lifecycle transitions without coupling the supervisor to Electron. */
+  subscribe(observer: (snapshot: DshWebSnapshot) => void): () => void {
+    this.observers.add(observer)
+    try {
+      observer(this.getSnapshot())
+    } catch {
+      // Observer failures are isolated from the managed process lifecycle.
+    }
+    return () => this.observers.delete(observer)
   }
 
   async start(): Promise<string> {
@@ -97,10 +101,12 @@ export class DshWebSupervisor {
     if (child === undefined) {
       this.url = undefined
       if (this.state !== 'failed') this.state = 'stopped'
+      this.publish()
       return
     }
 
     this.state = 'stopping'
+    this.publish()
     this.stopPromise = new Promise<void>((resolve) => {
       let settled = false
       let forceTimer: NodeJS.Timeout | undefined
@@ -111,6 +117,7 @@ export class DshWebSupervisor {
         this.child = undefined
         this.url = undefined
         this.state = 'stopped'
+        this.publish()
         resolve()
       }
       child.once('exit', finish)
@@ -130,6 +137,12 @@ export class DshWebSupervisor {
     }
   }
 
+  /** Stop any surviving child and launch a fresh workbench instance. */
+  async restart(): Promise<string> {
+    await this.stop()
+    return this.start()
+  }
+
   private async launch(): Promise<string> {
     const cliPath = join(this.options.sourceRoot, 'apps/cli/lib/bin.js')
     const webIndex = join(this.options.sourceRoot, 'apps/web/dist/index.html')
@@ -143,6 +156,7 @@ export class DshWebSupervisor {
     this.url = undefined
     this.detail = undefined
     this.output.length = 0
+    this.publish()
 
     const child = spawn(
       this.options.executablePath,
@@ -190,6 +204,7 @@ export class DshWebSupervisor {
         this.state = 'ready'
         this.url = readyUrl
         this.detail = undefined
+        this.publish()
         resolve(readyUrl)
       }
 
@@ -251,5 +266,17 @@ export class DshWebSupervisor {
   private fail(detail: string): void {
     this.state = 'failed'
     this.detail = detail
+    this.publish()
+  }
+
+  private publish(): void {
+    const snapshot = this.getSnapshot()
+    for (const observer of this.observers) {
+      try {
+        observer(snapshot)
+      } catch {
+        // A presentation observer must never affect process supervision.
+      }
+    }
   }
 }

@@ -6,6 +6,7 @@ import type {
   RuntimeRunResult,
   RuntimeStatus,
 } from '@telos/runtime-contracts'
+import type { DshWebSnapshot } from '../../shared/dsh-web'
 
 interface TelosAppInfo {
   name: string
@@ -18,6 +19,11 @@ declare global {
     telos: {
       system: {
         getAppInfo: () => Promise<TelosAppInfo>
+      }
+      dshWeb: {
+        getStatus: () => Promise<DshWebSnapshot>
+        retry: () => Promise<void>
+        onStatus: (observer: (snapshot: DshWebSnapshot) => void) => () => void
       }
       runtime: {
         getStatus: () => Promise<RuntimeStatus>

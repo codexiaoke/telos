@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+:root {
+  color: #242524;
+  background: #f7f7f6;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --telos-surface: #ffffff;
+  --telos-sidebar: #f5f5f3;
+  --telos-panel: #fafaf9;
+  --telos-ink: #252625;
+  --telos-text-primary: #292a29;
+  --telos-text-secondary: #666966;
+  --telos-text-tertiary: #a0a29f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--telos-surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  color: #1e2824;
+  background: #dce8e1;
+}
+
+.window-drag {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.window-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+.resize-separator {
+  position: relative;
+  z-index: 20;
+  width: 1px;
+  background: rgb(0 0 0 / 7%);
+  outline: none;
+  transition: background-color 150ms ease;
+}
+
+.resize-separator > span {
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: 9px;
+  transform: translateX(-50%);
+}
+
+.resize-separator:hover,
+.resize-separator[data-separator="active"],
+.resize-separator:focus-visible {
+  background: rgb(35 87 63 / 42%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #eceeeb;
+    background: #181a19;
+    --telos-surface: #1d1f1e;
+    --telos-sidebar: #191b1a;
+    --telos-panel: #202321;
+    --telos-ink: #f1f3f0;
+    --telos-text-primary: #eceeeb;
+    --telos-text-secondary: #b0b4af;
+    --telos-text-tertiary: #777c78;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

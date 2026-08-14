@@ -1,0 +1,20 @@
+{
+  "name": "telos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local-first personal intelligence system with replaceable agent runtimes.",
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @telos/desktop dev",
+    "build": "pnpm --filter @telos/desktop build",
+    "typecheck": "pnpm --filter @telos/desktop typecheck",
+    "lint": "oxlint ."
+  },
+  "devDependencies": {
+    "oxlint": "1.78.0",
+    "typescript": "7.0.2"
+  }
+}

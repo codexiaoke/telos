@@ -332,9 +332,13 @@ var TELOS_LAYOUT_CSS = `
 .telos-workbench-center,
 .telos-workbench-details {
   position: relative;
-  z-index: 1;
   min-width: 0;
 }
+
+/* Keep the columns in the frame's shared stacking context. DSH mounts the
+   full-viewport Settings dialog as a fixed descendant of sidebar.settings;
+   a z-index here would trap that dialog below the later center/details
+   siblings even though the dialog itself owns z-index: 1000. */
 
 .telos-workbench-sidebar {
   overflow: hidden;

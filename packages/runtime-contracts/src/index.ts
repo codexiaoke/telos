@@ -27,6 +27,21 @@ export interface RuntimeRunRequest {
   route?: RuntimeRoute
 }
 
+export interface RuntimePromptRequest {
+  runId: string
+  conversationId: string
+  input: string
+  route?: RuntimeRoute
+}
+
+export type RuntimeAvailability = 'ready' | 'needs-build' | 'missing-credential' | 'unavailable'
+
+export interface RuntimeStatus {
+  descriptor: RuntimeDescriptor
+  availability: RuntimeAvailability
+  detail: string
+}
+
 export interface DshEventReference {
   runtime: 'dsh'
   eventType: string

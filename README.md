@@ -26,8 +26,11 @@ git submodule update --init --recursive
 
 ```bash
 pnpm install
+pnpm dsh:build
 pnpm dev
 ```
+
+`pnpm dsh:build` installs the pinned DSH source tree with its frozen lockfile and builds the SDK client plus headless JSON-RPC runtime. Launch TELOS with `DEEPSEEK_API_KEY` in its environment until the local credential store is implemented.
 
 Build and validate:
 
@@ -44,8 +47,10 @@ pnpm build
 - React Aria Components, Tailwind CSS, Motion, and TELOS design tokens
 - A lightweight TELOS Agent Orb for meaningful long-running status animation
 - DeepSeek Harness source pinned as an isolated Git Submodule
-- Architecture boundaries for Agent Runtimes and external connectors
+- TELOS Runtime Contract and source-built DSH adapter over stdio JSON-RPC
+- Streaming answer and normalized runtime activity in the desktop shell
+- Architecture boundaries for external connectors
 
-The DSH source is present for audited, reproducible integration, but it is not yet built, launched, or connected to the desktop shell. OpenCLI and OpenConnector remain planned integrations.
+The current DSH profile is intentionally executor-less: it performs model conversations but exposes no shell or filesystem tools until interactive approvals can cross the SDK protocol. OpenCLI and OpenConnector remain planned integrations.
 
 See the [desktop foundation](docs/architecture/0001-foundation.md) and [DSH source integration](docs/architecture/0002-dsh-source-integration.md) decisions for ownership, runtime, and upgrade boundaries.

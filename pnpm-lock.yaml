@@ -20,6 +20,12 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@telos/runtime-contracts':
+        specifier: workspace:*
+        version: link:../../packages/runtime-contracts
+      '@telos/runtime-dsh':
+        specifier: workspace:*
+        version: link:../../packages/runtime-dsh
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1

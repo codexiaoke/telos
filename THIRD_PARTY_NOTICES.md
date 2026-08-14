@@ -1,5 +1,14 @@
 # Third-party notices
 
+## DeepSeek Harness
+
+`third_party/deepseek-harness` is a Git Submodule of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), maintained through the [codexiaoke fork](https://github.com/codexiaoke/deepseek-harness).
+
+- Pinned source commit: `47f943859bef60e4160492346772ded9b24f765a`
+- Version at adoption: `0.1.0-rc.5`
+- License: MIT
+- License file: `third_party/deepseek-harness/LICENSE`
+
 ## thinking-orbs
 
 Portions of `apps/desktop/src/renderer/src/components/agent-orb/orbEngine.ts` are derived from the geometry and projection approach in [thinking-orbs](https://github.com/Jakubantalik/thinking-orbs) by Jakub Antalik.

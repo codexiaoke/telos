@@ -44,6 +44,12 @@ describe('TELOS_LAYOUT_CSS', () => {
     expect(TELOS_LAYOUT_CSS).toContain('@keyframes telos-search-dialog-in')
   })
 
+  it('hides optional content-search status messages inside the modal', () => {
+    expect(TELOS_LAYOUT_CSS).toMatch(
+      /div:nth-of-type\(2\) \[role='status'\]\s*\{\s*display: none;/,
+    )
+  })
+
   it('keeps a non-interactive session-list snapshot behind the search dialog', () => {
     expect(TELOS_LAYOUT_CSS).toContain('[data-telos-search-sidebar-snapshot]')
     expect(TELOS_LAYOUT_CSS).toContain('pointer-events: none;')

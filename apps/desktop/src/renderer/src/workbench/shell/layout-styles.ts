@@ -186,6 +186,15 @@ export const TELOS_LAYOUT_CSS = `
   border-radius: 10px;
 }
 
+/* Content search is an optional upstream enhancement. Keep its pending and
+   degraded-capability messages out of the product UI; DSH's regular empty
+   state remains visible when neither local names nor remote content match. */
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div:has(
+  > div:first-child > div:first-of-type button[aria-expanded='true']
+) > div:nth-of-type(2) [role='status'] {
+  display: none;
+}
+
 @keyframes telos-search-dialog-in {
   from {
     opacity: 0;

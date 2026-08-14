@@ -59,7 +59,7 @@ export function createRuntimeGateway(): RuntimeGateway {
         return {
           descriptor: runtime.descriptor,
           availability: 'unavailable',
-          detail: 'DSH 源码或 TELOS Profile 不存在。',
+          detail: 'DSH 源码或 Telos Profile 不存在。',
         }
       }
       if (

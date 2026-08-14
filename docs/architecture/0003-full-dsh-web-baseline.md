@@ -1,4 +1,4 @@
-# ADR 0003: Complete DSH Web baseline inside TELOS Desktop
+# ADR 0003: Complete DSH Web baseline inside Telos Desktop
 
 - Status: Accepted
 - Date: 2026-08-14
@@ -6,9 +6,9 @@
 
 ## Context
 
-TELOS must first provide the complete functionality of the pinned DeepSeek
+Telos must first provide the complete functionality of the pinned DeepSeek
 Harness Web application before it adds personal memory, knowledge, automation,
-or other TELOS-only domains. Reimplementing DSH sessions, projections, tools,
+or other Telos-only domains. Reimplementing DSH sessions, projections, tools,
 permissions, presets, questions, plans, jobs, subagents, and settings behind a
 new visual shell would duplicate a large system and make functional parity
 unprovable.
@@ -21,9 +21,9 @@ product baseline.
 
 ## Decision
 
-TELOS Desktop will supervise the complete source-built `dsh web` process and
+Telos Desktop will supervise the complete source-built `dsh web` process and
 load the application it serves in the Electron window. The DSH Submodule stays
-unmodified and pinned to an explicit commit. TELOS presentation changes live
+unmodified and pinned to an explicit commit. Telos presentation changes live
 outside the Submodule as patch overlays, compatible DSH client plugins, design
 tokens, and selectively replaced visual components.
 
@@ -35,13 +35,13 @@ Electron main process
   -> source-built `dsh web --port 0`
   -> DSH Host, API gateway, projections, storage, and agent presets
   -> DSH browser runtime and complete client plugin roster
-  -> TELOS-compatible theme, shell, and visual overrides
+  -> Telos-compatible theme, shell, and visual overrides
 ```
 
 The existing headless path remains available for future background use:
 
 ```text
-TELOS runtime contract -> @telos/runtime-dsh -> DSH SDK JSON-RPC child
+Telos runtime contract -> @telos/runtime-dsh -> DSH SDK JSON-RPC child
 ```
 
 The two paths must not be confused. Only the first establishes DSH Web feature
@@ -50,15 +50,15 @@ parity.
 ## Functional baseline
 
 “All DSH functionality” means every capability enabled by the default
-`dsh web` composition at the DSH commit pinned by TELOS. It does not mean:
+`dsh web` composition at the DSH commit pinned by Telos. It does not mean:
 
 - an experimental or default-disabled row;
 - a provider that is present in source but lacks required configuration;
 - a platform-specific capability unavailable on the current operating system;
-- a future upstream capability that has not passed the TELOS upgrade process.
+- a future upstream capability that has not passed the Telos upgrade process.
 
 The authoritative upstream roster is composed from the DSH Web profile and
-`packages/bundle/web-app/cordis.patch.yml`. TELOS must not maintain a handwritten
+`packages/bundle/web-app/cordis.patch.yml`. Telos must not maintain a handwritten
 replacement roster as its source of truth.
 
 ## Ownership boundaries
@@ -67,31 +67,31 @@ replacement roster as its source of truth.
 
 DSH continues to own its Host services, browser runtime, Remote contracts,
 session event model, projections, stores, controllers, tool protocol, and the
-default Web plugin roster. TELOS must reuse these implementations rather than
+default Web plugin roster. Telos must reuse these implementations rather than
 imitate them.
 
-### TELOS owns the desktop product and presentation
+### Telos owns the desktop product and presentation
 
-TELOS owns Electron lifecycle and security, branding, layout, design tokens,
-animation language, navigation framing, and later personal domains. A TELOS
+Telos owns Electron lifecycle and security, branding, layout, design tokens,
+animation language, navigation framing, and later personal domains. A Telos
 visual replacement must preserve the DSH slot, props, event, and Remote
 contracts consumed by the component it replaces.
 
 The first desktop overlay is deliberately narrow: Electron translates the
-native window-title suffix from `DeepSeek Harness` to `TELOS` and injects a
-light/dark TELOS palette through DSH's `--dsw-*` design-token surface. It does
+native window-title suffix from `DeepSeek Harness` to `Telos` and injects a
+light/dark Telos palette through DSH's `--dsw-*` design-token surface. It does
 not select DSH component class names, rewrite the DOM, or modify the Submodule.
 The persistent sidebar brand is a generated MIT-derived client plugin: a
 fail-loud build transform starts from the pinned DSH sidebar bundle, changes
 only its module identity, host-controlled titlebar inset, and two brand marks,
-and a TELOS-owned `--patch` disables the upstream sidebar row before inserting
+and a Telos-owned `--patch` disables the upstream sidebar row before inserting
 that compatible replacement.
 If an upstream update removes a token we use, the sync audit must report that
 drift before the DSH pointer is advanced.
 
 ### The Submodule is read-only product input
 
-Normal TELOS development does not edit
+Normal Telos development does not edit
 `third_party/deepseek-harness`. A generic correction should be contributed to
 DSH through its own repository. An unavoidable temporary source patch follows
 ADR 0002 and lives on an explicit fork branch with provenance.
@@ -104,7 +104,7 @@ instance:
 1. Resolve development or packaged DSH source-built artifacts and a compatible
    standalone Node.js runtime; release packages include that runtime and do not
    depend on a system installation or Electron's embedded Node;
-2. Give DSH a TELOS-owned `DSH_HOME` under Electron application data.
+2. Give DSH a Telos-owned `DSH_HOME` under Electron application data.
 3. launch the built DSH CLI with loopback-only binding and an OS-assigned port;
 4. capture bounded stdout and stderr for diagnostics;
 5. treat the upstream `dsh web: http://127.0.0.1:<port>` line as the first
@@ -121,19 +121,19 @@ trusted local application page.
 ## Presentation migration
 
 ADR 0004 extends this migration by making `apps/desktop/src/renderer` the
-source of TELOS-compatible Client Plugin components. The DSH Web bootstrap and
+source of Telos-compatible Client Plugin components. The DSH Web bootstrap and
 client runtime remain the functional assembly path while root presentation is
-replaced from TELOS-owned source.
+replaced from Telos-owned source.
 
 Presentation changes proceed from lowest risk to highest risk:
 
 1. Run the untouched DSH Web application in Electron as the reference mode.
-2. Add TELOS branding, fonts, colors, spacing, and motion tokens.
+2. Add Telos branding, fonts, colors, spacing, and motion tokens.
 3. Replace the application frame, sidebar, and activity-panel presentation
    while retaining DSH slot composition and state.
 4. Adapt conversation visuals without replacing DSH session projections,
    controller logic, tool nodes, approvals, questions, or streaming semantics.
-5. Add TELOS-only client and host plugins after the parity baseline is stable.
+5. Add Telos-only client and host plugins after the parity baseline is stable.
 
 Copying an upstream component is allowed only when its provenance and contract
 are recorded. Copying the entire DSH Web source into a second unmanaged tree is
@@ -141,14 +141,14 @@ not allowed.
 
 ## Feature-parity gates
 
-A TELOS version may claim parity with its pinned DSH commit only when all of the
+A Telos version may claim parity with its pinned DSH commit only when all of the
 following pass:
 
 - the source-built default DSH Web composition starts inside Electron;
 - the effective enabled plugin roster has no unexplained removal from the
   pinned upstream roster;
 - DSH Web tests relevant to every adapted client package pass;
-- TELOS desktop tests cover supervisor readiness, failure, and shutdown;
+- Telos desktop tests cover supervisor readiness, failure, and shutdown;
 - a real local smoke test creates a session, streams one answer, resumes it,
   and observes the activity/tool surface;
 - settings, workspace selection, model selection, permission flow, questions,
@@ -157,7 +157,7 @@ following pass:
 - no credential is committed and no upstream source file is modified.
 
 The untouched DSH Web application remains a runnable reference mode until the
-TELOS visual migration has an automated parity suite.
+Telos visual migration has an automated parity suite.
 
 ## Upstream synchronization
 
@@ -180,16 +180,16 @@ plugin. Contract changes and plugin roster changes are mandatory review items.
 An upgrade is made on an isolated branch and commit. It advances the Submodule
 pointer, updates compatibility code and provenance records, runs the parity
 gates, and only then becomes the new baseline. A DSH upgrade must not be mixed
-with unrelated TELOS features.
+with unrelated Telos features.
 
 The executable controls are:
 
 - `pnpm dsh:audit` verifies the parent gitlink, clean Submodule, source remotes,
   pinned notice, license, provenance commit, and source/generated hashes;
 - `pnpm dsh:parity` asks the pinned DSH CLI for both the default and
-  TELOS-patched effective Web configurations and structurally verifies that all
+  Telos-patched effective Web configurations and structurally verifies that all
   upstream rows are unchanged except the disabled presentation sidebar, with
-  exactly one compatible TELOS sidebar inserted;
+  exactly one compatible Telos sidebar inserted;
 - `pnpm dsh:upstream` performs the same local audit plus a read-only comparison
   with canonical upstream `master`; it reports an available update without
   fetching it or changing the gitlink.
@@ -203,7 +203,7 @@ The complete procedure and acceptance evidence are defined in
 
 - this ADR is accepted;
 - the DSH source commit remains pinned and clean;
-- the TELOS build produces the full DSH host, client, and Web artifacts.
+- the Telos build produces the full DSH host, client, and Web artifacts.
 
 ### Phase 2: supervised full Web runtime
 
@@ -214,30 +214,30 @@ The complete procedure and acceptance evidence are defined in
 ### Phase 3: functional parity proof
 
 - the default plugin roster is captured from the effective composition;
-- DSH Web and TELOS smoke tests pass;
+- DSH Web and Telos smoke tests pass;
 - one real configured-model conversation passes through the full Web UI.
 
-### Phase 4: TELOS presentation
+### Phase 4: Telos presentation
 
 - design tokens and motion replace DSH branding;
-- the three-column TELOS frame is delivered through compatible UI overrides;
+- the three-column Telos frame is delivered through compatible UI overrides;
 - the parity gates show no functional regression.
 
 ## Deferred work
 
-Personal memory, graph storage, personal knowledge, long-running TELOS goals,
+Personal memory, graph storage, personal knowledge, long-running Telos goals,
 OpenCLI, OpenConnector, additional model orchestration, and new Planes are not
 part of this milestone. Their later Cordis plugins must be additive to this
 baseline.
 
 ## Consequences
 
-- TELOS gains DSH functionality immediately instead of rebuilding it feature by
+- Telos gains DSH functionality immediately instead of rebuilding it feature by
   feature.
 - The full DSH build and Web test surface becomes part of desktop delivery.
 - UI work must respect DSH client contracts, which constrains arbitrary rewrites
   but preserves behavior.
 - DSH updates remain explicit and reviewable, while untouched upstream code can
   advance through a Submodule pointer update.
-- TELOS-specific domains remain separable from a fast-moving runtime and Web
+- Telos-specific domains remain separable from a fast-moving runtime and Web
   implementation.

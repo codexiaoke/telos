@@ -68,7 +68,7 @@ const result = await build({
 })
 
 if (result.outputFiles.length !== 1 || result.outputFiles[0]?.text === undefined) {
-  throw new Error(`TELOS layout build expected one JavaScript output, found ${String(result.outputFiles.length)}`)
+  throw new Error(`Telos layout build expected one JavaScript output, found ${String(result.outputFiles.length)}`)
 }
 
 const compiled = result.outputFiles[0].text
@@ -80,15 +80,15 @@ const allowedModules = new Set([
 ])
 const unexpectedModules = [...new Set(requiredModules.filter(moduleId => !allowedModules.has(moduleId)))]
 if (unexpectedModules.length > 0) {
-  throw new Error(`TELOS layout bundle has unsupported module-table dependencies: ${unexpectedModules.join(', ')}`)
+  throw new Error(`Telos layout bundle has unsupported module-table dependencies: ${unexpectedModules.join(', ')}`)
 }
 for (const required of allowedModules) {
   if (!requiredModules.includes(required)) {
-    throw new Error(`TELOS layout bundle does not externalize required module ${required}`)
+    throw new Error(`Telos layout bundle does not externalize required module ${required}`)
   }
 }
 if (compiled.includes('react.production.min') || compiled.includes('react.development.js')) {
-  throw new Error('TELOS layout bundle contains a private React copy')
+  throw new Error('Telos layout bundle contains a private React copy')
 }
 
 const generated = [
@@ -135,4 +135,4 @@ const provenance = {
   preservedLayoutService: ['toggleSidebar', 'openDetails', 'closeDetails'],
 }
 writeFileSync(resolve(targetRoot, 'UPSTREAM.json'), `${JSON.stringify(provenance, null, 2)}\n`)
-process.stdout.write(`Built TELOS Renderer layout compatibility bundle from ${commit}.\n`)
+process.stdout.write(`Built Telos Renderer layout compatibility bundle from ${commit}.\n`)

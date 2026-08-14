@@ -12,7 +12,7 @@ export interface TelosDshWebOverlaySources {
   layoutPackageRoot: string
 }
 
-/** Read the tracked DSH patch that defines TELOS's complete allowed roster delta. */
+/** Read the tracked DSH patch that defines Telos's complete allowed roster delta. */
 export function loadTelosDshWebPatch(sources: TelosDshWebOverlaySources): string {
   return readFileSync(join(sources.sidebarPackageRoot, PATCH_TEMPLATE_FILENAME), 'utf8')
 }
@@ -25,16 +25,16 @@ function installProfilePackage(
   const packageManifest = join(sourceRoot, 'package.json')
   const clientBundle = join(sourceRoot, 'lib/client.js')
   if (!existsSync(packageManifest) || !existsSync(clientBundle)) {
-    throw new Error(`TELOS DSH package ${expectedPackageName} is missing; run pnpm dsh:build`)
+    throw new Error(`Telos DSH package ${expectedPackageName} is missing; run pnpm dsh:build`)
   }
   const manifest = JSON.parse(readFileSync(packageManifest, 'utf8')) as { name?: unknown; private?: unknown }
   if (manifest.name !== expectedPackageName || manifest.private !== true) {
-    throw new Error(`TELOS DSH package must be private and named ${expectedPackageName}`)
+    throw new Error(`Telos DSH package must be private and named ${expectedPackageName}`)
   }
 
   // The flat profiles/node_modules directory is healed by DSH and reserves
   // upstream package symlinks. Profile-specific node_modules precedes it in
-  // Node resolution and is the supported seat for TELOS compatibility input.
+  // Node resolution and is the supported seat for Telos compatibility input.
   const installedPackageRoot = join(
     dshHome,
     'profiles',
@@ -62,18 +62,18 @@ function removeLegacyFlatPackage(dshHome: string, expectedPackageName: string): 
   const owned = manifest.name === expectedPackageName
     && manifest.private === true
     && (expectedPackageName.startsWith('@telos/') || manifest.telos?.compatibilityDerivative === true)
-  if (!owned) throw new Error(`Refusing to remove non-TELOS DSH profile package at ${legacyRoot}`)
+  if (!owned) throw new Error(`Refusing to remove non-Telos DSH profile package at ${legacyRoot}`)
   rmSync(legacyRoot, { recursive: true, force: true })
 }
 
-/** Materialize TELOS packages and the absolute patch in application data. */
+/** Materialize Telos packages and the absolute patch in application data. */
 export function prepareTelosDshWebPatch(
   dshHome: string,
   sources: TelosDshWebOverlaySources,
 ): string {
   const patchTemplate = join(sources.sidebarPackageRoot, PATCH_TEMPLATE_FILENAME)
   if (!existsSync(patchTemplate)) {
-    throw new Error('TELOS DSH sidebar overlay is missing; run pnpm dsh:build')
+    throw new Error('Telos DSH sidebar overlay is missing; run pnpm dsh:build')
   }
 
   removeLegacyFlatPackage(dshHome, TELOS_SIDEBAR_PACKAGE)

@@ -11,7 +11,7 @@ describe('TELOS_LAYOUT_CSS', () => {
     expect(columnRule?.groups?.body).not.toContain('z-index')
   })
 
-  it('keeps TELOS shell overlays above the column content', () => {
+  it('keeps Telos shell overlays above the column content', () => {
     expect(TELOS_LAYOUT_CSS).toMatch(
       /\.telos-workbench-overlay\s*\{[^}]*z-index:\s*20;/,
     )

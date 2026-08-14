@@ -21,7 +21,7 @@ export function describeUpdate(snapshot: UpdateSnapshot): string {
     case 'idle': return '尚未检查更新'
     case 'checking': return '正在检查更新…'
     case 'available': return `发现新版本 ${snapshot.version ?? ''}`.trim()
-    case 'not-available': return 'TELOS 已是最新版本'
+    case 'not-available': return 'Telos 已是最新版本'
     case 'downloading': return `正在下载更新 ${Math.round(snapshot.progressPercent ?? 0)}%`
     case 'downloaded': return `版本 ${snapshot.version ?? ''} 已准备安装`.trim()
     case 'error': return '更新检查失败'
@@ -42,12 +42,12 @@ function createTrayIcon(): Electron.NativeImage {
 
 export function createApplicationTray(actions: ApplicationTrayActions): ApplicationTrayHandle {
   const tray = new Tray(createTrayIcon())
-  tray.setToolTip('TELOS')
+  tray.setToolTip('Telos')
 
   const rebuildMenu = (): void => {
     const update = actions.getUpdateSnapshot()
     const template: MenuItemConstructorOptions[] = [
-      { label: '打开 TELOS', click: actions.showMainWindow },
+      { label: '打开 Telos', click: actions.showMainWindow },
       { type: 'separator' },
       { label: describeUpdate(update), enabled: false },
       {
@@ -62,7 +62,7 @@ export function createApplicationTray(actions: ApplicationTrayActions): Applicat
         ? [{ label: '重启并安装更新', click: actions.installUpdate } satisfies MenuItemConstructorOptions]
         : []),
       { type: 'separator' },
-      { label: '退出 TELOS', click: actions.quit },
+      { label: '退出 Telos', click: actions.quit },
     ]
     tray.setContextMenu(Menu.buildFromTemplate(template))
   }

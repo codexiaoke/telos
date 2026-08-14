@@ -71,7 +71,7 @@ try {
   const defaultRows = parseRows(dumpConfig(['--dump-default-config']), 'default DSH Web config')
   const effectiveRows = parseRows(
     dumpConfig(['--patch', patchPath, '--dump-config']),
-    'TELOS effective DSH Web config',
+    'Telos effective DSH Web config',
   )
   const defaultById = mapRows(defaultRows)
   const effectiveById = mapRows(effectiveRows)
@@ -124,13 +124,13 @@ try {
   ]
   for (const id of requiredSurfaceIds) {
     assert(defaultById.has(id), `pinned DSH default Web config is missing required surface ${id}`)
-    assert(effectiveById.has(id), `TELOS effective Web config removed required surface ${id}`)
+    assert(effectiveById.has(id), `Telos effective Web config removed required surface ${id}`)
   }
 
   const upstreamSidebar = defaultById.get('ui-sidebar')
   const effectiveSidebar = effectiveById.get('ui-sidebar')
   assert(upstreamSidebar !== undefined, 'default DSH Web config has no ui-sidebar row')
-  assert(effectiveSidebar !== undefined, 'TELOS effective config has no ui-sidebar row')
+  assert(effectiveSidebar !== undefined, 'Telos effective config has no ui-sidebar row')
   assert(
     isDeepStrictEqual(effectiveSidebar, { ...upstreamSidebar, disabled: true }),
     'the upstream ui-sidebar row changed beyond the declared disabled flag',
@@ -138,10 +138,10 @@ try {
 
   for (const row of defaultRows) {
     if (row.id === 'ui-sidebar') continue
-    assert(effectiveById.has(row.id), `TELOS effective config removed ${row.id}`)
+    assert(effectiveById.has(row.id), `Telos effective config removed ${row.id}`)
     assert(
       isDeepStrictEqual(effectiveById.get(row.id), row),
-      `TELOS effective config unexpectedly changed ${row.id}`,
+      `Telos effective config unexpectedly changed ${row.id}`,
     )
   }
 
@@ -150,11 +150,11 @@ try {
     .filter((id) => !defaultById.has(id))
   assert(
     isDeepStrictEqual(addedIds, ['telos-ui-sidebar']),
-    `unexpected TELOS-only rows: ${addedIds.join(', ')}`,
+    `unexpected Telos-only rows: ${addedIds.join(', ')}`,
   )
   const telosSidebar = effectiveById.get('telos-ui-sidebar')
-  assert(telosSidebar.name === '@telos/dsh-client-ui-sidebar', 'TELOS sidebar package name changed')
-  assert(telosSidebar.disabled !== true, 'TELOS sidebar replacement is disabled')
+  assert(telosSidebar.name === '@telos/dsh-client-ui-sidebar', 'Telos sidebar package name changed')
+  assert(telosSidebar.disabled !== true, 'Telos sidebar replacement is disabled')
   assert(
     effectiveRows.length === defaultRows.length + 1,
     `expected ${String(defaultRows.length + 1)} effective rows, found ${String(effectiveRows.length)}`,
@@ -167,10 +167,10 @@ try {
   process.stdout.write(`[PASS] DSH default Web rows: ${String(defaultRows.length)}\n`)
   process.stdout.write(`[PASS] Unchanged upstream rows: ${String(defaultRows.length - 1)}\n`)
   process.stdout.write('[PASS] Explained upstream delta: ui-sidebar disabled\n')
-  process.stdout.write('[PASS] Explained TELOS addition: telos-ui-sidebar enabled\n')
-  process.stdout.write('[PASS] ui-layout identity preserved; Profile resolves the TELOS Renderer derivative\n')
+  process.stdout.write('[PASS] Explained Telos addition: telos-ui-sidebar enabled\n')
+  process.stdout.write('[PASS] ui-layout identity preserved; Profile resolves the Telos Renderer derivative\n')
   process.stdout.write(`[PASS] Required functional surfaces: ${String(requiredSurfaceIds.length)}\n`)
-  process.stdout.write('TELOS effective DSH Web composition is structurally equivalent to the pinned default.\n')
+  process.stdout.write('Telos effective DSH Web composition is structurally equivalent to the pinned default.\n')
 } finally {
   rmSync(temporaryRoot, { recursive: true, force: true })
 }

@@ -152,12 +152,12 @@ window.__ModuleLoader__.load({
 						className: SidebarRoot_module_css_default.logoRow,
 						children: [wide && (0, react_jsx_runtime.jsx)("div", {
 							className: clsx(SidebarRoot_module_css_default.brand, SidebarRoot_module_css_default.wide),
-							"aria-label": "TELOS v0.1.0",
+							"aria-label": "Telos v0.1.0",
 							children: (0, react_jsx_runtime.jsxs)("span", {
 								style: { display: "inline-flex", alignItems: "baseline", gap: "6px" },
 								children: [(0, react_jsx_runtime.jsx)("span", {
 									style: { fontSize: "16px", lineHeight: "22px", fontWeight: 650, letterSpacing: "-0.01em" },
-									children: "TELOS"
+									children: "Telos"
 								}), (0, react_jsx_runtime.jsx)("span", {
 									style: { fontSize: "13px", lineHeight: "18px", fontWeight: 450 },
 									children: "v0.1.0"

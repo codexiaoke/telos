@@ -1,33 +1,33 @@
 # DSH upstream synchronization runbook
 
-TELOS treats DeepSeek Harness as pinned product source, not as a floating npm
+Telos treats DeepSeek Harness as pinned product source, not as a floating npm
 dependency. An upstream update is therefore an explicit product-baseline
 change. This runbook preserves the complete DSH Web feature set while keeping
-TELOS presentation and future personal-intelligence domains outside the
+Telos presentation and future personal-intelligence domains outside the
 Submodule.
 
 ## What is authoritative
 
-- `.gitmodules` records the TELOS fork used to clone the Submodule.
+- `.gitmodules` records the Telos fork used to clone the Submodule.
 - The parent repository gitlink records the exact accepted DSH commit.
-- `third_party/deepseek-harness` must remain clean during ordinary TELOS work.
+- `third_party/deepseek-harness` must remain clean during ordinary Telos work.
 - `integrations/dsh/plugins/telos-ui-sidebar/UPSTREAM.json` records the source
   commit and hashes for the sidebar presentation derivative.
 - `integrations/dsh/plugins/telos-ui-layout/UPSTREAM.json` maps every
-  compatibility-bearing TELOS Renderer source file to the pinned upstream
+  compatibility-bearing Telos Renderer source file to the pinned upstream
   `ui-layout` source and records source/generated hashes.
 - `integrations/dsh/plugins/telos-ui-sidebar/telos.web.patch.yml` is the exact
   plugin-roster delta consumed by Electron and the parity audit.
 - `THIRD_PARTY_NOTICES.md` records source and license provenance.
 
-Do not copy a new DSH Web tree into TELOS and do not edit the Submodule as part
-of a TELOS feature. A generic DSH correction belongs in the DSH fork and should
+Do not copy a new DSH Web tree into Telos and do not edit the Submodule as part
+of a Telos feature. A generic DSH correction belongs in the DSH fork and should
 be proposed upstream. A temporary fork-only patch must retain its own commit
 history and rationale.
 
 ## 1. Detect drift without changing the workspace
 
-From the TELOS repository root, run:
+From the Telos repository root, run:
 
 ```bash
 pnpm dsh:upstream
@@ -39,7 +39,7 @@ not fetch, merge, check out, regenerate, or commit anything.
 
 ## 2. Prepare an isolated upgrade
 
-Create a dedicated TELOS branch. In the Submodule, keep `origin` pointed to
+Create a dedicated Telos branch. In the Submodule, keep `origin` pointed to
 `codexiaoke/deepseek-harness` and configure the canonical remote if needed:
 
 ```bash
@@ -50,7 +50,7 @@ git -C third_party/deepseek-harness fetch upstream master
 If `upstream` already exists, verify its URL and fetch it. Inspect the candidate
 commit before checking it out. Advance the fork branch with fast-forward-only
 history where possible; never rewrite a shared DSH branch merely to simplify a
-TELOS update.
+Telos update.
 
 Review the old-to-candidate diff in at least these areas:
 
@@ -82,10 +82,10 @@ pnpm dsh:build
 ```
 
 The build compiles the complete DSH Host, client packages, CLI, and Web app,
-then regenerates the TELOS sidebar from the candidate DSH bundle and rebuilds
-the TELOS Renderer layout compatibility package. Sidebar transforms use exact
+then regenerates the Telos sidebar from the candidate DSH bundle and rebuilds
+the Telos Renderer layout compatibility package. Sidebar transforms use exact
 anchors and fail loudly when upstream presentation code moved. Layout
-provenance checks fail whenever a mapped upstream or TELOS source changed
+provenance checks fail whenever a mapped upstream or Telos source changed
 without regeneration. A failure is a required manual merge, not a reason to
 weaken or bypass the check.
 
@@ -108,11 +108,11 @@ pnpm build
 ```
 
 The parity audit dynamically obtains the candidate commit's default Web
-composition from DSH itself. It verifies that TELOS retains every default row
+composition from DSH itself. It verifies that Telos retains every default row
 unchanged, except for disabling `ui-sidebar`, and adds only the enabled
 `telos-ui-sidebar` compatibility package. The `ui-layout` row deliberately
 keeps its upstream package name and graph edges; a separate resolution audit
-proves that `profiles/web/node_modules` selects the private TELOS Renderer
+proves that `profiles/web/node_modules` selects the private Telos Renderer
 derivative before DSH's shared upstream fallback. This avoids maintaining a
 stale, handwritten copy of DSH's roster while still auditing the invisible
 package substitution.
@@ -137,11 +137,11 @@ evidence.
 
 Commit the DSH gitlink, regenerated derivative, provenance, notices, required
 compatibility changes, and acceptance evidence as one standalone DSH-upgrade
-batch. Do not mix unrelated TELOS features into it. The candidate becomes the
+batch. Do not mix unrelated Telos features into it. The candidate becomes the
 new baseline only after all applicable gates pass and the diff has been
 reviewed.
 
-An update appearing upstream does not by itself mean TELOS still has every DSH
+An update appearing upstream does not by itself mean Telos still has every DSH
 function. The accepted guarantee is always scoped to one exact candidate
 commit, its effective composition, its build and tests, and its recorded live
 smoke evidence.

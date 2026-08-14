@@ -11,7 +11,7 @@ export function installApplicationMenu(actions: ApplicationMenuActions): void {
     ...(process.platform === 'darwin'
       ? [
           {
-            label: 'TELOS',
+            label: 'Telos',
             submenu: [
               { role: 'about' },
               { label: '检查更新…', click: () => void actions.checkForUpdates() },
@@ -22,7 +22,7 @@ export function installApplicationMenu(actions: ApplicationMenuActions): void {
               { role: 'hideOthers' },
               { role: 'unhide' },
               { type: 'separator' },
-              { label: '退出 TELOS', accelerator: 'Command+Q', click: actions.quit },
+              { label: '退出 Telos', accelerator: 'Command+Q', click: actions.quit },
             ],
           } satisfies MenuItemConstructorOptions,
         ]
@@ -34,7 +34,7 @@ export function installApplicationMenu(actions: ApplicationMenuActions): void {
         { type: 'separator' },
         process.platform === 'darwin'
           ? { role: 'close' }
-          : { label: '退出 TELOS', accelerator: 'Alt+F4', click: actions.quit },
+          : { label: '退出 Telos', accelerator: 'Alt+F4', click: actions.quit },
       ],
     },
     {

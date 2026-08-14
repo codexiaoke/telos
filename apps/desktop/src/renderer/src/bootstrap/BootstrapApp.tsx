@@ -19,7 +19,7 @@ function copyFor(snapshot: DshWebSnapshot): BootstrapCopy {
     case 'ready':
       return {
         eyebrow: '工作台已就绪',
-        title: '正在进入 TELOS',
+        title: '正在进入 Telos',
         description: '个人工作台已经连接，正在交接给完整界面。',
       }
     case 'failed':
@@ -32,7 +32,7 @@ function copyFor(snapshot: DshWebSnapshot): BootstrapCopy {
       return {
         eyebrow: '正在恢复',
         title: '正在重置本地运行时',
-        description: 'TELOS 正在安全停止旧进程，然后重新连接工作台。',
+        description: 'Telos 正在安全停止旧进程，然后重新连接工作台。',
       }
     case 'stopped':
       return {
@@ -44,12 +44,12 @@ function copyFor(snapshot: DshWebSnapshot): BootstrapCopy {
       return {
         eyebrow: '本地优先 · 正在启动',
         title: '正在准备你的个人工作台',
-        description: '正在加载 DSH Runtime、TELOS Renderer 和本地个人空间。',
+        description: '正在加载 DSH Runtime、Telos Renderer 和本地个人空间。',
       }
     case 'idle':
       return {
         eyebrow: '本地优先',
-        title: '正在唤醒 TELOS',
+        title: '正在唤醒 Telos',
         description: '你的个人上下文与运行能力将在本机完成连接。',
       }
   }
@@ -59,7 +59,7 @@ function StartupTrack({ state }: { state: DshWebSnapshot['state'] }): ReactNode 
   const failure = state === 'failed'
   const ready = state === 'ready'
   const activeStep = state === 'idle' ? 0 : state === 'starting' || state === 'stopping' ? 1 : 2
-  const steps = ['读取本地配置', '启动 DSH Runtime', '载入 TELOS 工作台']
+  const steps = ['读取本地配置', '启动 DSH Runtime', '载入 Telos 工作台']
 
   return (
     <ol aria-label="启动进度" className="bootstrap-track">
@@ -103,9 +103,9 @@ export function BootstrapApp(): ReactNode {
       <div className="bootstrap-ambient bootstrap-ambient-two" />
 
       <header className="bootstrap-titlebar window-drag">
-        <div className="bootstrap-brand window-no-drag" aria-label="TELOS">
+        <div className="bootstrap-brand window-no-drag" aria-label="Telos">
           <span className="bootstrap-brand-mark">T</span>
-          <span>TELOS</span>
+          <span>Telos</span>
         </div>
         <div className="bootstrap-local-badge">
           <ShieldCheck size={13} strokeWidth={1.8} />
@@ -122,7 +122,7 @@ export function BootstrapApp(): ReactNode {
         >
           <span className="bootstrap-orb-ring" />
           <AgentOrb
-            aria-label={failed ? 'TELOS 运行时需要恢复' : 'TELOS 正在启动'}
+            aria-label={failed ? 'Telos 运行时需要恢复' : 'Telos 正在启动'}
             size={96}
             state={failed ? 'idle' : 'working'}
           />
@@ -139,7 +139,7 @@ export function BootstrapApp(): ReactNode {
           >
             <p className="bootstrap-eyebrow" data-failed={failed || undefined}>{bridgeError === undefined ? copy.eyebrow : '连接异常'}</p>
             <h1>{bridgeError === undefined ? copy.title : '无法读取本地启动状态'}</h1>
-            <p className="bootstrap-description">{bridgeError === undefined ? copy.description : '桌面桥接暂时不可用，请重新打开 TELOS。'}</p>
+            <p className="bootstrap-description">{bridgeError === undefined ? copy.description : '桌面桥接暂时不可用，请重新打开 Telos。'}</p>
           </motion.div>
         </AnimatePresence>
 
@@ -157,8 +157,8 @@ export function BootstrapApp(): ReactNode {
       </section>
 
       <footer className="bootstrap-footer">
-        <span>TELOS {version}</span>
-        <span>DSH Runtime · TELOS Renderer</span>
+        <span>Telos {version}</span>
+        <span>DSH Runtime · Telos Renderer</span>
       </footer>
     </main>
   )

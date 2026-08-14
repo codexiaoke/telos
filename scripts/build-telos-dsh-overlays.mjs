@@ -14,7 +14,7 @@ const telosVersion = JSON.parse(readFileSync(resolve(repositoryRoot, 'package.js
 function replaceExactlyOnce(source, anchor, replacement, label) {
   const occurrences = source.split(anchor).length - 1
   if (occurrences !== 1) {
-    throw new Error(`TELOS DSH overlay expected one ${label} anchor, found ${String(occurrences)}`)
+    throw new Error(`Telos DSH overlay expected one ${label} anchor, found ${String(occurrences)}`)
   }
   return source.replace(anchor, replacement)
 }
@@ -104,12 +104,12 @@ generated = replaceExactlyOnce(
 \t\t\t\t\t\t})`,
   `wide && (0, react_jsx_runtime.jsx)("div", {
 \t\t\t\t\t\t\tclassName: clsx(SidebarRoot_module_css_default.brand, SidebarRoot_module_css_default.wide),
-\t\t\t\t\t\t\t"aria-label": "TELOS v${telosVersion}",
+\t\t\t\t\t\t\t"aria-label": "Telos v${telosVersion}",
 \t\t\t\t\t\t\tchildren: (0, react_jsx_runtime.jsxs)("span", {
 \t\t\t\t\t\t\t\tstyle: { display: "inline-flex", alignItems: "baseline", gap: "6px" },
 \t\t\t\t\t\t\t\tchildren: [(0, react_jsx_runtime.jsx)("span", {
 \t\t\t\t\t\t\t\t\tstyle: { fontSize: "16px", lineHeight: "22px", fontWeight: 650, letterSpacing: "-0.01em" },
-\t\t\t\t\t\t\t\t\tchildren: "TELOS"
+\t\t\t\t\t\t\t\t\tchildren: "Telos"
 \t\t\t\t\t\t\t\t}), (0, react_jsx_runtime.jsx)("span", {
 \t\t\t\t\t\t\t\t\tstyle: { fontSize: "13px", lineHeight: "18px", fontWeight: 450 },
 \t\t\t\t\t\t\t\t\tchildren: "v${telosVersion}"
@@ -158,7 +158,7 @@ const provenance = {
   ],
 }
 writeFileSync(resolve(targetPackage, 'UPSTREAM.json'), `${JSON.stringify(provenance, null, 2)}\n`)
-process.stdout.write(`Generated TELOS DSH sidebar overlay from ${commit}.\n`)
+process.stdout.write(`Generated Telos DSH sidebar overlay from ${commit}.\n`)
 
 execFileSync(process.execPath, [resolve(repositoryRoot, 'scripts/build-telos-dsh-layout.mjs')], {
   cwd: repositoryRoot,

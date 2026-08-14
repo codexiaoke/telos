@@ -7,7 +7,7 @@ import {
 const DSH_PRODUCT_NAME = 'DeepSeek Harness'
 const DSH_TITLE_SUFFIX = ` — ${DSH_PRODUCT_NAME}`
 
-export const TELOS_PRODUCT_NAME = 'TELOS'
+export const TELOS_PRODUCT_NAME = 'Telos'
 
 /**
  * Convert DSH's browser title into the title owned by the desktop shell.
@@ -21,7 +21,7 @@ export function toTelosWindowTitle(documentTitle: string): string {
 
 /**
  * Build host-owned design tokens and desktop chrome metrics. Component layout
- * remains in the TELOS Renderer derivative so DSH updates stay auditable.
+ * remains in the Telos Renderer derivative so DSH updates stay auditable.
  */
 export function createTelosDshThemeCss(platform: NodeJS.Platform): string {
   const leftSafe = platform === 'darwin' ? TELOS_MAC_TITLEBAR_LEFT_SAFE : 12

@@ -3,7 +3,7 @@
  * from thinking-orbs by Jakub Antalik, commit
  * e04f3e87075faa6dd7d42f3073198434d26ba730, licensed under the MIT License.
  *
- * This implementation has been rewritten and reduced for TELOS. See the
+ * This implementation has been rewritten and reduced for Telos. See the
  * repository THIRD_PARTY_NOTICES.md and licenses/thinking-orbs-MIT.txt.
  */
 

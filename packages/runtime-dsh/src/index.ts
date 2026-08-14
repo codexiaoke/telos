@@ -88,7 +88,7 @@ async function requireFile(path: string, label: string): Promise<void> {
   try {
     await access(path)
   } catch {
-    throw new Error(`${label} is missing at ${path}; run pnpm dsh:build from the TELOS repository root`)
+    throw new Error(`${label} is missing at ${path}; run pnpm dsh:build from the Telos repository root`)
   }
 }
 
@@ -164,7 +164,7 @@ export class DshRuntimeAdapter implements AgentRuntime {
         requireFile(sdkEntry, 'Built DSH SDK client'),
         requireFile(runtimeEntry, 'Built DSH JSON-RPC runtime'),
         requireFile(dependencyRoot, 'Installed DSH runtime dependency closure'),
-        requireFile(profilePath, 'TELOS DSH profile'),
+        requireFile(profilePath, 'Telos DSH profile'),
         mkdir(workspacePath, { recursive: true }),
         mkdir(sessionRoot, { recursive: true }),
       ])
@@ -184,7 +184,7 @@ export class DshRuntimeAdapter implements AgentRuntime {
             DSH_SESSION_ROOT: sessionRoot,
             DSH_SYSTEM_PROMPT:
               this.options.systemPrompt
-              ?? 'You are TELOS, a precise and helpful personal AI assistant. Answer the user directly and do not claim tools or memories you were not given.',
+              ?? 'You are Telos, a precise and helpful personal AI assistant. Answer the user directly and do not claim tools or memories you were not given.',
           },
           shutdownTimeoutMs: 2_000,
           disposeEofGraceMs: 8_000,

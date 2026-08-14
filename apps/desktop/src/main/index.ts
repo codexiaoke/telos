@@ -22,11 +22,11 @@ import { installApplicationMenu } from './shell/application-menu.js'
 import { createMainWindow, loadDshWeb } from './shell/main-window.js'
 import { UpdateService } from './update/update-service.js'
 
-app.setName('TELOS')
+app.setName('Telos')
 app.setAppLogsPath()
 
 const logger = configureApplicationLogger(app.isPackaged)
-logger.info('TELOS main process starting', { version: app.getVersion(), packaged: app.isPackaged })
+logger.info('Telos main process starting', { version: app.getVersion(), packaged: app.isPackaged })
 autoUpdater.logger = logger
 const updateService = new UpdateService({
   enabled: app.isPackaged,
@@ -137,7 +137,7 @@ async function startApplication(): Promise<void> {
     retry: async (sender) => {
       const window = BrowserWindow.fromWebContents(sender)
       if (window === null || window.isDestroyed() || dshWeb === undefined) {
-        throw new Error('TELOS startup window is no longer available')
+        throw new Error('Telos startup window is no longer available')
       }
       const url = await dshWeb.restart()
       if (!window.isDestroyed()) await loadDshWeb(window, url)
@@ -176,7 +176,7 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', showMainWindow)
   void app.whenReady().then(startApplication).catch((error: unknown) => {
-    logger.error('TELOS failed during startup', error)
+    logger.error('Telos failed during startup', error)
     requestQuit()
   })
 }

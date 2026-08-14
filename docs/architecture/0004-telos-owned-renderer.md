@@ -1,4 +1,4 @@
-# ADR 0004: TELOS-owned Renderer over the DSH client runtime
+# ADR 0004: Telos-owned Renderer over the DSH client runtime
 
 - Status: Accepted
 - Date: 2026-08-14
@@ -7,16 +7,16 @@
 ## Context
 
 ADR 0003 established the complete, source-built DSH Web application as the
-functional reference baseline. That was necessary to prove that TELOS could
+functional reference baseline. That was necessary to prove that Telos could
 retain DSH sessions, projections, tools, permissions, questions, plans, jobs,
 subagents, settings, workspaces, and activity surfaces without reimplementing
 them.
 
 The reference mode currently navigates the Electron `BrowserWindow` from the
-local TELOS Vite page to the loopback DSH Web URL after the Host becomes ready.
+local Telos Vite page to the loopback DSH Web URL after the Host becomes ready.
 Consequently, `apps/desktop/src/renderer` is visible only during startup or a
 startup failure. Theme tokens and a generated sidebar derivative can change
-presentation, but they do not give TELOS sufficient ownership of the product
+presentation, but they do not give Telos sufficient ownership of the product
 frame for a highly customized personal-intelligence system.
 
 DSH's `apps/web` is not the visible workbench implementation. Its entry mounts
@@ -30,26 +30,26 @@ and declares four child Slots:
 - `details`;
 - `shell.overlay`.
 
-This is the stable seam TELOS needs: it can own the root React component while
+This is the stable seam Telos needs: it can own the root React component while
 retaining the upstream occupants of every functional child Slot.
 
 ## Decision
 
-`apps/desktop/src/renderer` becomes the authoritative source layer for TELOS
+`apps/desktop/src/renderer` becomes the authoritative source layer for Telos
 desktop presentation. It has two independent build entries:
 
 1. a small local bootstrap/recovery application loaded while DSH starts;
-2. a DSH-compatible Client Plugin entry that registers the TELOS application
+2. a DSH-compatible Client Plugin entry that registers the Telos application
    frame into the DSH Slot runtime.
 
 The normal interactive page may continue to be served from the DSH loopback
 Host. The serving URL does not determine presentation ownership: after plugin
-assembly, the root React tree is supplied by TELOS Renderer source.
+assembly, the root React tree is supplied by Telos Renderer source.
 
 The first compatible replacement is `ui-layout`. It retains the complete DSH
 layout service and Slot contract while changing component structure, styling,
-motion, and future TELOS navigation seams. Later visual packages can migrate
-one at a time; DSH business state and behavior remain upstream until TELOS has
+motion, and future Telos navigation seams. Later visual packages can migrate
+one at a time; DSH business state and behavior remain upstream until Telos has
 an explicit domain reason to replace them.
 
 ## Exact package identity
@@ -60,11 +60,11 @@ as `ui-sidebar` and `ui-conversation` declare an injection dependency on
 named `@telos/*` module would leave those graph edges unresolved or require
 patching every dependent package.
 
-TELOS therefore installs a private compatibility derivative under the exact
+Telos therefore installs a private compatibility derivative under the exact
 package identity `@deepseek-ai/dsh-client-ui-layout` in the writable Web
 Profile's own `node_modules`. This is deliberately not the shared
 `profiles/node_modules` fallback, whose upstream symlinks are healed and owned
-by DSH. Node resolution from `profiles/web` selects the profile-specific TELOS
+by DSH. Node resolution from `profiles/web` selects the profile-specific Telos
 package before that upstream fallback. The default `ui-layout` Loader row and
 all downstream graph edges remain unchanged.
 
@@ -89,9 +89,9 @@ apps/desktop/src/renderer/src/
   bootstrap/                # startup, failure details, retry/recovery
   workbench/
     dsh-client.ts           # Client Plugin apply entry
-    shell/                  # TELOS root frame and layout state
+    shell/                  # Telos root frame and layout state
   features/                 # later memory, knowledge, goals, automation
-  components/               # TELOS-owned reusable React components
+  components/               # Telos-owned reusable React components
   lib/                      # presentation utilities and adapters
 ```
 
@@ -119,7 +119,7 @@ or plugin disposal can retract it. Generated artifacts are not hand-edited.
 
 ## Source derivation
 
-The first TELOS frame is a source derivative of the pinned DSH `ui-layout`
+The first Telos frame is a source derivative of the pinned DSH `ui-layout`
 package because these behaviors are compatibility obligations, not visual
 preferences:
 
@@ -131,8 +131,8 @@ preferences:
 - panel width constraints and narrow-window concession behavior;
 - theme snapshot presentation.
 
-TELOS may change DOM structure, visual tokens, component composition, motion,
-and additional TELOS-owned children. Every derived source mapping and hash is
+Telos may change DOM structure, visual tokens, component composition, motion,
+and additional Telos-owned children. Every derived source mapping and hash is
 recorded against the pinned DSH commit. The copied MIT license travels with the
 distribution.
 
@@ -144,7 +144,7 @@ ignored and recorded as such.
 
 During this phase:
 
-- TELOS owns the root frame and desktop visual system;
+- Telos owns the root frame and desktop visual system;
 - DSH continues to own the occupants of `sidebar`, `conversation`, `details`,
   and their nested Slots;
 - Electron main owns window/process lifecycle, filesystem/native capabilities,
@@ -159,23 +159,23 @@ Hooks, projections, and Remote contracts.
 ## Migration order
 
 1. Keep the untouched DSH `ui-layout` as the runnable reference.
-2. Build the TELOS layout derivative from Renderer source.
+2. Build the Telos layout derivative from Renderer source.
 3. Install it as the Profile-local compatibility package and prove all four
    child Slots still render.
 4. Reduce the local bootstrap application to startup/recovery responsibilities.
 5. Migrate sidebar, details/activity, conversation chrome, and settings only in
    separately accepted batches.
-6. Add TELOS personal features through additive Slots and Host/Remote plugins
+6. Add Telos personal features through additive Slots and Host/Remote plugins
    before replacing upstream business surfaces.
 
-The migration does not copy the complete DSH Web source tree into TELOS.
+The migration does not copy the complete DSH Web source tree into Telos.
 
 ## Verification gates
 
-A TELOS Renderer layout build is accepted only when:
+A Telos Renderer layout build is accepted only when:
 
 - the DSH Submodule remains clean and pinned;
-- the generated package resolves from the TELOS DSH Profile under the exact
+- the generated package resolves from the Telos DSH Profile under the exact
   compatibility name;
 - provenance source and generated hashes match;
 - the Client Plugin bundle externalizes React and DSH platform identities;
@@ -184,9 +184,9 @@ A TELOS Renderer layout build is accepted only when:
   rendered with the original kinds and scopes;
 - layout service actions continue to drive upstream sidebar and details
   plugins;
-- source-level layout tests, TELOS repository gates, and relevant upstream DSH
+- source-level layout tests, Telos repository gates, and relevant upstream DSH
   layout tests pass;
-- Electron loads the TELOS frame and a real configured-model conversation
+- Electron loads the Telos frame and a real configured-model conversation
   still streams through the full Web path.
 
 The untouched layout remains selectable as a reference or emergency fallback
@@ -199,11 +199,11 @@ until the source derivative passes these gates on every supported platform.
 This hides product changes inside an upstream checkout, dirties the locked
 input, and makes updates and attribution ambiguous.
 
-### Maintain a wholesale DSH Web fork inside TELOS
+### Maintain a wholesale DSH Web fork inside Telos
 
 The Web entry is only a bootstrap and most functionality is already modular.
 Copying the whole tree creates a much larger merge surface without increasing
-TELOS UI control.
+Telos UI control.
 
 ### Keep the local Electron page and rebuild DSH behavior through IPC
 
@@ -211,7 +211,7 @@ This returns to the discarded minimal-SDK architecture and would require
 reimplementing the mature client runtime, projections, Slots, permissions, and
 session lifecycle.
 
-### Embed the complete DSH page inside a TELOS page
+### Embed the complete DSH page inside a Telos page
 
 An iframe or nested WebContents creates focus, navigation, accessibility,
 dialog, drag-region, and lifecycle boundaries while still leaving DSH in
@@ -220,7 +220,7 @@ supports root replacement.
 
 ## Consequences
 
-- TELOS gains full control of its React component tree without abandoning the
+- Telos gains full control of its React component tree without abandoning the
   verified DSH functional baseline.
 - Runtime compatibility becomes an explicit adapter and provenance problem,
   rather than an unmanaged visual fork.

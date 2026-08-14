@@ -2,7 +2,7 @@ import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 
 const DARK_ATTRIBUTE = 'data-ds-dark-theme'
 
-/** Preserve the DSH theme service contract while TELOS owns the root frame. */
+/** Preserve the DSH theme service contract while Telos owns the root frame. */
 export class TelosThemePresenter {
   private appliedTokens: string[] = []
   private readonly themeColorMeta: HTMLMetaElement

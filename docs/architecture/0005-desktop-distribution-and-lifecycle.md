@@ -1,10 +1,10 @@
 # 0005 Desktop distribution and lifecycle
 
-Status: Accepted for the first distributable TELOS desktop baseline
+Status: Accepted for the first distributable Telos desktop baseline
 
 ## Context
 
-TELOS is not only an Electron renderer. A usable desktop release also owns the
+Telos is not only an Electron renderer. A usable desktop release also owns the
 application lifecycle, the system tray, a single running instance, diagnostics,
 signed installers, release metadata, updates, and the complete source-pinned DSH
 runtime that the desktop starts as a child process.
@@ -23,16 +23,16 @@ must not be optimized by silently removing runtime capabilities.
 
 ### Packaging stack
 
-TELOS uses `electron-builder` with the existing `electron-vite` build. This keeps
+Telos uses `electron-builder` with the existing `electron-vite` build. This keeps
 the current application architecture intact and supplies installers, signing,
 GitHub Release publishing metadata, and `electron-updater` compatibility without
 introducing a second Electron build system.
 
 The desktop package contains three independent payloads:
 
-1. the TELOS Electron application and its production dependencies;
+1. the Telos Electron application and its production dependencies;
 2. an unpacked, source-pinned and already-built DSH runtime under
-   `resources/dsh-runtime` plus TELOS-owned overlays under
+   `resources/dsh-runtime` plus Telos-owned overlays under
    `resources/dsh-overlays`;
 3. an official standalone Node.js distribution under `resources/dsh-node`.
 
@@ -55,7 +55,7 @@ The main process owns one application lifecycle controller:
 - restore and focus the existing window when a second launch occurs;
 - create the tray only after Electron is ready and retain its object for the
   lifetime of the process;
-- closing the window hides TELOS instead of terminating long-running work;
+- closing the window hides Telos instead of terminating long-running work;
 - the tray and application menu expose an explicit quit action;
 - an explicit quit stops DSH before the Electron process exits;
 - macOS activation recreates or restores the main window.
@@ -86,10 +86,10 @@ Windows releases are signed before public distribution.
 
 Each operating system builds its own payload on a native runner. A release job:
 
-1. checks out TELOS with the DSH submodule;
+1. checks out Telos with the DSH submodule;
 2. installs the pinned pnpm and dependency lockfiles;
-3. runs TELOS tests, type checks, lint, and DSH sync/parity checks;
-4. builds DSH and the TELOS overlays;
+3. runs Telos tests, type checks, lint, and DSH sync/parity checks;
+4. builds DSH and the Telos overlays;
 5. stages an official Node distribution compatible with DSH;
 6. packages and signs the target installer;
 7. uploads installers, blockmaps, and update metadata to one draft release.
@@ -116,7 +116,7 @@ is not acceptance evidence.
   than relying on Electron's default `window-all-closed` behavior.
 - Update behavior is testable without contacting GitHub by injecting an updater
   adapter into the state machine.
-- DSH updates remain source-pinned. A TELOS release never downloads an arbitrary
+- DSH updates remain source-pinned. A Telos release never downloads an arbitrary
   new DSH runtime at application startup.
 - Publishing a release remains a deliberate action. Merging the workflow does
   not by itself create or publish a GitHub Release.

@@ -19,7 +19,7 @@ function run(args) {
 }
 
 // DSH's root postinstall configures contributor Git hooks. A Submodule shares
-// its Git metadata with the parent repository, so TELOS skips lifecycle scripts
+// its Git metadata with the parent repository, so Telos skips lifecycle scripts
 // during restore and rebuilds only the reviewed native dependencies required by
 // the source build/runtime.
 run(['install', '--frozen-lockfile', '--ignore-scripts'])

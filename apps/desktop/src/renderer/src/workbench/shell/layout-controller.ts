@@ -31,7 +31,7 @@ export class TelosLayoutController implements TelosLayoutService {
 
   #requirePanels(): PanelActions {
     if (this.#panels === undefined) {
-      throw new Error('TELOS layout actions are unavailable before the root Slot mounts')
+      throw new Error('Telos layout actions are unavailable before the root Slot mounts')
     }
     return this.#panels
   }

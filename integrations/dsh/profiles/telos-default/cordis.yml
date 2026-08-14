@@ -1,4 +1,4 @@
-# TELOS-owned headless DSH composition. stdout is reserved for JSON-RPC.
+# Telos-owned headless DSH composition. stdout is reserved for JSON-RPC.
 
 - id: sdk-jsonrpc-server
   name: '@deepseek-ai/dsh-sdk-jsonrpc-server'

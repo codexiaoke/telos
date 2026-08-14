@@ -9,7 +9,7 @@ interface PresentationState {
 const installed = new WeakSet<WebContents>()
 const states = new WeakMap<WebContents, PresentationState>()
 
-/** Apply the host-owned TELOS token layer to the currently loaded DSH page. */
+/** Apply the host-owned Telos token layer to the currently loaded DSH page. */
 export function applyDshPresentation(webContents: WebContents): Promise<void> {
   const state = states.get(webContents) ?? { update: Promise.resolve() }
   states.set(webContents, state)
@@ -39,7 +39,7 @@ export function installDshPresentation(window: BrowserWindow): void {
   })
   webContents.on('did-finish-load', () => {
     void applyDshPresentation(webContents).catch((error: unknown) => {
-      console.error('Failed to apply the TELOS DSH presentation layer', error)
+      console.error('Failed to apply the Telos DSH presentation layer', error)
     })
   })
 }

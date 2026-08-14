@@ -1,2 +1,2 @@
-/** Host half of the TELOS-branded, DSH-compatible sidebar client plugin. */
+/** Host half of the Telos-branded, DSH-compatible sidebar client plugin. */
 export function apply() {}

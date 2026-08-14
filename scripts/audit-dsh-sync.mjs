@@ -61,7 +61,7 @@ check('DSH Submodule worktree is clean', () => {
   assert(status.length === 0, `uncommitted upstream files:\n${status}`)
 })
 
-check('Submodule clone source is the TELOS fork', () => {
+check('Submodule clone source is the Telos fork', () => {
   const configured = git(repositoryRoot, [
     'config',
     '--file',
@@ -72,7 +72,7 @@ check('Submodule clone source is the TELOS fork', () => {
   assert(configured === forkUrl, `${configured} != ${forkUrl}`)
 })
 
-check('DSH origin points to the TELOS fork', () => {
+check('DSH origin points to the Telos fork', () => {
   const configured = git(dshRoot, ['remote', 'get-url', 'origin'])
   assert(configured === forkUrl, `${configured} != ${forkUrl}`)
 })
@@ -128,7 +128,7 @@ check('Renderer layout source mappings match provenance', () => {
     const upstreamSource = readFileSync(resolve(dshRoot, mapping.upstream))
     const telosSource = readFileSync(resolve(repositoryRoot, mapping.telos))
     assert(sha256(upstreamSource) === mapping.upstreamSha256, `upstream source drift: ${mapping.upstream}`)
-    assert(sha256(telosSource) === mapping.telosSha256, `TELOS source drift: ${mapping.telos}`)
+    assert(sha256(telosSource) === mapping.telosSha256, `Telos source drift: ${mapping.telos}`)
   }
 })
 

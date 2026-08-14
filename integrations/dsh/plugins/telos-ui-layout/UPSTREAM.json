@@ -20,13 +20,13 @@
       "upstream": "packages/client/ui-layout/src/client/AppFrame.module.css",
       "telos": "apps/desktop/src/renderer/src/workbench/shell/layout-styles.ts",
       "upstreamSha256": "329ad2e094a26fb4ffe3a33eb2d4bdf21262af37ec01da386bd14ef10ba64670",
-      "telosSha256": "4b9c17daf159fdcc0500a16e9fd9eefb4d751c4206e684c5c2a81a566a2a205b"
+      "telosSha256": "24f2985442c1985eb00cfeeb806d0dea4982ba962cbf973b2196cba552af8355"
     },
     {
       "upstream": "packages/client/ui-layout/src/client/columns.ts",
       "telos": "apps/desktop/src/renderer/src/workbench/shell/layout-model.ts",
       "upstreamSha256": "c2f002126fc671aeaad058eae310d265f7b1f9b77223686c0fe4619cda4e71e2",
-      "telosSha256": "b91ae3ab1fc5802e027bbcad1a006f407da96a5863a4ef97c248b604b526bfb4"
+      "telosSha256": "4ac6e6043b98049aa935e5dff6d23ade3316c5b131142c39608cdf8681660307"
     },
     {
       "upstream": "packages/client/ui-layout/src/client/stores.ts",
@@ -38,17 +38,17 @@
       "upstream": "packages/client/ui-layout/src/client/service.ts",
       "telos": "apps/desktop/src/renderer/src/workbench/shell/layout-controller.ts",
       "upstreamSha256": "1c29345c018c2061de3f7bd5539dc3216b2761d848dcfda9622c77e0c752f1bb",
-      "telosSha256": "53833403a485130d304fd72f10e6bfc7629f93aac3e6e8e590d9352d3f0186a4"
+      "telosSha256": "81970d5a775799778b81312c9fbac50fbdee4bdd98a9e2b1ad6e932331e640cb"
     },
     {
       "upstream": "packages/client/ui-layout/src/client/theme-presenter.ts",
       "telos": "apps/desktop/src/renderer/src/workbench/shell/theme-presenter.ts",
       "upstreamSha256": "7ff8d31c70ebc7900a55b55813d482ef240e9549171fe8a05acf5d958db3a502",
-      "telosSha256": "625a820e5cf42c1105ff88ba1cb49bfbf678e44adf8140b4a59ca0ec0e47bf45"
+      "telosSha256": "8cdd95992516bb17cf3c1d81697767ce5beea2e1b1681ee22bfce30901d59565"
     }
   ],
   "generated": "integrations/dsh/plugins/telos-ui-layout/lib/client.js",
-  "generatedSha256": "30c116ec49b7ae9f08b7aff51739f3b528bb176f6cc18ce08f444770eea704f6",
+  "generatedSha256": "138e6a329bb1c29369797734c7e25f936927e6f1af589e2d1d10e4d14612e582",
   "externalModules": [
     "react",
     "react/jsx-runtime",

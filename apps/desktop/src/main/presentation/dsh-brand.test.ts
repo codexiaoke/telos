@@ -7,8 +7,8 @@ const repositoryRoot = resolve(__dirname, '../../../../..')
 
 describe('toTelosWindowTitle', () => {
   it('replaces only the DSH product identity', () => {
-    expect(toTelosWindowTitle('DeepSeek Harness')).toBe('TELOS')
-    expect(toTelosWindowTitle('A durable session — DeepSeek Harness')).toBe('A durable session — TELOS')
+    expect(toTelosWindowTitle('DeepSeek Harness')).toBe('Telos')
+    expect(toTelosWindowTitle('A durable session — DeepSeek Harness')).toBe('A durable session — Telos')
     expect(toTelosWindowTitle('Settings')).toBe('Settings')
   })
 })
@@ -35,7 +35,7 @@ describe('TELOS_DSH_THEME_CSS', () => {
     )
     expect(sidebarBundle).toContain('--dsh-sidebar-inline-padding:16px')
     expect(sidebarBundle).toContain('height:82px')
-    expect(sidebarBundle).toContain('TELOS v0.1.0')
+    expect(sidebarBundle).toContain('Telos v0.1.0')
   })
 
   it('reserves only the top-right native caption rectangle on Windows', () => {

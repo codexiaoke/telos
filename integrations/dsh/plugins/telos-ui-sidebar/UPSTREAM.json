@@ -4,7 +4,7 @@
   "commit": "47f943859bef60e4160492346772ded9b24f765a",
   "source": "packages/client/ui-sidebar/lib/client.js",
   "sourceSha256": "7e5487b06251b6b82d2c6da3c2fc838a84eb7ed64daf2a372526275f27ce5ea6",
-  "generatedSha256": "f33928d1ae807787b3afed5fce763a5d823d408336f5ef0afdf4ae9da450c6e5",
+  "generatedSha256": "7d00c85c44aca16708312a6b6654aafbca890127dad8d7091af866ac9a41c31e",
   "transformations": [
     "replace module id",
     "adopt compact WorkBuddy-style sidebar spacing",

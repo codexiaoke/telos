@@ -11,7 +11,7 @@ afterEach(() => {
 })
 
 describe('prepareTelosDshWebPatch', () => {
-  it('disables only the upstream sidebar and inserts the TELOS replacement', () => {
+  it('disables only the upstream sidebar and inserts the Telos replacement', () => {
     const root = mkdtempSync(join(tmpdir(), 'telos-dsh-overlay-'))
     temporaryRoots.push(root)
     const sidebar = join(root, 'sidebar')

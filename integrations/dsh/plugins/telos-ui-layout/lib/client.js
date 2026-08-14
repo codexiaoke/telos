@@ -347,7 +347,7 @@ var TelosLayoutController = class {
   }
   #requirePanels() {
     if (this.#panels === void 0) {
-      throw new Error("TELOS layout actions are unavailable before the root Slot mounts");
+      throw new Error("Telos layout actions are unavailable before the root Slot mounts");
     }
     return this.#panels;
   }
@@ -430,7 +430,7 @@ var TELOS_LAYOUT_CSS = `
 }
 
 /* ui-workspace keeps ownership of search, ordering and add-workspace behavior.
-   TELOS only re-seats its stable sidebar.workspaces header in the productive
+   Telos only re-seats its stable sidebar.workspaces header in the productive
    desktop titlebar, alongside the sidebar fold control. */
 .telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div > div:first-child {
   position: absolute;

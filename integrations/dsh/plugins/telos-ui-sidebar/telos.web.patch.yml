@@ -1,4 +1,4 @@
-# TELOS preserves every row from DSH's default Web composition except this
+# Telos preserves every row from DSH's default Web composition except this
 # presentation-only sidebar replacement.
 - id: ui-sidebar
   disabled: true

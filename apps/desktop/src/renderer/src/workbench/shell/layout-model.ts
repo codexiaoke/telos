@@ -1,5 +1,5 @@
 /**
- * TELOS three-column geometry. The concession order remains compatible with
+ * Telos three-column geometry. The concession order remains compatible with
  * DSH ui-layout: preserve the sidebar, shrink details, close details, then let
  * the conversation absorb the remaining width.
  */

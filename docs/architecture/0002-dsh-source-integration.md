@@ -5,26 +5,26 @@
 
 ## Context
 
-DeepSeek Harness is the first Agent Runtime selected for TELOS. It is not the personal domain core and does not own the TELOS UI. At adoption time DSH is a developer preview that warns of compatibility-breaking changes, publishes from a single `master` branch without stable Git tags, and reports version `0.1.0-rc.5` at commit `47f943859bef60e4160492346772ded9b24f765a`.
+DeepSeek Harness is the first Agent Runtime selected for Telos. It is not the personal domain core and does not own the Telos UI. At adoption time DSH is a developer preview that warns of compatibility-breaking changes, publishes from a single `master` branch without stable Git tags, and reports version `0.1.0-rc.5` at commit `47f943859bef60e4160492346772ded9b24f765a`.
 
-TELOS needs inspectable source, reproducible builds, controlled upgrades, and a clean path for contributing generic improvements upstream. Installing DSH itself from npm or copying its source into the TELOS history would weaken those properties.
+Telos needs inspectable source, reproducible builds, controlled upgrades, and a clean path for contributing generic improvements upstream. Installing DSH itself from npm or copying its source into the Telos history would weaken those properties.
 
 ## Decision
 
-TELOS tracks DSH as an isolated Git Submodule:
+Telos tracks DSH as an isolated Git Submodule:
 
 | Item | Value |
 |---|---|
 | Upstream | `https://github.com/deepseek-ai/deepseek-harness.git` |
 | Maintained fork | `https://github.com/codexiaoke/deepseek-harness.git` |
-| TELOS path | `third_party/deepseek-harness` |
+| Telos path | `third_party/deepseek-harness` |
 | Initial pinned commit | `47f943859bef60e4160492346772ded9b24f765a` |
 
-The TELOS commit records the exact DSH commit. The fork's `master` mirrors upstream and carries no TELOS product code. Any unavoidable temporary source patch lives on a clearly named `telos-patches/<base-sha>` branch and must reference an upstream issue or pull request.
+The Telos commit records the exact DSH commit. The fork's `master` mirrors upstream and carries no Telos product code. Any unavoidable temporary source patch lives on a clearly named `telos-patches/<base-sha>` branch and must reference an upstream issue or pull request.
 
-The nested DSH repository keeps its own package manager version, lockfile, patches, native dependencies, TypeScript configuration, and build gates. `third_party/deepseek-harness` is deliberately excluded from the TELOS pnpm workspace. A source checkout still installs DSH's reviewed third-party dependencies with DSH's own frozen lockfile; TELOS does not download DSH itself as an npm package.
+The nested DSH repository keeps its own package manager version, lockfile, patches, native dependencies, TypeScript configuration, and build gates. `third_party/deepseek-harness` is deliberately excluded from the Telos pnpm workspace. A source checkout still installs DSH's reviewed third-party dependencies with DSH's own frozen lockfile; Telos does not download DSH itself as an npm package.
 
-The TELOS build wrapper restores the DSH workspace with lifecycle scripts disabled, then explicitly rebuilds the native packages admitted by the pinned DSH workspace before running the Host library build. This avoids DSH's contributor-only Git-hook `postinstall`, which cannot safely configure worktree-local hooks from a Submodule, without modifying the DSH checkout or silently skipping runtime native dependencies.
+The Telos build wrapper restores the DSH workspace with lifecycle scripts disabled, then explicitly rebuilds the native packages admitted by the pinned DSH workspace before running the Host library build. This avoids DSH's contributor-only Git-hook `postinstall`, which cannot safely configure worktree-local hooks from a Submodule, without modifying the DSH checkout or silently skipping runtime native dependencies.
 
 ## Runtime boundary
 
@@ -33,19 +33,19 @@ The TELOS build wrapper restores the DSH workspace with lifecycle scripts disabl
 > valid headless integration and compatibility experiment, but it is no longer
 > the path used to claim DSH Web feature parity.
 
-The `@telos/runtime-dsh` adapter launches a DSH runtime built from the pinned source as a child process. It uses DSH's existing SDK client, JSON-RPC server, and newline-delimited stdio protocol instead of the DSH Web UI or internal Cordis services. The adapter loads the built SDK entry from the Submodule at runtime, so the TELOS workspace does not install DSH from the npm registry. In development it creates a TELOS-owned runtime carrier under local application data: the carrier copies the selected Profile and links DSH's source-installed SDK runtime dependency closure, allowing DSH's generic external-config launcher to resolve plugins without writing into the Submodule.
+The `@telos/runtime-dsh` adapter launches a DSH runtime built from the pinned source as a child process. It uses DSH's existing SDK client, JSON-RPC server, and newline-delimited stdio protocol instead of the DSH Web UI or internal Cordis services. The adapter loads the built SDK entry from the Submodule at runtime, so the Telos workspace does not install DSH from the npm registry. In development it creates a Telos-owned runtime carrier under local application data: the carrier copies the selected Profile and links DSH's source-installed SDK runtime dependency closure, allowing DSH's generic external-config launcher to resolve plugins without writing into the Submodule.
 
 The communication path is:
 
 ```text
-TELOS React UI
-  -> TELOS Local Gateway
-  -> TELOS Runtime Contract
+Telos React UI
+  -> Telos Local Gateway
+  -> Telos Runtime Contract
   -> runtime-dsh adapter
   -> source-built DSH child process over stdio JSON-RPC
 ```
 
-TELOS will own the external Cordis composition used for that process. DSH events will be translated into TELOS runtime events before reaching the UI or durable personal state. The React renderer and Personal Core must not import DSH packages or depend on DSH event shapes directly.
+Telos will own the external Cordis composition used for that process. DSH events will be translated into Telos runtime events before reaching the UI or durable personal state. The React renderer and Personal Core must not import DSH packages or depend on DSH event shapes directly.
 
 The first composition is `integrations/dsh/profiles/telos-default/cordis.yml`. It contains the SDK server, the official DeepSeek provider, an executor-less Agent spine, JSONL session evidence, and token metering. It deliberately exposes no shell or filesystem tool while the interactive approval path is absent from the SDK protocol.
 
@@ -55,14 +55,14 @@ The DSH session log may be retained as execution evidence, but it is not the tru
 
 ## Upstream synchronization
 
-Fetching an upstream commit and approving it for TELOS are separate operations.
+Fetching an upstream commit and approving it for Telos are separate operations.
 
-1. Fetch `deepseek-ai/deepseek-harness` into the fork and fast-forward the fork's `master` without TELOS changes.
+1. Fetch `deepseek-ai/deepseek-harness` into the fork and fast-forward the fork's `master` without Telos changes.
 2. Select a candidate upstream commit; never point a product build at a moving branch.
-3. Open a TELOS pull request that advances only the Submodule pointer and any required compatibility changes.
+3. Open a Telos pull request that advances only the Submodule pointer and any required compatibility changes.
 4. Build DSH from its source and frozen lockfile.
 5. Run the DSH gates relevant to the touched runtime surface.
-6. Run TELOS adapter contract tests and JSON-RPC schema validation.
+6. Run Telos adapter contract tests and JSON-RPC schema validation.
 7. Smoke-test process startup, initialization, prompt admission, session events, status transitions, subagents, graceful shutdown, and crash recovery.
 8. Merge the pointer update only when all gates pass. Upstream watcher automation may create an upgrade pull request, but it must not auto-merge one.
 
@@ -73,7 +73,7 @@ git -C third_party/deepseek-harness remote add upstream https://github.com/deeps
 git -C third_party/deepseek-harness fetch upstream master
 ```
 
-Updating the Fork and updating TELOS remain explicit, reviewable commits:
+Updating the Fork and updating Telos remain explicit, reviewable commits:
 
 ```bash
 git -C third_party/deepseek-harness switch master
@@ -84,7 +84,7 @@ git add third_party/deepseek-harness
 
 ## Compatibility policy
 
-The TELOS Runtime Contract is stable from the product's perspective. `runtime-dsh` advertises the capabilities supported by its pinned DSH version and maps unsupported operations explicitly rather than faking them.
+The Telos Runtime Contract is stable from the product's perspective. `runtime-dsh` advertises the capabilities supported by its pinned DSH version and maps unsupported operations explicitly rather than faking them.
 
 The initial DSH SDK protocol has known gaps that the adapter must account for:
 
@@ -92,16 +92,16 @@ The initial DSH SDK protocol has known gaps that the adapter must account for:
 - no per-prompt cancellation or per-session close;
 - no server-to-client request path for interactive approval or user questions.
 
-Generic protocol improvements should be contributed to DSH upstream. TELOS-specific integration stays in an out-of-tree DSH plugin so it can later be published with the `dsh-plugin` topic. Core-source patches are the last resort.
+Generic protocol improvements should be contributed to DSH upstream. Telos-specific integration stays in an out-of-tree DSH plugin so it can later be published with the `dsh-plugin` topic. Core-source patches are the last resort.
 
 ## Distribution
 
-Development builds use the checked-out source tree. Release automation will build a platform runtime from the pinned source and include the resulting artifacts and licenses in the TELOS desktop package. End users will not need Git, pnpm, or a separately installed DSH runtime.
+Development builds use the checked-out source tree. Release automation will build a platform runtime from the pinned source and include the resulting artifacts and licenses in the Telos desktop package. End users will not need Git, pnpm, or a separately installed DSH runtime.
 
 ## Consequences
 
 - A full clone must initialize Submodules.
 - DSH source history and dependencies consume additional disk space and build time.
-- Upstream changes cannot silently change a released TELOS build.
-- TELOS can audit, patch, roll back, and reproduce the exact Agent Runtime source.
+- Upstream changes cannot silently change a released Telos build.
+- Telos can audit, patch, roll back, and reproduce the exact Agent Runtime source.
 - Product code remains insulated from DSH's fast-moving internal architecture.

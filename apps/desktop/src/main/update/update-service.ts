@@ -108,7 +108,7 @@ export class UpdateService {
   }
 
   private onAvailable(info: UpdateInfo): void {
-    this.options.logger.info(`TELOS update ${info.version} is available`)
+    this.options.logger.info(`Telos update ${info.version} is available`)
     this.publish({
       status: 'available',
       version: info.version,
@@ -117,7 +117,7 @@ export class UpdateService {
   }
 
   private onNotAvailable(info: UpdateInfo): void {
-    this.options.logger.info(`TELOS is current at ${info.version}`)
+    this.options.logger.info(`Telos is current at ${info.version}`)
     this.publish({
       status: 'not-available',
       version: info.version,
@@ -134,7 +134,7 @@ export class UpdateService {
   }
 
   private onDownloaded(info: UpdateDownloadedEvent): void {
-    this.options.logger.info(`TELOS update ${info.version} is ready to install`)
+    this.options.logger.info(`Telos update ${info.version} is ready to install`)
     this.publish({
       status: 'downloaded',
       version: info.version,
@@ -144,7 +144,7 @@ export class UpdateService {
 
   private fail(error: unknown): void {
     const detail = safeErrorDetail(error)
-    this.options.logger.error('TELOS update failed', detail)
+    this.options.logger.error('Telos update failed', detail)
     this.publish({ status: 'error', detail })
   }
 

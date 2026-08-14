@@ -20,7 +20,7 @@ expanded/collapsed brand marks.
 package at `integrations/dsh/plugins/telos-ui-layout` derive the root Slot,
 panel-state, theme-presentation, and three-column concession contracts from
 DSH's `@deepseek-ai/dsh-client-ui-layout` sources at the same pinned commit.
-TELOS owns the resulting React structure and presentation while preserving the
+Telos owns the resulting React structure and presentation while preserving the
 DSH package identity and child Slot contract. `UPSTREAM.json` records each
 source mapping and hash; `LICENSE.upstream` carries the MIT license text. The
 compatibility package is private and must not be published as an upstream DSH
@@ -34,4 +34,4 @@ Portions of `apps/desktop/src/renderer/src/components/agent-orb/orbEngine.ts` ar
 - License: MIT
 - Local license copy: `licenses/thinking-orbs-MIT.txt`
 
-The code has been rewritten and reduced for TELOS. TELOS does not depend on the `thinking-orbs` npm package.
+The code has been rewritten and reduced for Telos. Telos does not depend on the `thinking-orbs` npm package.

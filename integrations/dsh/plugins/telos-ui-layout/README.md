@@ -1,6 +1,6 @@
-# TELOS DSH UI layout compatibility package
+# Telos DSH UI layout compatibility package
 
-This private package makes the TELOS-owned Renderer root frame available to
+This private package makes the Telos-owned Renderer root frame available to
 the DSH Client Plugin runtime. It deliberately uses the compatibility package
 name `@deepseek-ai/dsh-client-ui-layout` because existing DSH UI plugins depend
 on that exact module identity.

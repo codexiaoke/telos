@@ -6,7 +6,8 @@ import { resolve } from 'node:path'
 const repositoryRoot = resolve(import.meta.dirname, '..')
 const dshPath = 'third_party/deepseek-harness'
 const dshRoot = resolve(repositoryRoot, dshPath)
-const overlayRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar')
+const sidebarRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar')
+const layoutRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-layout')
 const upstreamUrl = 'https://github.com/deepseek-ai/deepseek-harness.git'
 const forkUrl = 'https://github.com/codexiaoke/deepseek-harness.git'
 const remoteRequested = process.argv.includes('--remote')
@@ -44,7 +45,8 @@ function check(label, operation) {
 }
 
 const actualCommit = git(dshRoot, ['rev-parse', 'HEAD'])
-const provenance = JSON.parse(readFileSync(resolve(overlayRoot, 'UPSTREAM.json'), 'utf8'))
+const sidebarProvenance = JSON.parse(readFileSync(resolve(sidebarRoot, 'UPSTREAM.json'), 'utf8'))
+const layoutProvenance = JSON.parse(readFileSync(resolve(layoutRoot, 'UPSTREAM.json'), 'utf8'))
 
 check('Parent index gitlink matches the checked-out DSH commit', () => {
   const entry = git(repositoryRoot, ['ls-files', '--stage', '--', dshPath])
@@ -89,32 +91,75 @@ if (upstreamRemote.status === 0) {
 }
 
 check('Overlay provenance points to the checked-out DSH commit', () => {
-  assert(provenance.schemaVersion === 1, `unsupported schema ${String(provenance.schemaVersion)}`)
-  assert(provenance.upstream === upstreamUrl.replace(/\.git$/, ''), 'unexpected provenance upstream URL')
-  assert(provenance.commit === actualCommit, `${provenance.commit} != ${actualCommit}`)
+  assert(sidebarProvenance.schemaVersion === 1, `unsupported schema ${String(sidebarProvenance.schemaVersion)}`)
+  assert(sidebarProvenance.upstream === upstreamUrl.replace(/\.git$/, ''), 'unexpected provenance upstream URL')
+  assert(sidebarProvenance.commit === actualCommit, `${sidebarProvenance.commit} != ${actualCommit}`)
 })
 
 check('Derived sidebar source hash matches provenance', () => {
-  const source = readFileSync(resolve(dshRoot, provenance.source))
+  const source = readFileSync(resolve(dshRoot, sidebarProvenance.source))
   const actual = sha256(source)
-  assert(actual === provenance.sourceSha256, `${actual} != ${provenance.sourceSha256}`)
+  assert(actual === sidebarProvenance.sourceSha256, `${actual} != ${sidebarProvenance.sourceSha256}`)
 })
 
 check('Generated sidebar hash matches provenance', () => {
-  const generated = readFileSync(resolve(overlayRoot, 'lib/client.js'))
+  const generated = readFileSync(resolve(sidebarRoot, 'lib/client.js'))
   const actual = sha256(generated)
-  assert(actual === provenance.generatedSha256, `${actual} != ${provenance.generatedSha256}`)
+  assert(actual === sidebarProvenance.generatedSha256, `${actual} != ${sidebarProvenance.generatedSha256}`)
 })
 
 check('Derived sidebar carries the exact upstream license', () => {
   const upstreamLicense = readFileSync(resolve(dshRoot, 'LICENSE'))
-  const copiedLicense = readFileSync(resolve(overlayRoot, 'LICENSE.upstream'))
+  const copiedLicense = readFileSync(resolve(sidebarRoot, 'LICENSE.upstream'))
   assert(upstreamLicense.equals(copiedLicense), 'LICENSE.upstream differs from the pinned DSH license')
+})
+
+check('Renderer layout provenance points to the checked-out DSH commit', () => {
+  assert(layoutProvenance.schemaVersion === 2, `unsupported schema ${String(layoutProvenance.schemaVersion)}`)
+  assert(layoutProvenance.upstream === upstreamUrl.replace(/\.git$/, ''), 'unexpected layout provenance URL')
+  assert(layoutProvenance.commit === actualCommit, `${layoutProvenance.commit} != ${actualCommit}`)
+  assert(layoutProvenance.compatibilityPackage === '@deepseek-ai/dsh-client-ui-layout', 'layout package identity drifted')
+})
+
+check('Renderer layout source mappings match provenance', () => {
+  assert(Array.isArray(layoutProvenance.sourceMappings), 'layout sourceMappings is not an array')
+  assert(layoutProvenance.sourceMappings.length === 7, 'layout source mapping count changed')
+  for (const mapping of layoutProvenance.sourceMappings) {
+    const upstreamSource = readFileSync(resolve(dshRoot, mapping.upstream))
+    const telosSource = readFileSync(resolve(repositoryRoot, mapping.telos))
+    assert(sha256(upstreamSource) === mapping.upstreamSha256, `upstream source drift: ${mapping.upstream}`)
+    assert(sha256(telosSource) === mapping.telosSha256, `TELOS source drift: ${mapping.telos}`)
+  }
+})
+
+check('Generated Renderer layout hash and module boundary match provenance', () => {
+  const generated = readFileSync(resolve(layoutRoot, 'lib/client.js'))
+  assert(sha256(generated) === layoutProvenance.generatedSha256, 'generated layout hash drifted')
+  const source = generated.toString('utf8')
+  assert(source.includes('id: "@deepseek-ai/dsh-client-ui-layout"'), 'layout client module id changed')
+  for (const external of layoutProvenance.externalModules) {
+    assert(source.includes(`require("${external}")`), `layout no longer externalizes ${external}`)
+  }
+  assert(!source.includes('react.production.min'), 'layout bundle contains a private React copy')
+})
+
+check('Renderer layout compatibility manifest is private and exact', () => {
+  const manifest = JSON.parse(readFileSync(resolve(layoutRoot, 'package.json'), 'utf8'))
+  assert(manifest.name === '@deepseek-ai/dsh-client-ui-layout', 'layout manifest name changed')
+  assert(manifest.private === true, 'layout compatibility package must stay private')
+  assert(manifest.exports?.['./client'] === './lib/client.js', 'layout client export changed')
+})
+
+check('Renderer layout derivative carries the exact upstream license', () => {
+  const upstreamLicense = readFileSync(resolve(dshRoot, 'LICENSE'))
+  const copiedLicense = readFileSync(resolve(layoutRoot, 'LICENSE.upstream'))
+  assert(upstreamLicense.equals(copiedLicense), 'layout LICENSE.upstream differs from DSH')
 })
 
 check('Third-party notice records the checked-out DSH commit', () => {
   const notice = readFileSync(resolve(repositoryRoot, 'THIRD_PARTY_NOTICES.md'), 'utf8')
   assert(notice.includes(`Pinned source commit: \`${actualCommit}\``), 'pinned commit is missing from notice')
+  assert(notice.includes('telos-ui-layout'), 'Renderer layout derivative is missing from notice')
 })
 
 if (remoteRequested && process.exitCode !== 1) {

@@ -1,0 +1,27 @@
+{
+  "name": "@deepseek-ai/dsh-client-ui-layout",
+  "version": "0.1.0-telos.1",
+  "private": true,
+  "description": "Private TELOS Renderer compatibility derivative of the DSH root layout plugin.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-theme"
+      ],
+      "platform": "web"
+    }
+  },
+  "telos": {
+    "compatibilityDerivative": true,
+    "sourceEntry": "apps/desktop/src/renderer/src/workbench/dsh-client.ts"
+  },
+  "license": "MIT"
+}

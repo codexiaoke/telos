@@ -27,6 +27,12 @@ export function resolveTelosDshSidebarPackageRoot(): string {
     : join(developmentRepositoryRoot(), 'integrations/dsh/plugins/telos-ui-sidebar')
 }
 
+export function resolveTelosDshLayoutPackageRoot(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'dsh-overlays/telos-ui-layout')
+    : join(developmentRepositoryRoot(), 'integrations/dsh/plugins/telos-ui-layout')
+}
+
 export function loadDevelopmentEnvironment(): void {
   if (app.isPackaged) return
   const localEnvironment = join(developmentRepositoryRoot(), '.env.local')

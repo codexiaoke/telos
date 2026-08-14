@@ -82,3 +82,8 @@ const provenance = {
 }
 writeFileSync(resolve(targetPackage, 'UPSTREAM.json'), `${JSON.stringify(provenance, null, 2)}\n`)
 process.stdout.write(`Generated TELOS DSH sidebar overlay from ${commit}.\n`)
+
+execFileSync(process.execPath, [resolve(repositoryRoot, 'scripts/build-telos-dsh-layout.mjs')], {
+  cwd: repositoryRoot,
+  stdio: 'inherit',
+})

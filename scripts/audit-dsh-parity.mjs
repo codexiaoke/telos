@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -8,8 +8,9 @@ import { isDeepStrictEqual } from 'node:util'
 const repositoryRoot = resolve(import.meta.dirname, '..')
 const dshRoot = resolve(repositoryRoot, 'third_party/deepseek-harness')
 const dshCli = resolve(dshRoot, 'apps/cli/lib/bin.js')
-const overlayRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar')
-const patchPath = resolve(overlayRoot, 'telos.web.patch.yml')
+const sidebarRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar')
+const layoutRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-layout')
+const patchPath = resolve(sidebarRoot, 'telos.web.patch.yml')
 const temporaryRoot = mkdtempSync(join(tmpdir(), 'telos-dsh-parity-'))
 
 const require = createRequire(resolve(dshRoot, 'package.json'))
@@ -57,8 +58,11 @@ try {
     dshCli,
     resolve(dshRoot, 'apps/web/dist/index.html'),
     resolve(dshRoot, 'packages/client/ui-sidebar/lib/client.js'),
-    resolve(overlayRoot, 'package.json'),
-    resolve(overlayRoot, 'lib/client.js'),
+    resolve(sidebarRoot, 'package.json'),
+    resolve(sidebarRoot, 'lib/client.js'),
+    resolve(layoutRoot, 'package.json'),
+    resolve(layoutRoot, 'lib/client.js'),
+    resolve(layoutRoot, 'UPSTREAM.json'),
     patchPath,
   ]) {
     assert(existsSync(artifact), `required full-Web artifact is missing: ${artifact}`)
@@ -71,6 +75,32 @@ try {
   )
   const defaultById = mapRows(defaultRows)
   const effectiveById = mapRows(effectiveRows)
+
+  const layoutRow = effectiveById.get('ui-layout')
+  assert(layoutRow?.name === '@deepseek-ai/dsh-client-ui-layout', 'ui-layout package identity changed')
+  const layoutManifest = JSON.parse(readFileSync(resolve(layoutRoot, 'package.json'), 'utf8'))
+  assert(layoutManifest.name === layoutRow.name, 'layout compatibility manifest does not match the DSH row')
+  assert(layoutManifest.private === true, 'layout compatibility package must stay private')
+  assert(
+    isDeepStrictEqual(layoutManifest.dsh?.client?.inject, [
+      '@deepseek-ai/dsh-client-runtime',
+      '@deepseek-ai/dsh-client-ui-theme',
+    ]),
+    'layout compatibility package changed its DSH client dependency edges',
+  )
+
+  const profileRoot = resolve(temporaryRoot, 'profile-resolution')
+  const installedLayout = resolve(profileRoot, 'node_modules/@deepseek-ai/dsh-client-ui-layout')
+  mkdirSync(resolve(profileRoot, 'node_modules/@deepseek-ai'), { recursive: true })
+  cpSync(layoutRoot, installedLayout, { recursive: true })
+  const profileAnchor = resolve(profileRoot, 'cordis.yml')
+  writeFileSync(profileAnchor, '')
+  const profileRequire = createRequire(profileAnchor)
+  const resolvedLayoutManifest = profileRequire.resolve('@deepseek-ai/dsh-client-ui-layout/package.json')
+  assert(
+    realpathSync(resolvedLayoutManifest) === realpathSync(resolve(installedLayout, 'package.json')),
+    `Profile-local layout derivative does not win package resolution: ${resolvedLayoutManifest}`,
+  )
 
   const requiredSurfaceIds = [
     'modules',
@@ -138,6 +168,7 @@ try {
   process.stdout.write(`[PASS] Unchanged upstream rows: ${String(defaultRows.length - 1)}\n`)
   process.stdout.write('[PASS] Explained upstream delta: ui-sidebar disabled\n')
   process.stdout.write('[PASS] Explained TELOS addition: telos-ui-sidebar enabled\n')
+  process.stdout.write('[PASS] ui-layout identity preserved; Profile resolves the TELOS Renderer derivative\n')
   process.stdout.write(`[PASS] Required functional surfaces: ${String(requiredSurfaceIds.length)}\n`)
   process.stdout.write('TELOS effective DSH Web composition is structurally equivalent to the pinned default.\n')
 } finally {

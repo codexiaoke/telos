@@ -14,7 +14,9 @@ describe('prepareTelosDshWebPatch', () => {
   it('disables only the upstream sidebar and inserts the TELOS replacement', () => {
     const root = mkdtempSync(join(tmpdir(), 'telos-dsh-overlay-'))
     temporaryRoots.push(root)
-    writeFileSync(join(root, 'telos.web.patch.yml'), [
+    const sidebar = join(root, 'sidebar')
+    mkdirSync(sidebar)
+    writeFileSync(join(sidebar, 'telos.web.patch.yml'), [
       '- id: ui-sidebar',
       '  disabled: true',
       '- insert:',
@@ -23,7 +25,7 @@ describe('prepareTelosDshWebPatch', () => {
       '',
     ].join('\n'))
 
-    const patch = loadTelosDshWebPatch(root)
+    const patch = loadTelosDshWebPatch({ sidebarPackageRoot: sidebar, layoutPackageRoot: '' })
     expect(patch).toContain('- id: ui-sidebar\n  disabled: true')
     expect(patch).toContain('id: telos-ui-sidebar')
     expect(patch).toContain('name: "@telos/dsh-client-ui-sidebar"')
@@ -33,11 +35,16 @@ describe('prepareTelosDshWebPatch', () => {
   it('installs the package into the writable profile dependency root', () => {
     const root = mkdtempSync(join(tmpdir(), 'telos-dsh-overlay-'))
     temporaryRoots.push(root)
-    const source = join(root, 'source')
-    mkdirSync(join(source, 'lib'), { recursive: true })
-    writeFileSync(join(source, 'package.json'), '{}')
-    writeFileSync(join(source, 'lib/client.js'), 'window.__TELOS_TEST__ = true')
-    writeFileSync(join(source, 'telos.web.patch.yml'), [
+    const sidebar = join(root, 'sidebar')
+    const layout = join(root, 'layout')
+    mkdirSync(join(sidebar, 'lib'), { recursive: true })
+    mkdirSync(join(layout, 'lib'), { recursive: true })
+    writeFileSync(join(sidebar, 'package.json'), JSON.stringify({
+      name: '@telos/dsh-client-ui-sidebar',
+      private: true,
+    }))
+    writeFileSync(join(sidebar, 'lib/client.js'), 'window.__TELOS_SIDEBAR_TEST__ = true')
+    writeFileSync(join(sidebar, 'telos.web.patch.yml'), [
       '- id: ui-sidebar',
       '  disabled: true',
       '- insert:',
@@ -45,11 +52,21 @@ describe('prepareTelosDshWebPatch', () => {
       '      name: "@telos/dsh-client-ui-sidebar"',
       '',
     ].join('\n'))
+    writeFileSync(join(layout, 'package.json'), JSON.stringify({
+      name: '@deepseek-ai/dsh-client-ui-layout',
+      private: true,
+    }))
+    writeFileSync(join(layout, 'lib/client.js'), 'window.__TELOS_LAYOUT_TEST__ = true')
 
-    const path = prepareTelosDshWebPatch(join(root, 'home'), source)
+    const path = prepareTelosDshWebPatch(join(root, 'home'), {
+      sidebarPackageRoot: sidebar,
+      layoutPackageRoot: layout,
+    })
 
     expect(readFileSync(path, 'utf8')).toContain('"@telos/dsh-client-ui-sidebar"')
-    expect(existsSync(join(root, 'home/profiles/node_modules/@telos/dsh-client-ui-sidebar/lib/client.js')))
+    expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-client-ui-sidebar/lib/client.js')))
+      .toBe(true)
+    expect(existsSync(join(root, 'home/profiles/web/node_modules/@deepseek-ai/dsh-client-ui-layout/lib/client.js')))
       .toBe(true)
   })
 })

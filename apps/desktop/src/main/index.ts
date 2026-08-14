@@ -6,6 +6,7 @@ import {
   loadDevelopmentEnvironment,
   resolveDshNodeExecutable,
   resolveDshSourceRoot,
+  resolveTelosDshLayoutPackageRoot,
   resolveTelosDshSidebarPackageRoot,
 } from './application/dsh-runtime-paths.js'
 import { createRuntimeGateway } from './application/runtime-gateway.js'
@@ -37,14 +38,16 @@ app.whenReady().then(() => {
   registerRuntimeHandlers(createRuntimeGateway())
 
   const dshHome = join(app.getPath('userData'), 'runtime/dsh/web-home')
-  const telosPatch = prepareTelosDshWebPatch(dshHome, resolveTelosDshSidebarPackageRoot())
+  const telosPatch = prepareTelosDshWebPatch(dshHome, {
+    sidebarPackageRoot: resolveTelosDshSidebarPackageRoot(),
+    layoutPackageRoot: resolveTelosDshLayoutPackageRoot(),
+  })
   dshWeb = new DshWebSupervisor({
     sourceRoot: resolveDshSourceRoot(),
     dshHome,
     executablePath: resolveDshNodeExecutable(),
     patchPaths: [telosPatch],
   })
-
   const window = openMainWindow()
   void dshWeb.start().then(
     async (url) => {

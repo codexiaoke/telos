@@ -16,6 +16,16 @@ commit. Its `UPSTREAM.json` records source and generated hashes, and
 module identity, a host-controlled window-chrome inset, and the
 expanded/collapsed brand marks.
 
+`apps/desktop/src/renderer/src/workbench` and the generated private compatibility
+package at `integrations/dsh/plugins/telos-ui-layout` derive the root Slot,
+panel-state, theme-presentation, and three-column concession contracts from
+DSH's `@deepseek-ai/dsh-client-ui-layout` sources at the same pinned commit.
+TELOS owns the resulting React structure and presentation while preserving the
+DSH package identity and child Slot contract. `UPSTREAM.json` records each
+source mapping and hash; `LICENSE.upstream` carries the MIT license text. The
+compatibility package is private and must not be published as an upstream DSH
+artifact.
+
 ## thinking-orbs
 
 Portions of `apps/desktop/src/renderer/src/components/agent-orb/orbEngine.ts` are derived from the geometry and projection approach in [thinking-orbs](https://github.com/Jakubantalik/thinking-orbs) by Jakub Antalik.

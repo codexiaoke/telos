@@ -61,10 +61,12 @@ named `@telos/*` module would leave those graph edges unresolved or require
 patching every dependent package.
 
 TELOS therefore installs a private compatibility derivative under the exact
-package identity `@deepseek-ai/dsh-client-ui-layout` in the writable DSH
-Profile's `node_modules`. Node resolution from the Profile selects this package
-before the source workspace package. The default `ui-layout` Loader row and all
-downstream graph edges remain unchanged.
+package identity `@deepseek-ai/dsh-client-ui-layout` in the writable Web
+Profile's own `node_modules`. This is deliberately not the shared
+`profiles/node_modules` fallback, whose upstream symlinks are healed and owned
+by DSH. Node resolution from `profiles/web` selects the profile-specific TELOS
+package before that upstream fallback. The default `ui-layout` Loader row and
+all downstream graph edges remain unchanged.
 
 The tracked distribution directory is named for its ownership rather than its
 runtime identity:

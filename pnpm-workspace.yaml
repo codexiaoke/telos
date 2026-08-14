@@ -5,4 +5,7 @@ packages:
 
 allowBuilds:
   electron: true
+  # Selects the matching bundled 7-Zip executable used by electron-builder's
+  # Windows installer support. This is a reviewed local file-selection script.
+  electron-winstaller: true
   esbuild: true

@@ -1,6 +1,12 @@
 import { Menu, type MenuItemConstructorOptions } from 'electron'
 
-export function installApplicationMenu(): void {
+export interface ApplicationMenuActions {
+  showMainWindow: () => void
+  checkForUpdates: () => Promise<void>
+  quit: () => void
+}
+
+export function installApplicationMenu(actions: ApplicationMenuActions): void {
   const template: MenuItemConstructorOptions[] = [
     ...(process.platform === 'darwin'
       ? [
@@ -8,6 +14,7 @@ export function installApplicationMenu(): void {
             label: 'TELOS',
             submenu: [
               { role: 'about' },
+              { label: '检查更新…', click: () => void actions.checkForUpdates() },
               { type: 'separator' },
               { role: 'services' },
               { type: 'separator' },
@@ -15,14 +22,20 @@ export function installApplicationMenu(): void {
               { role: 'hideOthers' },
               { role: 'unhide' },
               { type: 'separator' },
-              { role: 'quit' },
+              { label: '退出 TELOS', accelerator: 'Command+Q', click: actions.quit },
             ],
           } satisfies MenuItemConstructorOptions,
         ]
       : []),
     {
       label: '文件',
-      submenu: [{ role: process.platform === 'darwin' ? 'close' : 'quit' }],
+      submenu: [
+        { label: '打开主窗口', click: actions.showMainWindow },
+        { type: 'separator' },
+        process.platform === 'darwin'
+          ? { role: 'close' }
+          : { label: '退出 TELOS', accelerator: 'Alt+F4', click: actions.quit },
+      ],
     },
     {
       label: '编辑',

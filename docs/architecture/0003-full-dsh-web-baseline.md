@@ -120,6 +120,11 @@ trusted local application page.
 
 ## Presentation migration
 
+ADR 0004 extends this migration by making `apps/desktop/src/renderer` the
+source of TELOS-compatible Client Plugin components. The DSH Web bootstrap and
+client runtime remain the functional assembly path while root presentation is
+replaced from TELOS-owned source.
+
 Presentation changes proceed from lowest risk to highest risk:
 
 1. Run the untouched DSH Web application in Electron as the reference mode.

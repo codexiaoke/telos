@@ -37,7 +37,7 @@ var CENTER_MIN = 620;
 var SIDEBAR_MIN = 264;
 var SIDEBAR_MAX = 420;
 var SIDEBAR_DEFAULT = 296;
-var SIDEBAR_COLLAPSED = 56;
+var SIDEBAR_COLLAPSED = 0;
 var SIDEBAR_AUTO_COLLAPSE = 1060;
 var DETAILS_MIN = 300;
 var DETAILS_MAX = 520;
@@ -77,6 +77,12 @@ function CenterColumn({ children }) {
 }
 function DetailsColumn({ children }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telos-workbench-details", children });
+}
+function SidebarOpenIcon() {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { "aria-hidden": "true", fill: "none", viewBox: "0 0 20 20", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { height: "14", rx: "3.5", stroke: "currentColor", strokeWidth: "1.6", width: "16", x: "2", y: "3" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M7 3.8v12.4", stroke: "currentColor", strokeLinecap: "round", strokeWidth: "1.6" })
+  ] });
 }
 function Resizer({ side, left, value, onStart, onDrag, onEnd }) {
   const [dragging, setDragging] = (0, import_react.useState)(false);
@@ -220,6 +226,17 @@ function TelosAppFrame({
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CenterColumn, { children: renderSlot("conversation", {}) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DetailsColumn, { children: renderSlot("details", {}) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telos-workbench-overlay", "data-shell-overlay": true, children: renderSlot("shell.overlay", {}) }),
+        sidebarCollapsed && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            "aria-label": "\u6253\u5F00\u4FA7\u8FB9\u680F",
+            className: "telos-sidebar-reopen",
+            onClick: actions.toggleSidebar,
+            title: "\u6253\u5F00\u4FA7\u8FB9\u680F",
+            type: "button",
+            children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SidebarOpenIcon, {})
+          }
+        ),
         !sidebarCollapsed && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           Resizer,
           {
@@ -353,6 +370,46 @@ var TELOS_LAYOUT_CSS = `
   background: color-mix(in srgb, var(--dsw-alias-bg-base) 98%, transparent);
 }
 
+/* The DSH session header is the desktop titlebar surface. It remains useful
+   space: native controls occupy only their platform rectangles while the
+   session title, tabs and utilities stay in the same row. */
+.telos-workbench-center [data-slot='conversation.session.header'] > header {
+  z-index: 2;
+  padding-right: calc(28px + var(--telos-titlebar-right-safe, 0px));
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.telos-workbench-center [data-slot='conversation.session.header'] > header button,
+.telos-workbench-center [data-slot='conversation.session.header'] > header a,
+.telos-workbench-center [data-slot='conversation.session.header'] > header input,
+.telos-workbench-center [data-slot='conversation.session.header'] > header [role='button'] {
+  -webkit-app-region: no-drag;
+  user-select: auto;
+}
+
+.telos-workbench-frame[data-sidebar-collapsed] .telos-workbench-center [data-slot='conversation.session.header'] > header {
+  padding-left: var(--telos-titlebar-collapsed-content-left, 132px);
+}
+
+.telos-workbench-frame[data-sidebar-collapsed] .telos-workbench-sidebar {
+  visibility: hidden;
+  pointer-events: none;
+  border-right: 0;
+}
+
+/* A blank conversation hides the DSH session header. Keep just that empty
+   top strip draggable without placing a full-width element over the hero. */
+.telos-workbench-center:has([data-phase='hero'])::before,
+.telos-workbench-center:has([data-phase='settling'])::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  inset: 0 var(--telos-titlebar-right-safe, 0px) auto 0;
+  height: var(--telos-titlebar-height, 52px);
+  -webkit-app-region: drag;
+}
+
 .telos-workbench-details {
   overflow: hidden;
   background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 98%, transparent);
@@ -419,11 +476,54 @@ var TELOS_LAYOUT_CSS = `
   pointer-events: auto;
 }
 
+.telos-sidebar-reopen {
+  position: absolute;
+  z-index: 8;
+  top: 10px;
+  left: var(--telos-titlebar-left-safe, 12px);
+  display: grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  color: var(--dsw-alias-label-secondary);
+  background: transparent;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  animation: telos-sidebar-reopen-in 220ms cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.telos-sidebar-reopen svg {
+  width: 20px;
+  height: 20px;
+}
+
+.telos-sidebar-reopen:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.telos-sidebar-reopen:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 62%, transparent);
+  outline-offset: 2px;
+}
+
+@keyframes telos-sidebar-reopen-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px) scale(.94);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .telos-workbench-frame,
   .telos-workbench-resizer,
-  .telos-workbench-resizer::after {
+  .telos-workbench-resizer::after,
+  .telos-sidebar-reopen {
     transition: none;
+    animation: none;
   }
 }
 `;

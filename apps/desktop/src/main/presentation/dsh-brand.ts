@@ -1,4 +1,8 @@
-import { TELOS_TITLE_BAR_HEIGHT } from '../shell/window-chrome.js'
+import {
+  TELOS_CAPTION_CONTROLS_WIDTH,
+  TELOS_MAC_TITLEBAR_LEFT_SAFE,
+  TELOS_TITLE_BAR_HEIGHT,
+} from '../shell/window-chrome.js'
 
 const DSH_PRODUCT_NAME = 'DeepSeek Harness'
 const DSH_TITLE_SUFFIX = ` — ${DSH_PRODUCT_NAME}`
@@ -16,17 +20,22 @@ export function toTelosWindowTitle(documentTitle: string): string {
 }
 
 /**
- * TELOS presentation overrides only DSH's documented design-token surface.
- * Component selectors deliberately stay in the upstream Web application so
- * a DSH update can change layout and behavior without being shadowed here.
+ * Build host-owned design tokens and desktop chrome metrics. Component layout
+ * remains in the TELOS Renderer derivative so DSH updates stay auditable.
  */
-export const TELOS_DSH_THEME_CSS = `
+export function createTelosDshThemeCss(platform: NodeJS.Platform): string {
+  const leftSafe = platform === 'darwin' ? TELOS_MAC_TITLEBAR_LEFT_SAFE : 12
+  const rightSafe = platform === 'darwin' ? 0 : TELOS_CAPTION_CONTROLS_WIDTH
+
+  return `
 body {
   color-scheme: light;
   box-sizing: border-box;
-  padding-top: ${TELOS_TITLE_BAR_HEIGHT}px;
-  --telos-title-bar-height: ${TELOS_TITLE_BAR_HEIGHT}px;
-  --telos-sidebar-top-inset: 6px;
+  --telos-titlebar-height: ${TELOS_TITLE_BAR_HEIGHT}px;
+  --telos-titlebar-left-safe: ${leftSafe}px;
+  --telos-titlebar-right-safe: ${rightSafe}px;
+  --telos-titlebar-collapsed-content-left: ${leftSafe + 44}px;
+  --telos-sidebar-top-inset: 0px;
   --telos-sidebar-rail-top-inset: 18px;
   --dsw-static-deepseek-50: rgb(244, 245, 255);
   --dsw-static-deepseek-100: rgb(234, 236, 255);
@@ -46,16 +55,6 @@ body {
   --dsw-specific-sidebar-fill: rgb(246, 246, 244);
   --dsw-specific-sidebar-nav-item-active: rgb(235, 235, 232);
   --dsw-specific-sidebar-nav-item-hover: rgb(240, 240, 237);
-}
-
-body::before {
-  content: '';
-  position: fixed;
-  z-index: 2147483646;
-  inset: 0 0 auto;
-  height: var(--telos-title-bar-height);
-  background: var(--dsw-alias-bg-base);
-  -webkit-app-region: drag;
 }
 
 body[data-ds-dark-theme] {
@@ -80,3 +79,6 @@ body[data-ds-dark-theme] {
   --dsw-specific-sidebar-nav-item-hover: rgb(33, 34, 41);
 }
 `
+}
+
+export const TELOS_DSH_THEME_CSS = createTelosDshThemeCss(process.platform)

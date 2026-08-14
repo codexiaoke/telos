@@ -26,6 +26,15 @@ function DetailsColumn({ children }: { children?: ReactNode }) {
   return <div className="telos-workbench-details">{children}</div>
 }
 
+function SidebarOpenIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 20 20">
+      <rect height="14" rx="3.5" stroke="currentColor" strokeWidth="1.6" width="16" x="2" y="3" />
+      <path d="M7 3.8v12.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+    </svg>
+  )
+}
+
 interface ResizerProps {
   side: 'sidebar' | 'details'
   left: number
@@ -192,6 +201,17 @@ export function TelosAppFrame({
       <div className="telos-workbench-overlay" data-shell-overlay>
         {renderSlot('shell.overlay', {})}
       </div>
+      {sidebarCollapsed && (
+        <button
+          aria-label="打开侧边栏"
+          className="telos-sidebar-reopen"
+          onClick={actions.toggleSidebar}
+          title="打开侧边栏"
+          type="button"
+        >
+          <SidebarOpenIcon />
+        </button>
+      )}
       {!sidebarCollapsed && (
         <Resizer
           left={columns.sidebar}

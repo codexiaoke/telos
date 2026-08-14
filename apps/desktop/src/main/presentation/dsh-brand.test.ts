@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { TELOS_DSH_THEME_CSS, toTelosWindowTitle } from './dsh-brand.js'
+import { createTelosDshThemeCss, TELOS_DSH_THEME_CSS, toTelosWindowTitle } from './dsh-brand.js'
 
 const repositoryRoot = resolve(__dirname, '../../../../..')
 
@@ -20,25 +20,34 @@ describe('TELOS_DSH_THEME_CSS', () => {
     expect(TELOS_DSH_THEME_CSS).not.toMatch(/\.(?:frame|sidebar|composer|message)[\s,{:#.]/i)
   })
 
-  it('reserves one title-bar row for native controls on every platform', () => {
-    expect(TELOS_DSH_THEME_CSS).toContain('padding-top: 44px;')
-    expect(TELOS_DSH_THEME_CSS).toContain('--telos-title-bar-height: 44px;')
-    expect(TELOS_DSH_THEME_CSS).toContain('--telos-sidebar-top-inset: 6px;')
+  it('shares one productive titlebar row with macOS controls', () => {
+    const css = createTelosDshThemeCss('darwin')
+    expect(css).not.toContain('padding-top:')
+    expect(css).toContain('--telos-titlebar-height: 52px;')
+    expect(css).toContain('--telos-titlebar-left-safe: 88px;')
+    expect(css).toContain('--telos-titlebar-right-safe: 0px;')
+    expect(css).toContain('--telos-sidebar-top-inset: 0px;')
     expect(TELOS_DSH_THEME_CSS).toContain('--telos-sidebar-rail-top-inset: 18px;')
-    expect(TELOS_DSH_THEME_CSS).toContain('-webkit-app-region: drag;')
 
     const sidebarBundle = readFileSync(
       resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar/lib/client.js'),
       'utf8',
     )
-    expect(sidebarBundle).toContain('var(--telos-sidebar-rail-top-inset,18px)')
+    expect(sidebarBundle).toContain('var(--telos-titlebar-left-safe,16px)')
   })
 
-  it('keeps sidebar controls out of the desktop drag strip', () => {
+  it('reserves only the top-right native caption rectangle on Windows', () => {
+    const css = createTelosDshThemeCss('win32')
+    expect(css).toContain('--telos-titlebar-left-safe: 12px;')
+    expect(css).toContain('--telos-titlebar-right-safe: 138px;')
+  })
+
+  it('keeps sidebar titlebar controls out of the drag region', () => {
     const sidebarBundle = readFileSync(
       resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar/lib/client.js'),
       'utf8',
     )
-    expect(sidebarBundle).not.toContain('-webkit-app-region:no-drag')
+    expect(sidebarBundle).toContain('-webkit-app-region:drag')
+    expect(sidebarBundle).toContain('-webkit-app-region:no-drag')
   })
 })

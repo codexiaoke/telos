@@ -37,6 +37,24 @@ generated = replaceExactlyOnce(
 )
 generated = replaceExactlyOnce(
   generated,
+  'padding:8px 0 8px 4px;display:flex;overflow:hidden',
+  'padding:8px 0 8px max(4px,calc(var(--telos-titlebar-left-safe,16px) - var(--dsh-sidebar-inline-padding)));display:flex;overflow:hidden;-webkit-app-region:drag',
+  'sidebar titlebar layout',
+)
+generated = replaceExactlyOnce(
+  generated,
+  'background:0 0;border:none;flex:1;align-items:center;padding:0;display:inline-flex;overflow:hidden',
+  'background:0 0;border:none;flex:1;align-items:center;padding:0;display:inline-flex;overflow:hidden;-webkit-app-region:no-drag',
+  'sidebar brand hit region',
+)
+generated = replaceExactlyOnce(
+  generated,
+  'border-radius:50%;flex:none;justify-content:center;align-items:center;padding:0;display:inline-flex',
+  'border-radius:50%;flex:none;justify-content:center;align-items:center;padding:0;display:inline-flex;-webkit-app-region:no-drag',
+  'sidebar icon hit regions',
+)
+generated = replaceExactlyOnce(
+  generated,
   'children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.BrandWordmark, {})',
   `children: (0, react_jsx_runtime.jsx)("span", {
 \t\t\t\t\t\t\t\tstyle: { fontSize: "16px", lineHeight: "24px", fontWeight: 700, letterSpacing: "0.16em" },
@@ -75,6 +93,8 @@ const provenance = {
   transformations: [
     'replace module id',
     'add host-controlled expanded and collapsed sidebar top insets',
+    'turn the expanded logo row into a platform-aware draggable titlebar',
+    'keep sidebar titlebar controls interactive',
     'replace expanded wordmark',
     'replace collapsed mark',
   ],

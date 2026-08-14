@@ -34,10 +34,10 @@ describe('computeWorkbenchColumns', () => {
     })
   })
 
-  it('keeps the compact sidebar rail when its preference is closed', () => {
+  it('returns the whole viewport to the workbench when the sidebar is closed', () => {
     expect(computeWorkbenchColumns(900, 0, 0)).toEqual({
       sidebar: SIDEBAR_COLLAPSED,
-      center: 900 - SIDEBAR_COLLAPSED,
+      center: 900,
       details: 0,
     })
   })

@@ -83,16 +83,22 @@ function StartupTrack({ state }: { state: DshWebSnapshot['state'] }): ReactNode 
 export function BootstrapApp(): ReactNode {
   const { snapshot, retry, retrying, bridgeError } = useDshWebStatus()
   const [version, setVersion] = useState('0.1.0')
+  const [platform, setPlatform] = useState(() => (
+    navigator.platform.startsWith('Mac') ? 'darwin' : navigator.platform.startsWith('Win') ? 'win32' : 'linux'
+  ))
   const copy = copyFor(snapshot)
   const failed = snapshot.state === 'failed' || bridgeError !== undefined
   const diagnostic = bridgeError ?? snapshot.detail?.split('\n')[0]
 
   useEffect(() => {
-    void window.telos.system.getAppInfo().then(info => setVersion(info.version))
+    void window.telos.system.getAppInfo().then((info) => {
+      setVersion(info.version)
+      setPlatform(info.platform)
+    })
   }, [])
 
   return (
-    <main className="bootstrap-shell">
+    <main className="bootstrap-shell" data-platform={platform}>
       <div className="bootstrap-ambient bootstrap-ambient-one" />
       <div className="bootstrap-ambient bootstrap-ambient-two" />
 

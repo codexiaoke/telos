@@ -45,6 +45,46 @@ export const TELOS_LAYOUT_CSS = `
   background: color-mix(in srgb, var(--dsw-alias-bg-base) 98%, transparent);
 }
 
+/* The DSH session header is the desktop titlebar surface. It remains useful
+   space: native controls occupy only their platform rectangles while the
+   session title, tabs and utilities stay in the same row. */
+.telos-workbench-center [data-slot='conversation.session.header'] > header {
+  z-index: 2;
+  padding-right: calc(28px + var(--telos-titlebar-right-safe, 0px));
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.telos-workbench-center [data-slot='conversation.session.header'] > header button,
+.telos-workbench-center [data-slot='conversation.session.header'] > header a,
+.telos-workbench-center [data-slot='conversation.session.header'] > header input,
+.telos-workbench-center [data-slot='conversation.session.header'] > header [role='button'] {
+  -webkit-app-region: no-drag;
+  user-select: auto;
+}
+
+.telos-workbench-frame[data-sidebar-collapsed] .telos-workbench-center [data-slot='conversation.session.header'] > header {
+  padding-left: var(--telos-titlebar-collapsed-content-left, 132px);
+}
+
+.telos-workbench-frame[data-sidebar-collapsed] .telos-workbench-sidebar {
+  visibility: hidden;
+  pointer-events: none;
+  border-right: 0;
+}
+
+/* A blank conversation hides the DSH session header. Keep just that empty
+   top strip draggable without placing a full-width element over the hero. */
+.telos-workbench-center:has([data-phase='hero'])::before,
+.telos-workbench-center:has([data-phase='settling'])::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  inset: 0 var(--telos-titlebar-right-safe, 0px) auto 0;
+  height: var(--telos-titlebar-height, 52px);
+  -webkit-app-region: drag;
+}
+
 .telos-workbench-details {
   overflow: hidden;
   background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 98%, transparent);
@@ -111,11 +151,54 @@ export const TELOS_LAYOUT_CSS = `
   pointer-events: auto;
 }
 
+.telos-sidebar-reopen {
+  position: absolute;
+  z-index: 8;
+  top: 10px;
+  left: var(--telos-titlebar-left-safe, 12px);
+  display: grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  color: var(--dsw-alias-label-secondary);
+  background: transparent;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  animation: telos-sidebar-reopen-in 220ms cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.telos-sidebar-reopen svg {
+  width: 20px;
+  height: 20px;
+}
+
+.telos-sidebar-reopen:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.telos-sidebar-reopen:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 62%, transparent);
+  outline-offset: 2px;
+}
+
+@keyframes telos-sidebar-reopen-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px) scale(.94);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .telos-workbench-frame,
   .telos-workbench-resizer,
-  .telos-workbench-resizer::after {
+  .telos-workbench-resizer::after,
+  .telos-sidebar-reopen {
     transition: none;
+    animation: none;
   }
 }
 `

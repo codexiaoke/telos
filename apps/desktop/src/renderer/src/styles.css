@@ -13,7 +13,9 @@
   --telos-text-primary: #292a29;
   --telos-text-secondary: #666966;
   --telos-text-tertiary: #a0a29f;
-  --telos-title-bar-height: 44px;
+  --telos-titlebar-height: 52px;
+  --telos-titlebar-left-safe: 88px;
+  --telos-titlebar-right-safe: 26px;
 }
 
 * {
@@ -59,8 +61,7 @@ textarea {
   display: grid;
   width: 100%;
   height: 100%;
-  padding-top: var(--telos-title-bar-height);
-  grid-template-rows: 72px minmax(0, 1fr) 44px;
+  grid-template-rows: var(--telos-titlebar-height) minmax(0, 1fr) 44px;
   overflow: hidden;
   isolation: isolate;
   background:
@@ -68,13 +69,10 @@ textarea {
     radial-gradient(circle at 50% 38%, rgb(222 234 227 / 48%), transparent 42%);
 }
 
-.bootstrap-shell::after {
-  position: absolute;
-  z-index: 20;
-  inset: 0 0 auto;
-  height: var(--telos-title-bar-height);
-  content: "";
-  -webkit-app-region: drag;
+.bootstrap-shell[data-platform="win32"],
+.bootstrap-shell[data-platform="linux"] {
+  --telos-titlebar-left-safe: 26px;
+  --telos-titlebar-right-safe: 164px;
 }
 
 .bootstrap-shell::before {
@@ -120,6 +118,8 @@ textarea {
 }
 
 .bootstrap-titlebar {
+  padding-left: var(--telos-titlebar-left-safe);
+  padding-right: var(--telos-titlebar-right-safe);
   border-bottom: 1px solid rgb(28 33 30 / 5%);
 }
 

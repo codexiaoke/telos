@@ -14,7 +14,10 @@ export const CENTER_MIN = 620
 export const SIDEBAR_MIN = 264
 export const SIDEBAR_MAX = 420
 export const SIDEBAR_DEFAULT = 296
-export const SIDEBAR_COLLAPSED = 56
+/** A closed sidebar yields the whole track to the workbench. Its reopen control
+ * is owned by TelosAppFrame and floats inside the shared titlebar instead of
+ * keeping a permanent navigation rail. */
+export const SIDEBAR_COLLAPSED = 0
 export const SIDEBAR_AUTO_COLLAPSE = 1_060
 export const DETAILS_MIN = 300
 export const DETAILS_MAX = 520

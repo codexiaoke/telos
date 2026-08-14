@@ -193,6 +193,14 @@ export const TELOS_LAYOUT_CSS = `
   }
 }
 
+.telos-workbench-sidebar [data-telos-search-sidebar-snapshot] {
+  flex: 1;
+  min-height: 0;
+  pointer-events: none;
+  user-select: none;
+  animation: none;
+}
+
 .telos-workbench-center {
   display: flex;
   flex-direction: column;

@@ -13,6 +13,10 @@ import {
 } from './layout-model'
 import type { createTelosLayoutStore } from './layout-store'
 
+const OPEN_SEARCH_DIALOG_SELECTOR =
+  ".telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div:has(> div:first-child > div:first-of-type button[aria-expanded='true'])"
+const SEARCH_SIDEBAR_SNAPSHOT_SELECTOR = '[data-telos-search-sidebar-snapshot]'
+
 export type TelosAppFrameProps =
   & PropsRuntime<'root'>
   & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay'>
@@ -150,6 +154,46 @@ export function TelosAppFrame({
     }
   }, [])
 
+  useEffect(() => {
+    const frame = frameRef.current
+    if (frame === null) return
+
+    const syncSidebarSnapshot = () => {
+      const searchDialog = frame.querySelector<HTMLElement>(OPEN_SEARCH_DIALOG_SELECTOR)
+      const existingSnapshot = frame.querySelector<HTMLElement>(SEARCH_SIDEBAR_SNAPSHOT_SELECTOR)
+      if (searchDialog === null) {
+        existingSnapshot?.remove()
+        return
+      }
+      if (existingSnapshot !== null) return
+
+      const slot = searchDialog.parentElement
+      const region = slot?.parentElement
+      if (slot === null || slot === undefined || region === null || region === undefined) return
+
+      const snapshot = searchDialog.cloneNode(true) as HTMLElement
+      snapshot.dataset.telosSearchSidebarSnapshot = ''
+      snapshot.setAttribute('aria-hidden', 'true')
+      snapshot.inert = true
+      snapshot.querySelector(':scope > div:first-child')?.remove()
+      snapshot.querySelectorAll('[id]').forEach(element => { element.removeAttribute('id') })
+      region.insertBefore(snapshot, slot.nextSibling)
+    }
+
+    const observer = new MutationObserver(syncSidebarSnapshot)
+    observer.observe(frame, {
+      attributes: true,
+      attributeFilter: ['aria-expanded'],
+      childList: true,
+      subtree: true,
+    })
+    syncSidebarSnapshot()
+    return () => {
+      observer.disconnect()
+      frame.querySelector(SEARCH_SIDEBAR_SNAPSHOT_SELECTOR)?.remove()
+    }
+  }, [])
+
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
   useEffect(() => actions.setNarrow(narrow), [actions, narrow])
   const sidebarCollapsed = narrow ? !panels.narrowExpanded : panels.sidebar === 0
@@ -185,9 +229,7 @@ export function TelosAppFrame({
 
   const handleWorkbenchClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (!(event.target instanceof Element)) return
-    const searchDialog = event.currentTarget.querySelector<HTMLElement>(
-      ".telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div:has(> div:first-child > div:first-of-type button[aria-expanded='true'])",
-    )
+    const searchDialog = event.currentTarget.querySelector<HTMLElement>(OPEN_SEARCH_DIALOG_SELECTOR)
     if (searchDialog === null) return
 
     const sessionRow = event.target.closest("[role='treeitem'][aria-selected]")

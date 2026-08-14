@@ -43,4 +43,9 @@ describe('TELOS_LAYOUT_CSS', () => {
     expect(TELOS_LAYOUT_CSS).toContain('background: rgb(0 0 0 / 48%);')
     expect(TELOS_LAYOUT_CSS).toContain('@keyframes telos-search-dialog-in')
   })
+
+  it('keeps a non-interactive session-list snapshot behind the search dialog', () => {
+    expect(TELOS_LAYOUT_CSS).toContain('[data-telos-search-sidebar-snapshot]')
+    expect(TELOS_LAYOUT_CSS).toContain('pointer-events: none;')
+  })
 })

@@ -1,10 +1,12 @@
 import { app, BrowserWindow, dialog } from 'electron'
 import { join } from 'node:path'
 import { DshWebSupervisor } from './application/dsh-web-supervisor.js'
+import { prepareTelosDshWebPatch } from './application/dsh-web-overlay.js'
 import {
   loadDevelopmentEnvironment,
   resolveDshNodeExecutable,
   resolveDshSourceRoot,
+  resolveTelosDshSidebarPackageRoot,
 } from './application/dsh-runtime-paths.js'
 import { createRuntimeGateway } from './application/runtime-gateway.js'
 import { registerRuntimeHandlers } from './ipc/register-runtime-handlers.js'
@@ -34,10 +36,13 @@ app.whenReady().then(() => {
   registerSystemHandlers()
   registerRuntimeHandlers(createRuntimeGateway())
 
+  const dshHome = join(app.getPath('userData'), 'runtime/dsh/web-home')
+  const telosPatch = prepareTelosDshWebPatch(dshHome, resolveTelosDshSidebarPackageRoot())
   dshWeb = new DshWebSupervisor({
     sourceRoot: resolveDshSourceRoot(),
-    dshHome: join(app.getPath('userData'), 'runtime/dsh/web-home'),
+    dshHome,
     executablePath: resolveDshNodeExecutable(),
+    patchPaths: [telosPatch],
   })
 
   const window = openMainWindow()

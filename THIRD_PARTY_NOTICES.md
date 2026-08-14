@@ -9,6 +9,13 @@
 - License: MIT
 - License file: `third_party/deepseek-harness/LICENSE`
 
+`integrations/dsh/plugins/telos-ui-sidebar/lib/client.js` is a generated
+derivative of DSH's `@deepseek-ai/dsh-client-ui-sidebar` bundle at that pinned
+commit. Its `UPSTREAM.json` records source and generated hashes, and
+`LICENSE.upstream` carries the license text. The generation changes only the
+module identity, a host-controlled window-chrome inset, and the
+expanded/collapsed brand marks.
+
 ## thinking-orbs
 
 Portions of `apps/desktop/src/renderer/src/components/agent-orb/orbEngine.ts` are derived from the geometry and projection approach in [thinking-orbs](https://github.com/Jakubantalik/thinking-orbs) by Jakub Antalik.

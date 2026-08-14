@@ -77,6 +77,18 @@ animation language, navigation framing, and later personal domains. A TELOS
 visual replacement must preserve the DSH slot, props, event, and Remote
 contracts consumed by the component it replaces.
 
+The first desktop overlay is deliberately narrow: Electron translates the
+native window-title suffix from `DeepSeek Harness` to `TELOS` and injects a
+light/dark TELOS palette through DSH's `--dsw-*` design-token surface. It does
+not select DSH component class names, rewrite the DOM, or modify the Submodule.
+The persistent sidebar brand is a generated MIT-derived client plugin: a
+fail-loud build transform starts from the pinned DSH sidebar bundle, changes
+only its module identity, host-controlled titlebar inset, and two brand marks,
+and a TELOS-owned `--patch` disables the upstream sidebar row before inserting
+that compatible replacement.
+If an upstream update removes a token we use, the sync audit must report that
+drift before the DSH pointer is advanced.
+
 ### The Submodule is read-only product input
 
 Normal TELOS development does not edit

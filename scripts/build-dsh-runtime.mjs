@@ -30,9 +30,18 @@ run(['--config.verify-deps-before-run=false', 'rebuild', 'esbuild', 'node-pty', 
 // same source build and remains covered by the artifact checks below.
 run(['--config.verify-deps-before-run=false', 'run', 'build'])
 
+const overlayBuild = spawnSync(process.execPath, [resolve(repositoryRoot, 'scripts/build-telos-dsh-overlays.mjs')], {
+  cwd: repositoryRoot,
+  env: process.env,
+  stdio: 'inherit',
+})
+if (overlayBuild.error) throw overlayBuild.error
+if (overlayBuild.status !== 0) process.exit(overlayBuild.status ?? 1)
+
 accessSync(resolve(dshRoot, 'packages/sdk/client/lib/index.js'))
 accessSync(resolve(dshRoot, 'packages/examples/jsonrpc-demo/lib/bin.js'))
 accessSync(resolve(dshRoot, 'python/sdk-runtime/node_modules/@deepseek-ai/dsh-sdk-jsonrpc-server'))
 accessSync(resolve(dshRoot, 'apps/cli/lib/bin.js'))
 accessSync(resolve(dshRoot, 'apps/web/dist/index.html'))
+accessSync(resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar/lib/client.js'))
 process.stdout.write('DSH source runtime and complete Web application are built and ready.\n')

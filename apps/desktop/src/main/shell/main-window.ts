@@ -1,5 +1,6 @@
 import { BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
+import { applyDshPresentation, installDshPresentation } from '../presentation/dsh-presentation.js'
 
 function parseDshWebUrl(value: string): URL {
   const url = new URL(value)
@@ -46,6 +47,8 @@ export async function loadDshWeb(window: BrowserWindow, value: string): Promise<
   const url = parseDshWebUrl(value)
   const allowedOrigin = url.origin
 
+  installDshPresentation(window)
+
   const guardNavigation = (event: Electron.Event, target: string): void => {
     try {
       if (new URL(target).origin === allowedOrigin) return
@@ -64,4 +67,5 @@ export async function loadDshWeb(window: BrowserWindow, value: string): Promise<
   })
 
   await window.loadURL(url.href)
+  await applyDshPresentation(window.webContents)
 }

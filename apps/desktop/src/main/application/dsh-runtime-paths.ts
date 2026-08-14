@@ -21,6 +21,12 @@ export function resolveDshSourceRoot(): string {
     : join(developmentRepositoryRoot(), 'third_party/deepseek-harness')
 }
 
+export function resolveTelosDshSidebarPackageRoot(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'dsh-overlays/telos-ui-sidebar')
+    : join(developmentRepositoryRoot(), 'integrations/dsh/plugins/telos-ui-sidebar')
+}
+
 export function loadDevelopmentEnvironment(): void {
   if (app.isPackaged) return
   const localEnvironment = join(developmentRepositoryRoot(), '.env.local')

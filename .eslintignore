@@ -1,1 +1,2 @@
 third_party/
+integrations/dsh/plugins/*/lib/

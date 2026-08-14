@@ -211,6 +211,24 @@ function TelosAppFrame({
   const dragDetails = (0, import_react.useCallback)((dx) => {
     actions.setDetails(detailsBase.current - dx);
   }, [actions]);
+  const handleWorkbenchClick = (0, import_react.useCallback)((event) => {
+    if (!(event.target instanceof Element)) return;
+    const searchDialog = event.currentTarget.querySelector(
+      ".telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div:has(> div:first-child > div:first-of-type button[aria-expanded='true'])"
+    );
+    if (searchDialog === null) return;
+    const sessionRow = event.target.closest("[role='treeitem'][aria-selected]");
+    const pickedSession = sessionRow !== null && searchDialog.contains(sessionRow);
+    const clickedBackdrop = !searchDialog.contains(event.target);
+    if (!pickedSession && !clickedBackdrop) return;
+    const closeButton = searchDialog.querySelector(
+      ":scope > div:first-child > div:first-of-type button:last-of-type"
+    );
+    if (closeButton === null) return;
+    queueMicrotask(() => {
+      closeButton.click();
+    });
+  }, []);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
     "div",
     {
@@ -219,6 +237,7 @@ function TelosAppFrame({
       "data-dragging": dragging || void 0,
       "data-sidebar-collapsed": sidebarCollapsed || void 0,
       "data-telos-workbench": "",
+      onClick: handleWorkbenchClick,
       ref: frameRef,
       style: { gridTemplateColumns: `${columns.sidebar}px minmax(0, 1fr) ${columns.details}px` },
       children: [
@@ -399,6 +418,123 @@ var TELOS_LAYOUT_CSS = `
    separate search control rendered below the header. */
 .telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div > div:first-child > div:first-of-type > button:last-of-type {
   display: none;
+}
+
+/* The upstream workspace browser exposes its search-open state through the
+   search trigger's aria-expanded attribute. Reuse that stable state instead of
+   stretching the titlebar control across the narrow sidebar. */
+.telos-workbench-sidebar:has(
+  [data-slot='sidebar.workspaces'] > div > div:first-child > div:first-of-type button[aria-expanded='true']
+) {
+  overflow: visible;
+}
+
+.telos-workbench-sidebar:has(
+  [data-slot='sidebar.workspaces'] > div > div:first-child > div:first-of-type button[aria-expanded='true']
+)::after {
+  content: '';
+  position: fixed;
+  z-index: 99;
+  inset: 0;
+  background: rgb(0 0 0 / 48%);
+  -webkit-app-region: no-drag;
+}
+
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div:has(
+  > div:first-child > div:first-of-type button[aria-expanded='true']
+) {
+  position: fixed;
+  z-index: 100;
+  top: 50%;
+  left: 50%;
+  width: min(640px, calc(100vw - 64px));
+  height: min(640px, calc(100vh - 112px));
+  min-height: 360px;
+  padding: 20px;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 24px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 24px 72px rgb(0 0 0 / 24%);
+  transform: translate(-50%, -50%);
+  animation: telos-search-dialog-in 160ms var(--ds-ease-in-out);
+  -webkit-app-region: no-drag;
+}
+
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div:has(
+  > div:first-child > div:first-of-type button[aria-expanded='true']
+) > div:first-child {
+  position: relative;
+  z-index: 1;
+  inset: auto;
+  width: 100%;
+  height: 44px;
+  margin: 0 0 16px;
+  padding: 0;
+  overflow: visible;
+}
+
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div:has(
+  > div:first-child > div:first-of-type button[aria-expanded='true']
+) > div:first-child > div:first-of-type {
+  flex: 1;
+  width: 100%;
+  max-width: none;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+}
+
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div:has(
+  > div:first-child > div:first-of-type button[aria-expanded='true']
+) > div:first-child > div:first-of-type > div {
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: inset 0 0 0 1px var(--dsw-alias-border-l1);
+}
+
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div:has(
+  > div:first-child > div:first-of-type button[aria-expanded='true']
+) > div:first-child > div:first-of-type input {
+  margin-left: 0;
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div:has(
+  > div:first-child > div:first-of-type button[aria-expanded='true']
+) > div:first-child > div:nth-of-type(2) {
+  display: none;
+}
+
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div:has(
+  > div:first-child > div:first-of-type button[aria-expanded='true']
+) > div:nth-of-type(2) {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div:has(
+  > div:first-child > div:first-of-type button[aria-expanded='true']
+) > div:nth-of-type(2) [role='treeitem'] {
+  min-height: 40px;
+  border-radius: 10px;
+}
+
+@keyframes telos-search-dialog-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 12px)) scale(0.985);
+  }
 }
 
 .telos-workbench-center {

@@ -183,6 +183,25 @@ export function TelosAppFrame({
     actions.setDetails(detailsBase.current - dx)
   }, [actions])
 
+  const handleWorkbenchClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof Element)) return
+    const searchDialog = event.currentTarget.querySelector<HTMLElement>(
+      ".telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div:has(> div:first-child > div:first-of-type button[aria-expanded='true'])",
+    )
+    if (searchDialog === null) return
+
+    const sessionRow = event.target.closest("[role='treeitem'][aria-selected]")
+    const pickedSession = sessionRow !== null && searchDialog.contains(sessionRow)
+    const clickedBackdrop = !searchDialog.contains(event.target)
+    if (!pickedSession && !clickedBackdrop) return
+
+    const closeButton = searchDialog.querySelector<HTMLElement>(
+      ':scope > div:first-child > div:first-of-type button:last-of-type',
+    )
+    if (closeButton === null) return
+    queueMicrotask(() => { closeButton.click() })
+  }, [])
+
   return (
     <div
       className="telos-workbench-frame"
@@ -190,6 +209,7 @@ export function TelosAppFrame({
       data-dragging={dragging || undefined}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-telos-workbench=""
+      onClick={handleWorkbenchClick}
       ref={frameRef}
       style={{ gridTemplateColumns: `${columns.sidebar}px minmax(0, 1fr) ${columns.details}px` }}
     >

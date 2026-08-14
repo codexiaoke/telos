@@ -35,4 +35,12 @@ describe('TELOS_LAYOUT_CSS', () => {
     expect(TELOS_LAYOUT_CSS).toMatch(/button:last-of-type\s*\{\s*display: none;/)
     expect(TELOS_LAYOUT_CSS).toContain('div:first-of-type > button:last-of-type')
   })
+
+  it('promotes the expanded session search into a centered modal surface', () => {
+    expect(TELOS_LAYOUT_CSS).toContain("button[aria-expanded='true']")
+    expect(TELOS_LAYOUT_CSS).toContain('width: min(640px, calc(100vw - 64px));')
+    expect(TELOS_LAYOUT_CSS).toMatch(/::after\s*\{[^}]*z-index:\s*99;/)
+    expect(TELOS_LAYOUT_CSS).toContain('background: rgb(0 0 0 / 48%);')
+    expect(TELOS_LAYOUT_CSS).toContain('@keyframes telos-search-dialog-in')
+  })
 })

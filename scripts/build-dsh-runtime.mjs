@@ -18,8 +18,13 @@ function run(args) {
   if (result.status !== 0) process.exit(result.status ?? 1)
 }
 
-run(['install', '--frozen-lockfile'])
-run(['run', 'build:lib:host'])
+// DSH's root postinstall configures contributor Git hooks. A Submodule shares
+// its Git metadata with the parent repository, so TELOS skips lifecycle scripts
+// during restore and rebuilds only the reviewed native dependencies required by
+// the source build/runtime.
+run(['install', '--frozen-lockfile', '--ignore-scripts'])
+run(['--config.verify-deps-before-run=false', 'rebuild', 'esbuild', 'node-pty', 'koffi', '@deepseek-ai/dsh-subprocess-local'])
+run(['--config.verify-deps-before-run=false', 'run', 'build:lib:host'])
 
 accessSync(resolve(dshRoot, 'packages/sdk/client/lib/index.js'))
 accessSync(resolve(dshRoot, 'packages/examples/jsonrpc-demo/lib/packaged-bin.js'))

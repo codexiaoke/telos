@@ -30,7 +30,7 @@ pnpm dsh:build
 pnpm dev
 ```
 
-`pnpm dsh:build` installs the pinned DSH source tree with its frozen lockfile and builds the SDK client plus headless JSON-RPC runtime. Launch TELOS with `DEEPSEEK_API_KEY` in its environment until the local credential store is implemented.
+`pnpm dsh:build` installs the pinned DSH source tree with its frozen lockfile and builds the SDK client plus headless JSON-RPC runtime. It skips DSH's contributor-only Git hook installer because a Submodule shares Git metadata with TELOS, while explicitly rebuilding the reviewed native dependencies needed by the runtime. Launch TELOS with `DEEPSEEK_API_KEY` in its environment until the local credential store is implemented.
 
 Build and validate:
 

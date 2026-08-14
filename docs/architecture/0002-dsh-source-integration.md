@@ -24,6 +24,8 @@ The TELOS commit records the exact DSH commit. The fork's `master` mirrors upstr
 
 The nested DSH repository keeps its own package manager version, lockfile, patches, native dependencies, TypeScript configuration, and build gates. `third_party/deepseek-harness` is deliberately excluded from the TELOS pnpm workspace. A source checkout still installs DSH's reviewed third-party dependencies with DSH's own frozen lockfile; TELOS does not download DSH itself as an npm package.
 
+The TELOS build wrapper restores the DSH workspace with lifecycle scripts disabled, then explicitly rebuilds the native packages admitted by the pinned DSH workspace before running the Host library build. This avoids DSH's contributor-only Git-hook `postinstall`, which cannot safely configure worktree-local hooks from a Submodule, without modifying the DSH checkout or silently skipping runtime native dependencies.
+
 ## Runtime boundary
 
 The `@telos/runtime-dsh` adapter launches a DSH runtime built from the pinned source as a child process. It uses DSH's existing SDK client, JSON-RPC server, and newline-delimited stdio protocol instead of the DSH Web UI or internal Cordis services. The adapter loads the built SDK entry from the Submodule at runtime, so the TELOS workspace does not install DSH from the npm registry.

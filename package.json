@@ -12,7 +12,7 @@
     "build": "pnpm run build:packages && pnpm --filter @telos/desktop build",
     "build:packages": "pnpm --filter './packages/**' build",
     "typecheck": "pnpm run build:packages && pnpm --filter @telos/desktop typecheck",
-    "test": "vitest run --dir packages",
+    "test": "vitest run --dir packages && vitest run --dir apps/desktop",
     "lint": "oxlint .",
     "dsh:build": "node scripts/build-dsh-runtime.mjs",
     "dsh:smoke": "node scripts/smoke-dsh-runtime.mjs"

@@ -4,10 +4,11 @@
   "commit": "47f943859bef60e4160492346772ded9b24f765a",
   "source": "packages/client/ui-sidebar/lib/client.js",
   "sourceSha256": "7e5487b06251b6b82d2c6da3c2fc838a84eb7ed64daf2a372526275f27ce5ea6",
-  "generatedSha256": "c75cd0b91414e4651e96e45e11180f19e5f220f7c39567f0adeccf12cc47739a",
+  "generatedSha256": "70e680a7afeb33e5186a6746d3dc4530207f7b974dd23dc282b8c633d1525a70",
   "transformations": [
     "replace module id",
     "add host-controlled expanded and collapsed sidebar top insets",
+    "exclude sidebar title-row controls from the Electron drag region",
     "replace expanded wordmark",
     "replace collapsed mark"
   ]

@@ -35,6 +35,18 @@ generated = replaceExactlyOnce(
   'padding:var(--telos-sidebar-rail-top-inset,18px) 10px 6px',
   'collapsed sidebar top inset',
 )
+generated = replaceExactlyOnce(
+  generated,
+  'min-width:0;color:inherit;cursor:pointer;background:0 0;border:none;flex:1',
+  'min-width:0;color:inherit;-webkit-app-region:no-drag;cursor:pointer;background:0 0;border:none;flex:1',
+  'sidebar brand no-drag hit region',
+)
+generated = replaceExactlyOnce(
+  generated,
+  'cursor:pointer;width:28px;height:28px;color:var(--dsw-alias-label-secondary)',
+  '-webkit-app-region:no-drag;cursor:pointer;width:28px;height:28px;color:var(--dsw-alias-label-secondary)',
+  'sidebar toggle no-drag hit region',
+)
 
 generated = replaceExactlyOnce(
   generated,
@@ -76,6 +88,7 @@ const provenance = {
   transformations: [
     'replace module id',
     'add host-controlled expanded and collapsed sidebar top insets',
+    'exclude sidebar title-row controls from the Electron drag region',
     'replace expanded wordmark',
     'replace collapsed mark',
   ],

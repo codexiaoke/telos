@@ -30,4 +30,12 @@ describe('TELOS_DSH_THEME_CSS', () => {
     )
     expect(sidebarBundle).toContain('var(--telos-sidebar-rail-top-inset,18px)')
   })
+
+  it('keeps the sidebar title-row controls clickable inside the macOS titlebar', () => {
+    const sidebarBundle = readFileSync(
+      resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar/lib/client.js'),
+      'utf8',
+    )
+    expect(sidebarBundle.match(/-webkit-app-region:no-drag/g)).toHaveLength(2)
+  })
 })

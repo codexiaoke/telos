@@ -26,7 +26,7 @@ The nested DSH repository keeps its own package manager version, lockfile, patch
 
 ## Runtime boundary
 
-The future `runtime-dsh` adapter will launch a DSH runtime built from the pinned source as a child process. It will prefer DSH's existing SDK JSON-RPC server and newline-delimited stdio protocol instead of the DSH Web UI or internal package imports.
+The `@telos/runtime-dsh` adapter launches a DSH runtime built from the pinned source as a child process. It uses DSH's existing SDK client, JSON-RPC server, and newline-delimited stdio protocol instead of the DSH Web UI or internal Cordis services. The adapter loads the built SDK entry from the Submodule at runtime, so the TELOS workspace does not install DSH from the npm registry.
 
 The communication path is:
 
@@ -39,6 +39,10 @@ TELOS React UI
 ```
 
 TELOS will own the external Cordis composition used for that process. DSH events will be translated into TELOS runtime events before reaching the UI or durable personal state. The React renderer and Personal Core must not import DSH packages or depend on DSH event shapes directly.
+
+The first composition is `integrations/dsh/profiles/telos-default/cordis.yml`. It contains the SDK server, the official DeepSeek provider, an executor-less Agent spine, JSONL session evidence, and token metering. It deliberately exposes no shell or filesystem tool while the interactive approval path is absent from the SDK protocol.
+
+The first adapter runs one active session per DSH child process. This makes process termination a session-scoped fallback instead of risking unrelated work while protocol-level cancellation is unavailable. Process pooling is deferred until the SDK negotiates capabilities and supports cancel, close, and interactive requests.
 
 The DSH session log may be retained as execution evidence, but it is not the truth source for personal goals, memory, permissions, or durable action receipts.
 

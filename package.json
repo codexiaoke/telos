@@ -8,13 +8,18 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "pnpm --filter @telos/desktop dev",
-    "build": "pnpm --filter @telos/desktop build",
-    "typecheck": "pnpm --filter @telos/desktop typecheck",
-    "lint": "oxlint ."
+    "dev": "pnpm run build:packages && pnpm --filter @telos/desktop dev",
+    "build": "pnpm run build:packages && pnpm --filter @telos/desktop build",
+    "build:packages": "pnpm --filter './packages/**' build",
+    "typecheck": "pnpm run build:packages && pnpm --filter @telos/desktop typecheck",
+    "test": "vitest run --dir packages",
+    "lint": "oxlint .",
+    "dsh:build": "node scripts/build-dsh-runtime.mjs",
+    "dsh:smoke": "node scripts/smoke-dsh-runtime.mjs"
   },
   "devDependencies": {
     "oxlint": "1.78.0",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "vitest": "4.1.8"
   }
 }

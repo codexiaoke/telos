@@ -15,7 +15,11 @@
     "test": "vitest run --dir packages && vitest run --dir apps/desktop",
     "lint": "oxlint .",
     "dsh:build": "node scripts/build-dsh-runtime.mjs",
-    "dsh:smoke": "node scripts/smoke-dsh-runtime.mjs"
+    "dsh:audit": "node scripts/audit-dsh-sync.mjs",
+    "dsh:parity": "node scripts/audit-dsh-parity.mjs",
+    "dsh:smoke": "node scripts/smoke-dsh-runtime.mjs",
+    "dsh:upstream": "node scripts/audit-dsh-sync.mjs --remote",
+    "dsh:verify": "pnpm dsh:audit && pnpm dsh:parity"
   },
   "devDependencies": {
     "oxlint": "1.78.0",

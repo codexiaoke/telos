@@ -44,4 +44,5 @@ accessSync(resolve(dshRoot, 'python/sdk-runtime/node_modules/@deepseek-ai/dsh-sd
 accessSync(resolve(dshRoot, 'apps/cli/lib/bin.js'))
 accessSync(resolve(dshRoot, 'apps/web/dist/index.html'))
 accessSync(resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar/lib/client.js'))
+accessSync(resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar/telos.web.patch.yml'))
 process.stdout.write('DSH source runtime and complete Web application are built and ready.\n')

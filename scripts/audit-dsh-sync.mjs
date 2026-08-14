@@ -1,0 +1,137 @@
+import { createHash } from 'node:crypto'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+const repositoryRoot = resolve(import.meta.dirname, '..')
+const dshPath = 'third_party/deepseek-harness'
+const dshRoot = resolve(repositoryRoot, dshPath)
+const overlayRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar')
+const upstreamUrl = 'https://github.com/deepseek-ai/deepseek-harness.git'
+const forkUrl = 'https://github.com/codexiaoke/deepseek-harness.git'
+const remoteRequested = process.argv.includes('--remote')
+const unknownArguments = process.argv.slice(2).filter((argument) => argument !== '--remote')
+
+if (unknownArguments.length > 0) {
+  throw new Error(`Unknown arguments: ${unknownArguments.join(', ')}`)
+}
+
+function git(cwd, args) {
+  return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
+}
+
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message)
+}
+
+function pass(label, detail = '') {
+  process.stdout.write(`[PASS] ${label}${detail.length > 0 ? `: ${detail}` : ''}\n`)
+}
+
+function check(label, operation) {
+  try {
+    const detail = operation()
+    pass(label, detail ?? '')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    process.stderr.write(`[FAIL] ${label}: ${detail}\n`)
+    process.exitCode = 1
+  }
+}
+
+const actualCommit = git(dshRoot, ['rev-parse', 'HEAD'])
+const provenance = JSON.parse(readFileSync(resolve(overlayRoot, 'UPSTREAM.json'), 'utf8'))
+
+check('Parent index gitlink matches the checked-out DSH commit', () => {
+  const entry = git(repositoryRoot, ['ls-files', '--stage', '--', dshPath])
+  const match = /^160000 ([0-9a-f]{40}) 0\tthird_party\/deepseek-harness$/.exec(entry)
+  assert(match !== null, `unexpected gitlink entry: ${entry}`)
+  assert(match[1] === actualCommit, `indexed gitlink ${match[1]} != worktree ${actualCommit}`)
+  return actualCommit
+})
+
+check('DSH Submodule worktree is clean', () => {
+  const status = git(dshRoot, ['status', '--porcelain', '--untracked-files=all'])
+  assert(status.length === 0, `uncommitted upstream files:\n${status}`)
+})
+
+check('Submodule clone source is the TELOS fork', () => {
+  const configured = git(repositoryRoot, [
+    'config',
+    '--file',
+    '.gitmodules',
+    '--get',
+    'submodule.deepseek-harness.url',
+  ])
+  assert(configured === forkUrl, `${configured} != ${forkUrl}`)
+})
+
+check('DSH origin points to the TELOS fork', () => {
+  const configured = git(dshRoot, ['remote', 'get-url', 'origin'])
+  assert(configured === forkUrl, `${configured} != ${forkUrl}`)
+})
+
+const upstreamRemote = spawnSync('git', ['remote', 'get-url', 'upstream'], {
+  cwd: dshRoot,
+  encoding: 'utf8',
+})
+if (upstreamRemote.status === 0) {
+  check('Optional local upstream remote is canonical', () => {
+    const configured = upstreamRemote.stdout.trim()
+    assert(configured === upstreamUrl, `${configured} != ${upstreamUrl}`)
+  })
+} else {
+  process.stdout.write('[INFO] Optional local upstream remote is not configured; remote audit uses the recorded URL.\n')
+}
+
+check('Overlay provenance points to the checked-out DSH commit', () => {
+  assert(provenance.schemaVersion === 1, `unsupported schema ${String(provenance.schemaVersion)}`)
+  assert(provenance.upstream === upstreamUrl.replace(/\.git$/, ''), 'unexpected provenance upstream URL')
+  assert(provenance.commit === actualCommit, `${provenance.commit} != ${actualCommit}`)
+})
+
+check('Derived sidebar source hash matches provenance', () => {
+  const source = readFileSync(resolve(dshRoot, provenance.source))
+  const actual = sha256(source)
+  assert(actual === provenance.sourceSha256, `${actual} != ${provenance.sourceSha256}`)
+})
+
+check('Generated sidebar hash matches provenance', () => {
+  const generated = readFileSync(resolve(overlayRoot, 'lib/client.js'))
+  const actual = sha256(generated)
+  assert(actual === provenance.generatedSha256, `${actual} != ${provenance.generatedSha256}`)
+})
+
+check('Derived sidebar carries the exact upstream license', () => {
+  const upstreamLicense = readFileSync(resolve(dshRoot, 'LICENSE'))
+  const copiedLicense = readFileSync(resolve(overlayRoot, 'LICENSE.upstream'))
+  assert(upstreamLicense.equals(copiedLicense), 'LICENSE.upstream differs from the pinned DSH license')
+})
+
+check('Third-party notice records the checked-out DSH commit', () => {
+  const notice = readFileSync(resolve(repositoryRoot, 'THIRD_PARTY_NOTICES.md'), 'utf8')
+  assert(notice.includes(`Pinned source commit: \`${actualCommit}\``), 'pinned commit is missing from notice')
+})
+
+if (remoteRequested && process.exitCode !== 1) {
+  check('Canonical DSH upstream branch is reachable', () => {
+    const output = execFileSync('git', ['ls-remote', upstreamUrl, 'refs/heads/master'], {
+      cwd: dshRoot,
+      encoding: 'utf8',
+    }).trim()
+    const match = /^([0-9a-f]{40})\trefs\/heads\/master$/.exec(output)
+    assert(match !== null, `unexpected ls-remote response: ${output}`)
+    if (match[1] === actualCommit) {
+      return `UP_TO_DATE ${actualCommit}`
+    }
+    return `UPDATE_AVAILABLE pinned=${actualCommit} upstream=${match[1]}`
+  })
+}
+
+if (process.exitCode !== 1) {
+  process.stdout.write('DSH provenance and synchronization audit passed.\n')
+}

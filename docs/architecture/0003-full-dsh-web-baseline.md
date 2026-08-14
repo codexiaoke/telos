@@ -177,6 +177,21 @@ pointer, updates compatibility code and provenance records, runs the parity
 gates, and only then becomes the new baseline. A DSH upgrade must not be mixed
 with unrelated TELOS features.
 
+The executable controls are:
+
+- `pnpm dsh:audit` verifies the parent gitlink, clean Submodule, source remotes,
+  pinned notice, license, provenance commit, and source/generated hashes;
+- `pnpm dsh:parity` asks the pinned DSH CLI for both the default and
+  TELOS-patched effective Web configurations and structurally verifies that all
+  upstream rows are unchanged except the disabled presentation sidebar, with
+  exactly one compatible TELOS sidebar inserted;
+- `pnpm dsh:upstream` performs the same local audit plus a read-only comparison
+  with canonical upstream `master`; it reports an available update without
+  fetching it or changing the gitlink.
+
+The complete procedure and acceptance evidence are defined in
+`docs/maintenance/dsh-upstream-sync.md`.
+
 ## Phased acceptance
 
 ### Phase 1: architecture and build baseline

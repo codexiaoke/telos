@@ -35,10 +35,20 @@ pnpm dev
 Build and validate:
 
 ```bash
+pnpm dsh:verify
 pnpm typecheck
 pnpm lint
+pnpm test
 pnpm build
 ```
+
+`pnpm dsh:verify` proves that the checked-out Submodule, parent gitlink,
+provenance hashes, copied license, and generated overlay agree, then compares
+the effective TELOS plugin composition with DSH's pinned default Web
+composition. The only accepted roster delta is the documented sidebar
+presentation replacement. `pnpm dsh:upstream` additionally performs a
+read-only check of the canonical upstream `master` branch; it never fetches or
+moves the Submodule pointer.
 
 ## Current scope
 
@@ -52,4 +62,4 @@ pnpm build
 
 OpenCLI, OpenConnector, personal memory, and personal knowledge remain planned additions after the complete DSH parity baseline and upstream-sync gates are stable.
 
-See the [complete DSH Web baseline](docs/architecture/0003-full-dsh-web-baseline.md) for the current ownership, presentation, parity, and upgrade boundaries. The earlier [desktop foundation](docs/architecture/0001-foundation.md) and [DSH source integration](docs/architecture/0002-dsh-source-integration.md) decisions are retained as historical context where ADR 0003 supersedes them.
+See the [complete DSH Web baseline](docs/architecture/0003-full-dsh-web-baseline.md) for the current ownership, presentation, parity, and upgrade boundaries, and the [DSH upstream synchronization runbook](docs/maintenance/dsh-upstream-sync.md) before changing the pinned source commit. The earlier [desktop foundation](docs/architecture/0001-foundation.md) and [DSH source integration](docs/architecture/0002-dsh-source-integration.md) decisions are retained as historical context where ADR 0003 supersedes them.

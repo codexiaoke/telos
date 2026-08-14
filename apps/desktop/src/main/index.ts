@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { DshWebSupervisor } from './application/dsh-web-supervisor.js'
 import { prepareTelosDshWebPatch } from './application/dsh-web-overlay.js'
@@ -28,8 +29,12 @@ app.setAppLogsPath()
 const logger = configureApplicationLogger(app.isPackaged)
 logger.info('Telos main process starting', { version: app.getVersion(), packaged: app.isPackaged })
 autoUpdater.logger = logger
+const updateConfigurationAvailable = app.isPackaged && existsSync(join(process.resourcesPath, 'app-update.yml'))
+if (app.isPackaged && !updateConfigurationAvailable) {
+  logger.info('Online updates are disabled because this directory build has no release metadata')
+}
 const updateService = new UpdateService({
-  enabled: app.isPackaged,
+  enabled: updateConfigurationAvailable,
   updater: autoUpdater,
   logger,
 })

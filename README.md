@@ -52,6 +52,30 @@ Profile. `pnpm dsh:upstream` additionally performs a
 read-only check of the canonical upstream `master` branch; it never fetches or
 moves the Submodule pointer.
 
+## Package the desktop app
+
+Desktop packaging requires standalone Node.js `^22.19.0` or `>=24.0.0` because
+the same executable is bundled for the source-pinned DSH child runtime.
+
+```bash
+pnpm package:desktop:dir
+pnpm package:desktop
+```
+
+The directory command creates an unpacked application for local smoke tests.
+The full command creates the native installer, update archive, blockmaps, and
+update metadata under `dist/`. Both commands build Telos, copy the complete DSH
+runtime and its overlays, bundle Node.js with its license, then execute the
+packaged DSH CLI as a release gate.
+
+`.github/workflows/desktop-release.yml` verifies and packages native macOS,
+Windows, and Linux artifacts. Manual workflow runs retain CI artifacts without
+publishing a release. A pushed `v*` tag additionally requires signing secrets
+for macOS and Windows, notarizes macOS, merges architecture-specific update
+metadata, and creates or updates a draft GitHub Release. See the
+[desktop distribution baseline](docs/architecture/0005-desktop-distribution-and-lifecycle.md)
+for the lifecycle, update, signing, and rollback boundary.
+
 ## Current scope
 
 - Electron-supervised, loopback-only complete DSH Web Runtime lifecycle

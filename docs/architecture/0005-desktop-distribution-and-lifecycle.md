@@ -41,8 +41,9 @@ architecture. Native DSH dependencies must never be copied from a different
 platform runner.
 
 The first distributable baseline uses a correctness-first DSH runtime snapshot.
-It excludes repository metadata, source maps, tests, caches, and contributor-only
-artifacts, but it retains the built workspace and installed dependency layout.
+It excludes repository metadata, source maps, caches, coverage, and TypeScript
+build metadata, but it retains the complete source tree, built workspace, and
+installed dependency layout.
 Before an installer is accepted, the packaged runtime must pass a launch smoke
 test. A later size-optimization phase may replace this snapshot only with an
 explicit deployment manifest whose dependency closure passes the same smoke test.

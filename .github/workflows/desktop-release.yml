@@ -1,0 +1,173 @@
+name: Desktop release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version without the v prefix
+        required: true
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  metadata:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - id: version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            tag="${GITHUB_REF_NAME}"
+            version="${tag#v}"
+            publish=true
+          else
+            version="${INPUT_VERSION#v}"
+            tag="v${version}"
+            publish=false
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid semantic version: $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+  verify:
+    needs: metadata
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.21.1
+      - name: Enable pinned pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify Telos
+        run: |
+          pnpm typecheck
+          pnpm test
+          pnpm lint
+          pnpm dsh:verify
+
+  package:
+    needs: [metadata, verify]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            artifact: macos-arm64
+            platform: macos
+          - runner: macos-15-intel
+            artifact: macos-x64
+            platform: macos
+          - runner: windows-2025
+            artifact: windows-x64
+            platform: windows
+          - runner: ubuntu-24.04
+            artifact: linux-x64
+            platform: linux
+    runs-on: ${{ matrix.runner }}
+    env:
+      CSC_LINK: ${{ matrix.platform == 'macos' && secrets.MAC_CSC_LINK || matrix.platform == 'windows' && secrets.WIN_CSC_LINK || '' }}
+      CSC_KEY_PASSWORD: ${{ matrix.platform == 'macos' && secrets.MAC_CSC_KEY_PASSWORD || matrix.platform == 'windows' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+      APPLE_ID: ${{ matrix.platform == 'macos' && secrets.APPLE_ID || '' }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'macos' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+      APPLE_TEAM_ID: ${{ matrix.platform == 'macos' && secrets.APPLE_TEAM_ID || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.21.1
+      - name: Enable pinned pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Require signing for tagged desktop releases
+        if: needs.metadata.outputs.publish == 'true' && (runner.os == 'macOS' || runner.os == 'Windows')
+        shell: bash
+        run: |
+          if [[ -z "$CSC_LINK" || -z "$CSC_KEY_PASSWORD" ]]; then
+            echo "Tagged macOS and Windows releases require signing secrets." >&2
+            exit 1
+          fi
+          if [[ "$RUNNER_OS" == "macOS" && ( -z "$APPLE_ID" || -z "$APPLE_APP_SPECIFIC_PASSWORD" || -z "$APPLE_TEAM_ID" ) ]]; then
+            echo "Tagged macOS releases require notarization secrets." >&2
+            exit 1
+          fi
+      - name: Build complete DSH runtime
+        run: pnpm dsh:build
+      - name: Package desktop
+        shell: bash
+        run: pnpm package:desktop -- --config.extraMetadata.version=${{ needs.metadata.outputs.version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Telos-${{ needs.metadata.outputs.version }}-${{ matrix.artifact }}
+          compression-level: 0
+          if-no-files-found: error
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+            dist/latest*.yml
+            dist/*.blockmap
+
+  draft-release:
+    if: needs.metadata.outputs.publish == 'true'
+    needs: [metadata, package]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.21.1
+      - name: Enable pinned pnpm
+        run: corepack enable
+      - name: Install release metadata dependency
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter telos
+      - uses: actions/download-artifact@v4
+        with:
+          path: downloaded-artifacts
+      - name: Prepare cross-platform release artifacts
+        run: pnpm release:prepare-artifacts -- downloaded-artifacts release-artifacts
+      - name: Create draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+        run: |
+          mapfile -d '' -t files < <(find release-artifacts -maxdepth 1 -type f -print0)
+          if (( ${#files[@]} == 0 )); then
+            echo "No prepared desktop release artifacts were found." >&2
+            exit 1
+          fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" --clobber "${files[@]}"
+          else
+            gh release create "$RELEASE_TAG" --draft --generate-notes --title "Telos $RELEASE_TAG" "${files[@]}"
+          fi

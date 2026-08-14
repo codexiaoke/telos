@@ -2,6 +2,7 @@
   "name": "@telos/desktop",
   "version": "0.1.0",
   "private": true,
+  "author": "Telos contributors",
   "description": "Telos desktop application",
   "main": "./out/main/index.js",
   "scripts": {

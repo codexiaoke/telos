@@ -12,8 +12,11 @@
     "build": "pnpm run build:packages && pnpm --filter @telos/desktop build",
     "build:packages": "pnpm --filter './packages/**' build",
     "typecheck": "pnpm run build:packages && pnpm --filter @telos/desktop typecheck",
-    "test": "vitest run --dir packages && vitest run --dir apps/desktop",
+    "test": "vitest run --dir packages && vitest run --dir apps/desktop && vitest run --dir scripts",
     "lint": "oxlint .",
+    "package:desktop": "node scripts/package-desktop.mjs",
+    "package:desktop:dir": "node scripts/package-desktop.mjs --dir",
+    "release:prepare-artifacts": "node scripts/prepare-release-artifacts.mjs",
     "dsh:build": "node scripts/build-dsh-runtime.mjs",
     "dsh:audit": "node scripts/audit-dsh-sync.mjs",
     "dsh:parity": "node scripts/audit-dsh-parity.mjs",
@@ -25,6 +28,7 @@
     "esbuild": "0.25.12",
     "oxlint": "1.78.0",
     "typescript": "7.0.2",
-    "vitest": "4.1.8"
+    "vitest": "4.1.8",
+    "yaml": "2.9.0"
   }
 }

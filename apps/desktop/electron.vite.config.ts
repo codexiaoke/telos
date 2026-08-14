@@ -4,10 +4,14 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin({
+      exclude: ['@telos/runtime-contracts', '@telos/runtime-dsh']
+    })]
   },
   preload: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin({
+      exclude: ['@telos/runtime-contracts']
+    })]
   },
   renderer: {
     plugins: [react({}), tailwindcss({})]

@@ -1,0 +1,56 @@
+appId: ai.telos.desktop
+productName: Telos
+copyright: Copyright © 2026 Telos contributors
+asar: true
+npmRebuild: false
+compression: normal
+afterPack: ../../scripts/after-pack-desktop.mjs
+
+directories:
+  output: ../../dist
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+  - '!out/**/*.map'
+
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
+publish:
+  provider: github
+  owner: codexiaoke
+  repo: telos
+  releaseType: draft
+
+mac:
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  binaries:
+    - Contents/Resources/dsh-node/bin/node
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  target:
+    - dmg
+    - zip
+
+dmg:
+  sign: false
+
+win:
+  target:
+    - nsis
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Telos
+
+linux:
+  category: Utility
+  target:
+    - AppImage
+    - deb

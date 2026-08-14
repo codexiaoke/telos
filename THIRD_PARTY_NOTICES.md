@@ -1,5 +1,13 @@
 # Third-party notices
 
+## Node.js runtime
+
+Desktop distributions include a standalone Node.js executable exclusively for
+the pinned DSH child runtime. The exact Node.js version and source executable
+are recorded in `resources/dsh-node/TELOS_NODE_RUNTIME.json`, and the Node.js
+license distributed with that executable is copied to
+`resources/dsh-node/LICENSE`.
+
 ## DeepSeek Harness
 
 `third_party/deepseek-harness` is a Git Submodule of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), maintained through the [codexiaoke fork](https://github.com/codexiaoke/deepseek-harness).

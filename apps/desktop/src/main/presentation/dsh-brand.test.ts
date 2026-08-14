@@ -20,9 +20,12 @@ describe('TELOS_DSH_THEME_CSS', () => {
     expect(TELOS_DSH_THEME_CSS).not.toMatch(/\.(?:frame|sidebar|composer|message)[\s,{:#.]/i)
   })
 
-  it('keeps the collapsed rail control below the macOS traffic lights', () => {
-    expect(TELOS_DSH_THEME_CSS).toContain('--telos-sidebar-top-inset: 30px;')
-    expect(TELOS_DSH_THEME_CSS).toContain('--telos-sidebar-rail-top-inset: 54px;')
+  it('reserves one title-bar row for native controls on every platform', () => {
+    expect(TELOS_DSH_THEME_CSS).toContain('padding-top: 44px;')
+    expect(TELOS_DSH_THEME_CSS).toContain('--telos-title-bar-height: 44px;')
+    expect(TELOS_DSH_THEME_CSS).toContain('--telos-sidebar-top-inset: 6px;')
+    expect(TELOS_DSH_THEME_CSS).toContain('--telos-sidebar-rail-top-inset: 18px;')
+    expect(TELOS_DSH_THEME_CSS).toContain('-webkit-app-region: drag;')
 
     const sidebarBundle = readFileSync(
       resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar/lib/client.js'),
@@ -31,11 +34,11 @@ describe('TELOS_DSH_THEME_CSS', () => {
     expect(sidebarBundle).toContain('var(--telos-sidebar-rail-top-inset,18px)')
   })
 
-  it('keeps the sidebar title-row controls clickable inside the macOS titlebar', () => {
+  it('keeps sidebar controls out of the desktop drag strip', () => {
     const sidebarBundle = readFileSync(
       resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar/lib/client.js'),
       'utf8',
     )
-    expect(sidebarBundle.match(/-webkit-app-region:no-drag/g)).toHaveLength(2)
+    expect(sidebarBundle).not.toContain('-webkit-app-region:no-drag')
   })
 })

@@ -3,8 +3,8 @@
 This package is a generated derivative of DSH's MIT-licensed
 `@deepseek-ai/dsh-client-ui-sidebar` client bundle. It keeps the upstream
 sidebar implementation and changes only the visible wordmark, collapsed mark,
-host-controlled expanded/rail top-inset tokens, and the macOS title-row button
-hit regions. Do not edit `lib/client.js` manually.
+and host-controlled expanded/rail top-inset tokens. The Electron host owns the
+cross-platform title-bar safe area. Do not edit `lib/client.js` manually.
 
 Run `node scripts/build-telos-dsh-overlays.mjs` (or `pnpm dsh:build`) to
 regenerate it from the DSH commit pinned by the TELOS Submodule. The generator

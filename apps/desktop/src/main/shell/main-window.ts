@@ -1,6 +1,7 @@
 import { BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { applyDshPresentation, installDshPresentation } from '../presentation/dsh-presentation.js'
+import { createWindowChromeOptions } from './window-chrome.js'
 
 function parseDshWebUrl(value: string): URL {
   const url = new URL(value)
@@ -26,8 +27,7 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 1060,
     minHeight: 700,
     backgroundColor: '#f7f7f6',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 18, y: 18 },
+    ...createWindowChromeOptions(process.platform),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

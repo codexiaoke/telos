@@ -24,9 +24,15 @@ function run(args) {
 // the source build/runtime.
 run(['install', '--frozen-lockfile', '--ignore-scripts'])
 run(['--config.verify-deps-before-run=false', 'rebuild', 'esbuild', 'node-pty', 'koffi', '@deepseek-ai/dsh-subprocess-local'])
-run(['--config.verify-deps-before-run=false', 'run', 'build:lib:host'])
+// The desktop's primary interactive path is the complete DSH Web application,
+// so a valid runtime build must contain host libraries, browser-side client
+// bundles, and the frontend dist. The headless SDK adapter uses a subset of the
+// same source build and remains covered by the artifact checks below.
+run(['--config.verify-deps-before-run=false', 'run', 'build'])
 
 accessSync(resolve(dshRoot, 'packages/sdk/client/lib/index.js'))
 accessSync(resolve(dshRoot, 'packages/examples/jsonrpc-demo/lib/bin.js'))
 accessSync(resolve(dshRoot, 'python/sdk-runtime/node_modules/@deepseek-ai/dsh-sdk-jsonrpc-server'))
-process.stdout.write('DSH source runtime is built and ready.\n')
+accessSync(resolve(dshRoot, 'apps/cli/lib/bin.js'))
+accessSync(resolve(dshRoot, 'apps/web/dist/index.html'))
+process.stdout.write('DSH source runtime and complete Web application are built and ready.\n')

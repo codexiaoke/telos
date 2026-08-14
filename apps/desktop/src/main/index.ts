@@ -16,6 +16,7 @@ import { registerDshWebHandlers } from './ipc/register-dsh-web-handlers.js'
 import { registerRuntimeHandlers } from './ipc/register-runtime-handlers.js'
 import { registerSystemHandlers } from './ipc/register-system-handlers.js'
 import { configureApplicationLogger } from './logging/application-logger.js'
+import { installApplicationIcon } from './shell/application-icon.js'
 import { createApplicationTray, type ApplicationTrayHandle } from './shell/application-tray.js'
 import { installApplicationMenu } from './shell/application-menu.js'
 import { createMainWindow, loadDshWeb } from './shell/main-window.js'
@@ -108,6 +109,7 @@ function installReadyUpdate(): void {
 
 async function startApplication(): Promise<void> {
   loadDevelopmentEnvironment()
+  installApplicationIcon()
   installApplicationMenu({
     showMainWindow,
     checkForUpdates: () => updateService.checkForUpdates(),

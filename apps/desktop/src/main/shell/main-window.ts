@@ -1,6 +1,7 @@
 import { BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { applyDshPresentation, installDshPresentation } from '../presentation/dsh-presentation.js'
+import { getDevelopmentApplicationIconPath } from './application-icon.js'
 import { createWindowChromeOptions } from './window-chrome.js'
 
 function parseDshWebUrl(value: string): URL {
@@ -21,12 +22,14 @@ function openExternalIfSafe(value: string): void {
 }
 
 export function createMainWindow(): BrowserWindow {
+  const icon = getDevelopmentApplicationIconPath()
   const window = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1060,
     minHeight: 700,
     backgroundColor: '#f7f7f6',
+    ...(icon === undefined ? {} : { icon }),
     ...createWindowChromeOptions(process.platform),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

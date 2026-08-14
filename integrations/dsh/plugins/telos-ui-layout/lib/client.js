@@ -158,6 +158,7 @@ function TelosAppFrame({
     return current !== void 0 && sessions.byId[current]?.blank === false ? current : void 0;
   });
   const frameRef = (0, import_react.useRef)(null);
+  const searchDialogClick = (0, import_react.useRef)(false);
   const [viewport, setViewport] = (0, import_react.useState)(() => window.innerWidth);
   const lastSession = (0, import_react.useRef)(detailsSession);
   (0, import_react.useLayoutEffect)(() => {
@@ -250,13 +251,16 @@ function TelosAppFrame({
   const dragDetails = (0, import_react.useCallback)((dx) => {
     actions.setDetails(detailsBase.current - dx);
   }, [actions]);
-  const handleWorkbenchClick = (0, import_react.useCallback)((event) => {
+  const handleWorkbenchClickCapture = (0, import_react.useCallback)((event) => {
+    searchDialogClick.current = false;
     if (!(event.target instanceof Element)) return;
     const searchDialog = event.currentTarget.querySelector(OPEN_SEARCH_DIALOG_SELECTOR);
     if (searchDialog === null) return;
+    const clickedInsideDialog = searchDialog.contains(event.target);
+    searchDialogClick.current = clickedInsideDialog;
     const sessionRow = event.target.closest("[role='treeitem'][aria-selected]");
-    const pickedSession = sessionRow !== null && searchDialog.contains(sessionRow);
-    const clickedBackdrop = !searchDialog.contains(event.target);
+    const pickedSession = sessionRow !== null && clickedInsideDialog;
+    const clickedBackdrop = !clickedInsideDialog;
     if (!pickedSession && !clickedBackdrop) return;
     const closeButton = searchDialog.querySelector(
       ":scope > div:first-child > div:first-of-type button:last-of-type"
@@ -265,6 +269,11 @@ function TelosAppFrame({
     queueMicrotask(() => {
       closeButton.click();
     });
+  }, []);
+  const handleWorkbenchClick = (0, import_react.useCallback)((event) => {
+    if (!searchDialogClick.current) return;
+    searchDialogClick.current = false;
+    event.stopPropagation();
   }, []);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
     "div",
@@ -275,6 +284,7 @@ function TelosAppFrame({
       "data-sidebar-collapsed": sidebarCollapsed || void 0,
       "data-telos-workbench": "",
       onClick: handleWorkbenchClick,
+      onClickCapture: handleWorkbenchClickCapture,
       ref: frameRef,
       style: { gridTemplateColumns: `${columns.sidebar}px minmax(0, 1fr) ${columns.details}px` },
       children: [

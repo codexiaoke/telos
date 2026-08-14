@@ -125,6 +125,7 @@ export function TelosAppFrame({
     return current !== undefined && sessions.byId[current]?.blank === false ? current : undefined
   })
   const frameRef = useRef<HTMLDivElement | null>(null)
+  const searchDialogClick = useRef(false)
   const [viewport, setViewport] = useState(() => window.innerWidth)
 
   const lastSession = useRef(detailsSession)
@@ -227,14 +228,17 @@ export function TelosAppFrame({
     actions.setDetails(detailsBase.current - dx)
   }, [actions])
 
-  const handleWorkbenchClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+  const handleWorkbenchClickCapture = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    searchDialogClick.current = false
     if (!(event.target instanceof Element)) return
     const searchDialog = event.currentTarget.querySelector<HTMLElement>(OPEN_SEARCH_DIALOG_SELECTOR)
     if (searchDialog === null) return
 
+    const clickedInsideDialog = searchDialog.contains(event.target)
+    searchDialogClick.current = clickedInsideDialog
     const sessionRow = event.target.closest("[role='treeitem'][aria-selected]")
-    const pickedSession = sessionRow !== null && searchDialog.contains(sessionRow)
-    const clickedBackdrop = !searchDialog.contains(event.target)
+    const pickedSession = sessionRow !== null && clickedInsideDialog
+    const clickedBackdrop = !clickedInsideDialog
     if (!pickedSession && !clickedBackdrop) return
 
     const closeButton = searchDialog.querySelector<HTMLElement>(
@@ -242,6 +246,14 @@ export function TelosAppFrame({
     )
     if (closeButton === null) return
     queueMicrotask(() => { closeButton.click() })
+  }, [])
+
+  const handleWorkbenchClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!searchDialogClick.current) return
+    searchDialogClick.current = false
+    // DSH treats the result tree as outside its input-only search root. Let the
+    // row action finish, then keep this in-dialog click from its document listener.
+    event.stopPropagation()
   }, [])
 
   return (
@@ -252,6 +264,7 @@ export function TelosAppFrame({
       data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-telos-workbench=""
       onClick={handleWorkbenchClick}
+      onClickCapture={handleWorkbenchClickCapture}
       ref={frameRef}
       style={{ gridTemplateColumns: `${columns.sidebar}px minmax(0, 1fr) ${columns.details}px` }}
     >

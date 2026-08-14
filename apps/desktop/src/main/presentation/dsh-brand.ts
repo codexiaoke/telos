@@ -22,6 +22,7 @@ export const TELOS_DSH_THEME_CSS = `
 body {
   color-scheme: light;
   --telos-sidebar-top-inset: 30px;
+  --telos-sidebar-rail-top-inset: 54px;
   --dsw-static-deepseek-50: rgb(244, 245, 255);
   --dsw-static-deepseek-100: rgb(234, 236, 255);
   --dsw-static-deepseek-200: rgb(216, 220, 255);

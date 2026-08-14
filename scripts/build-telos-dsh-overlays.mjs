@@ -32,7 +32,7 @@ generated = replaceExactlyOnce(
 generated = replaceExactlyOnce(
   generated,
   'padding:18px 10px 6px',
-  'padding:var(--telos-sidebar-top-inset,18px) 10px 6px',
+  'padding:var(--telos-sidebar-rail-top-inset,18px) 10px 6px',
   'collapsed sidebar top inset',
 )
 
@@ -75,7 +75,7 @@ const provenance = {
   generatedSha256: createHash('sha256').update(generated).digest('hex'),
   transformations: [
     'replace module id',
-    'add host-controlled sidebar top inset',
+    'add host-controlled expanded and collapsed sidebar top insets',
     'replace expanded wordmark',
     'replace collapsed mark',
   ],

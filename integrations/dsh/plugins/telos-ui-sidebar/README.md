@@ -3,7 +3,7 @@
 This package is a generated derivative of DSH's MIT-licensed
 `@deepseek-ai/dsh-client-ui-sidebar` client bundle. It keeps the upstream
 sidebar implementation and changes only the visible wordmark, collapsed mark,
-and a host-controlled top-inset token for macOS window chrome. Do not edit
+and host-controlled expanded/rail top-inset tokens for macOS window chrome. Do not edit
 `lib/client.js` manually.
 
 Run `node scripts/build-telos-dsh-overlays.mjs` (or `pnpm dsh:build`) to

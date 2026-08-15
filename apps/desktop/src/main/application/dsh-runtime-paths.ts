@@ -33,6 +33,12 @@ export function resolveTelosDshLayoutPackageRoot(): string {
     : join(developmentRepositoryRoot(), 'integrations/dsh/plugins/telos-ui-layout')
 }
 
+export function resolveTelosDshContinuityPackageRoot(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'dsh-overlays/telos-continuity')
+    : join(developmentRepositoryRoot(), 'plugins/dsh-continuity')
+}
+
 export function loadDevelopmentEnvironment(): void {
   if (app.isPackaged) return
   const localEnvironment = join(developmentRepositoryRoot(), '.env.local')

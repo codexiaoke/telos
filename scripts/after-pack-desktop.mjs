@@ -58,5 +58,6 @@ export default async function afterPack(context) {
   copyResource(dshRoot, join(resourcesDirectory, 'dsh-runtime'), dshRuntimeFilter)
   copyResource(join(overlaysRoot, 'telos-ui-sidebar'), join(resourcesDirectory, 'dsh-overlays/telos-ui-sidebar'))
   copyResource(join(overlaysRoot, 'telos-ui-layout'), join(resourcesDirectory, 'dsh-overlays/telos-ui-layout'))
+  copyResource(join(repositoryRoot, 'plugins/dsh-continuity'), join(resourcesDirectory, 'dsh-overlays/telos-continuity'))
   copyResource(nodeRoot, join(resourcesDirectory, 'dsh-node'))
 }

@@ -10,9 +10,9 @@
   "scripts": {
     "dev": "pnpm run build:packages && pnpm --filter @telos/desktop dev",
     "build": "pnpm run build:packages && pnpm --filter @telos/desktop build",
-    "build:packages": "pnpm --filter './packages/**' build",
+    "build:packages": "pnpm --filter './packages/**' build && pnpm --filter './plugins/**' build",
     "typecheck": "pnpm run build:packages && pnpm --filter @telos/desktop typecheck",
-    "test": "vitest run --dir packages && vitest run --dir apps/desktop && vitest run --dir scripts",
+    "test": "vitest run --dir packages && vitest run --dir plugins && vitest run --dir apps/desktop && vitest run --dir scripts",
     "lint": "oxlint .",
     "package:desktop": "node scripts/package-desktop.mjs",
     "package:desktop:dir": "node scripts/package-desktop.mjs --dir",
@@ -21,6 +21,7 @@
     "dsh:audit": "node scripts/audit-dsh-sync.mjs",
     "dsh:parity": "node scripts/audit-dsh-parity.mjs",
     "dsh:smoke": "node scripts/smoke-dsh-runtime.mjs",
+    "dsh:continuity:smoke": "node scripts/smoke-dsh-continuity.mjs",
     "dsh:upstream": "node scripts/audit-dsh-sync.mjs --remote",
     "dsh:verify": "pnpm dsh:audit && pnpm dsh:parity"
   },

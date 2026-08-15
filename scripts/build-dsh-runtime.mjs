@@ -38,6 +38,14 @@ const overlayBuild = spawnSync(process.execPath, [resolve(repositoryRoot, 'scrip
 if (overlayBuild.error) throw overlayBuild.error
 if (overlayBuild.status !== 0) process.exit(overlayBuild.status ?? 1)
 
+const continuityBuild = spawnSync('corepack', ['pnpm', '--filter', '@telos/dsh-continuity', 'build'], {
+  cwd: repositoryRoot,
+  env: process.env,
+  stdio: 'inherit',
+})
+if (continuityBuild.error) throw continuityBuild.error
+if (continuityBuild.status !== 0) process.exit(continuityBuild.status ?? 1)
+
 accessSync(resolve(dshRoot, 'packages/sdk/client/lib/index.js'))
 accessSync(resolve(dshRoot, 'packages/examples/jsonrpc-demo/lib/bin.js'))
 accessSync(resolve(dshRoot, 'python/sdk-runtime/node_modules/@deepseek-ai/dsh-sdk-jsonrpc-server'))
@@ -47,4 +55,6 @@ accessSync(resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar/li
 accessSync(resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar/telos.web.patch.yml'))
 accessSync(resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-layout/lib/client.js'))
 accessSync(resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-layout/UPSTREAM.json'))
+accessSync(resolve(repositoryRoot, 'plugins/dsh-continuity/lib/index.js'))
+accessSync(resolve(repositoryRoot, 'plugins/dsh-continuity/lib/BUILD.json'))
 process.stdout.write('DSH source runtime and complete Web application are built and ready.\n')

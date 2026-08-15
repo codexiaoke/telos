@@ -5,3 +5,12 @@
 - insert:
     - id: telos-ui-sidebar
       name: '@telos/dsh-client-ui-sidebar'
+    - id: telos-continuity
+      name: '@telos/dsh-continuity'
+      config:
+        databasePath: !!js dshHomePath('telos', 'personal-continuity.sqlite')
+        maxRecallClaims: 8
+        maxRecallChars: 2400
+        graphDepth: 2
+        captureTurnSources: true
+        queueInference: true

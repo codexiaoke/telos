@@ -25,7 +25,11 @@ describe('prepareTelosDshWebPatch', () => {
       '',
     ].join('\n'))
 
-    const patch = loadTelosDshWebPatch({ sidebarPackageRoot: sidebar, layoutPackageRoot: '' })
+    const patch = loadTelosDshWebPatch({
+      sidebarPackageRoot: sidebar,
+      layoutPackageRoot: '',
+      continuityPackageRoot: '',
+    })
     expect(patch).toContain('- id: ui-sidebar\n  disabled: true')
     expect(patch).toContain('id: telos-ui-sidebar')
     expect(patch).toContain('name: "@telos/dsh-client-ui-sidebar"')
@@ -37,8 +41,10 @@ describe('prepareTelosDshWebPatch', () => {
     temporaryRoots.push(root)
     const sidebar = join(root, 'sidebar')
     const layout = join(root, 'layout')
+    const continuity = join(root, 'continuity')
     mkdirSync(join(sidebar, 'lib'), { recursive: true })
     mkdirSync(join(layout, 'lib'), { recursive: true })
+    mkdirSync(join(continuity, 'lib'), { recursive: true })
     writeFileSync(join(sidebar, 'package.json'), JSON.stringify({
       name: '@telos/dsh-client-ui-sidebar',
       private: true,
@@ -57,16 +63,24 @@ describe('prepareTelosDshWebPatch', () => {
       private: true,
     }))
     writeFileSync(join(layout, 'lib/client.js'), 'window.__TELOS_LAYOUT_TEST__ = true')
+    writeFileSync(join(continuity, 'package.json'), JSON.stringify({
+      name: '@telos/dsh-continuity',
+      private: true,
+    }))
+    writeFileSync(join(continuity, 'lib/index.js'), 'export const name = "telos-continuity"')
 
     const path = prepareTelosDshWebPatch(join(root, 'home'), {
       sidebarPackageRoot: sidebar,
       layoutPackageRoot: layout,
+      continuityPackageRoot: continuity,
     })
 
     expect(readFileSync(path, 'utf8')).toContain('"@telos/dsh-client-ui-sidebar"')
     expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-client-ui-sidebar/lib/client.js')))
       .toBe(true)
     expect(existsSync(join(root, 'home/profiles/web/node_modules/@deepseek-ai/dsh-client-ui-layout/lib/client.js')))
+      .toBe(true)
+    expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-continuity/lib/index.js')))
       .toBe(true)
   })
 })

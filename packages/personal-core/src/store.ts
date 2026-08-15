@@ -169,7 +169,9 @@ export class PersonalContinuityStore {
     this.assertOpen()
     const sourceKind = assertNonEmpty(input.sourceKind, 'sourceKind')
     const sourceInstanceId = assertNonEmpty(input.sourceInstanceId, 'sourceInstanceId')
-    if ((input.seqStart === undefined) !== (input.seqEnd === undefined)) {
+    const hasSeqStart = input.seqStart !== undefined
+    const hasSeqEnd = input.seqEnd !== undefined
+    if (hasSeqStart !== hasSeqEnd) {
       throw new TypeError('seqStart and seqEnd must be provided together')
     }
     if (input.seqStart !== undefined && (!Number.isInteger(input.seqStart) || input.seqStart < 0 || input.seqEnd! < input.seqStart)) {
@@ -832,7 +834,9 @@ export class PersonalContinuityStore {
       return this.requireClaim(claimId)
     }
     this.requireEntity(input.subjectEntityId)
-    if ((input.objectEntityId === undefined) === (input.objectValue === undefined)) {
+    const hasObjectEntity = input.objectEntityId !== undefined
+    const hasObjectValue = input.objectValue !== undefined
+    if (hasObjectEntity === hasObjectValue) {
       throw new TypeError('exactly one of objectEntityId or objectValue is required')
     }
     if (input.objectEntityId !== undefined) this.requireEntity(input.objectEntityId)

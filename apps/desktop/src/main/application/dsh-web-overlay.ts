@@ -6,10 +6,12 @@ const PATCH_TEMPLATE_FILENAME = 'telos.web.patch.yml'
 const WEB_PROFILE_NAME = 'web'
 const DSH_LAYOUT_PACKAGE = '@deepseek-ai/dsh-client-ui-layout'
 const TELOS_SIDEBAR_PACKAGE = '@telos/dsh-client-ui-sidebar'
+const TELOS_CONTINUITY_PACKAGE = '@telos/dsh-continuity'
 
 export interface TelosDshWebOverlaySources {
   sidebarPackageRoot: string
   layoutPackageRoot: string
+  continuityPackageRoot: string
 }
 
 /** Read the tracked DSH patch that defines Telos's complete allowed roster delta. */
@@ -21,10 +23,11 @@ function installProfilePackage(
   dshHome: string,
   sourceRoot: string,
   expectedPackageName: string,
+  expectedArtifact: string,
 ): void {
   const packageManifest = join(sourceRoot, 'package.json')
-  const clientBundle = join(sourceRoot, 'lib/client.js')
-  if (!existsSync(packageManifest) || !existsSync(clientBundle)) {
+  const builtArtifact = join(sourceRoot, expectedArtifact)
+  if (!existsSync(packageManifest) || !existsSync(builtArtifact)) {
     throw new Error(`Telos DSH package ${expectedPackageName} is missing; run pnpm dsh:build`)
   }
   const manifest = JSON.parse(readFileSync(packageManifest, 'utf8')) as { name?: unknown; private?: unknown }
@@ -78,8 +81,10 @@ export function prepareTelosDshWebPatch(
 
   removeLegacyFlatPackage(dshHome, TELOS_SIDEBAR_PACKAGE)
   removeLegacyFlatPackage(dshHome, DSH_LAYOUT_PACKAGE)
-  installProfilePackage(dshHome, sources.sidebarPackageRoot, TELOS_SIDEBAR_PACKAGE)
-  installProfilePackage(dshHome, sources.layoutPackageRoot, DSH_LAYOUT_PACKAGE)
+  removeLegacyFlatPackage(dshHome, TELOS_CONTINUITY_PACKAGE)
+  installProfilePackage(dshHome, sources.sidebarPackageRoot, TELOS_SIDEBAR_PACKAGE, 'lib/client.js')
+  installProfilePackage(dshHome, sources.layoutPackageRoot, DSH_LAYOUT_PACKAGE, 'lib/client.js')
+  installProfilePackage(dshHome, sources.continuityPackageRoot, TELOS_CONTINUITY_PACKAGE, 'lib/index.js')
 
   mkdirSync(dshHome, { recursive: true })
   const path = join(dshHome, PATCH_FILENAME)

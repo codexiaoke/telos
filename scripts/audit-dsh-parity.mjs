@@ -10,6 +10,7 @@ const dshRoot = resolve(repositoryRoot, 'third_party/deepseek-harness')
 const dshCli = resolve(dshRoot, 'apps/cli/lib/bin.js')
 const sidebarRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar')
 const layoutRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-layout')
+const continuityRoot = resolve(repositoryRoot, 'plugins/dsh-continuity')
 const patchPath = resolve(sidebarRoot, 'telos.web.patch.yml')
 const temporaryRoot = mkdtempSync(join(tmpdir(), 'telos-dsh-parity-'))
 
@@ -63,6 +64,9 @@ try {
     resolve(layoutRoot, 'package.json'),
     resolve(layoutRoot, 'lib/client.js'),
     resolve(layoutRoot, 'UPSTREAM.json'),
+    resolve(continuityRoot, 'package.json'),
+    resolve(continuityRoot, 'lib/index.js'),
+    resolve(continuityRoot, 'lib/BUILD.json'),
     patchPath,
   ]) {
     assert(existsSync(artifact), `required full-Web artifact is missing: ${artifact}`)
@@ -91,8 +95,11 @@ try {
 
   const profileRoot = resolve(temporaryRoot, 'profile-resolution')
   const installedLayout = resolve(profileRoot, 'node_modules/@deepseek-ai/dsh-client-ui-layout')
+  const installedContinuity = resolve(profileRoot, 'node_modules/@telos/dsh-continuity')
   mkdirSync(resolve(profileRoot, 'node_modules/@deepseek-ai'), { recursive: true })
+  mkdirSync(resolve(profileRoot, 'node_modules/@telos'), { recursive: true })
   cpSync(layoutRoot, installedLayout, { recursive: true })
+  cpSync(continuityRoot, installedContinuity, { recursive: true })
   const profileAnchor = resolve(profileRoot, 'cordis.yml')
   writeFileSync(profileAnchor, '')
   const profileRequire = createRequire(profileAnchor)
@@ -100,6 +107,11 @@ try {
   assert(
     realpathSync(resolvedLayoutManifest) === realpathSync(resolve(installedLayout, 'package.json')),
     `Profile-local layout derivative does not win package resolution: ${resolvedLayoutManifest}`,
+  )
+  const resolvedContinuityManifest = profileRequire.resolve('@telos/dsh-continuity/package.json')
+  assert(
+    realpathSync(resolvedContinuityManifest) === realpathSync(resolve(installedContinuity, 'package.json')),
+    `Profile-local continuity plugin does not win package resolution: ${resolvedContinuityManifest}`,
   )
 
   const requiredSurfaceIds = [
@@ -149,26 +161,41 @@ try {
     .map((row) => row.id)
     .filter((id) => !defaultById.has(id))
   assert(
-    isDeepStrictEqual(addedIds, ['telos-ui-sidebar']),
+    isDeepStrictEqual(addedIds, ['telos-ui-sidebar', 'telos-continuity']),
     `unexpected Telos-only rows: ${addedIds.join(', ')}`,
   )
   const telosSidebar = effectiveById.get('telos-ui-sidebar')
   assert(telosSidebar.name === '@telos/dsh-client-ui-sidebar', 'Telos sidebar package name changed')
   assert(telosSidebar.disabled !== true, 'Telos sidebar replacement is disabled')
+  const telosContinuity = effectiveById.get('telos-continuity')
+  assert(telosContinuity?.name === '@telos/dsh-continuity', 'Telos continuity package name changed')
+  assert(telosContinuity.disabled !== true, 'Telos continuity plugin is disabled')
   assert(
-    effectiveRows.length === defaultRows.length + 1,
-    `expected ${String(defaultRows.length + 1)} effective rows, found ${String(effectiveRows.length)}`,
+    isDeepStrictEqual(telosContinuity.config, {
+      databasePath: { javascriptSource: "dshHomePath('telos', 'personal-continuity.sqlite')" },
+      maxRecallClaims: 8,
+      maxRecallChars: 2400,
+      graphDepth: 2,
+      captureTurnSources: true,
+      queueInference: true,
+    }),
+    'Telos continuity bounded runtime configuration changed',
+  )
+  assert(
+    effectiveRows.length === defaultRows.length + 2,
+    `expected ${String(defaultRows.length + 2)} effective rows, found ${String(effectiveRows.length)}`,
   )
 
   // Reading the tracked file here makes the same patch consumed by Electron
   // part of the audit input, instead of re-creating its contents in this script.
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-ui-sidebar'), 'tracked patch is incomplete')
+  assert(readFileSync(patchPath, 'utf8').includes('id: telos-continuity'), 'tracked continuity patch is incomplete')
 
   process.stdout.write(`[PASS] DSH default Web rows: ${String(defaultRows.length)}\n`)
   process.stdout.write(`[PASS] Unchanged upstream rows: ${String(defaultRows.length - 1)}\n`)
   process.stdout.write('[PASS] Explained upstream delta: ui-sidebar disabled\n')
-  process.stdout.write('[PASS] Explained Telos addition: telos-ui-sidebar enabled\n')
-  process.stdout.write('[PASS] ui-layout identity preserved; Profile resolves the Telos Renderer derivative\n')
+  process.stdout.write('[PASS] Explained Telos additions: telos-ui-sidebar and telos-continuity enabled\n')
+  process.stdout.write('[PASS] Profile resolves the Telos Renderer derivative and continuity Host plugin\n')
   process.stdout.write(`[PASS] Required functional surfaces: ${String(requiredSurfaceIds.length)}\n`)
   process.stdout.write('Telos effective DSH Web composition is structurally equivalent to the pinned default.\n')
 } finally {

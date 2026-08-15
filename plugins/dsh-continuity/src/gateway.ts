@@ -11,6 +11,7 @@ import {
 import type {
   ContinuityHealth,
   ContinuityRpcResult,
+  ConfirmCommand,
   CorrectCommand,
   ForgetCommand,
   ListClaimsCommand,
@@ -122,6 +123,16 @@ function correctCommand(value: unknown): CorrectCommand {
   return {
     ...rememberCommand(input),
     claimId: string(input.claimId, 'claimId'),
+  }
+}
+
+function confirmCommand(value: unknown): ConfirmCommand {
+  const input = record(value)
+  return {
+    claimId: string(input.claimId, 'claimId'),
+    source: source(input.source),
+    actor: member(input.actor, ['user'] as const, 'actor', 'user'),
+    idempotencyKey: string(input.idempotencyKey, 'idempotencyKey'),
   }
 }
 
@@ -261,6 +272,16 @@ export class ContinuityGateway {
     })
   }
 
+  confirm(command: ConfirmCommand) {
+    const episode = this.store.createSourceEpisode(command.source)
+    return this.store.confirmCandidate({
+      claimId: command.claimId,
+      sourceEpisodeIds: [episode.id],
+      actor: command.actor,
+      idempotencyKey: command.idempotencyKey,
+    })
+  }
+
   forget(command: ForgetCommand) {
     return this.store.forget(command.claimId, {
       physical: command.physical,
@@ -290,6 +311,7 @@ export class ContinuityGateway {
         case 'health': return success(this.health())
         case 'memory/list': return success(this.store.listClaims(listClaimsCommand(payload)))
         case 'memory/remember': return success(this.remember(rememberCommand(payload)))
+        case 'memory/confirm': return success(this.confirm(confirmCommand(payload)))
         case 'memory/correct': return success(this.correct(correctCommand(payload)))
         case 'memory/forget': return success(this.forget(forgetCommand(payload)))
         case 'memory/recall': return success(this.recall(recallCommand(payload)))

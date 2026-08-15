@@ -35,6 +35,13 @@ export interface CorrectCommand extends Omit<RememberCommand, 'status'> {
   status: 'candidate' | 'confirmed'
 }
 
+export interface ConfirmCommand {
+  claimId: string
+  source: CreateSourceEpisodeInput
+  actor: 'user'
+  idempotencyKey: string
+}
+
 export interface ForgetCommand {
   claimId: string
   physical: boolean

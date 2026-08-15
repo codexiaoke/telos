@@ -68,6 +68,14 @@ class FakeRpc implements ClientRpc {
       this.claims = [replacement, claim({ status: 'superseded', supersededByClaimId: replacement.id })]
       return { ok: true as const, value: replacement }
     }
+    if (endpoint === 'memory/confirm') {
+      const input = payload as { claimId: string }
+      const confirmed = this.claims.find(item => item.id === input.claimId)
+      if (confirmed === undefined) return { ok: false as const, error: { code: 'bad-request', message: 'unknown claim' } }
+      const replacement = { ...confirmed, status: 'confirmed' as const, revision: confirmed.revision + 1 }
+      this.claims = this.claims.map(item => item.id === input.claimId ? replacement : item)
+      return { ok: true as const, value: replacement }
+    }
     if (endpoint === 'memory/forget') {
       const input = payload as { claimId: string; physical: boolean }
       this.claims = input.physical
@@ -138,6 +146,21 @@ describe('ContinuityClientController', () => {
       selectedCount: 1,
       recallId: 'recall-1',
       createdAt: '2026-08-15T00:00:00.000Z',
+    })
+  })
+
+  it('promotes a candidate only through an explicit confirmation command', async () => {
+    const rpc = new FakeRpc()
+    rpc.claims = [claim({ status: 'candidate' })]
+    const controller = new ContinuityClientController(rpc)
+    await controller.refresh()
+
+    await controller.confirm(rpc.claims[0]!)
+    expect(controller.getSnapshot().claims[0]).toMatchObject({ id: 'claim-1', status: 'confirmed', revision: 2 })
+    expect(rpc.calls.find(call => call.endpoint === 'memory/confirm')?.payload).toMatchObject({
+      claimId: 'claim-1',
+      actor: 'user',
+      source: { sourceKind: 'telos.user-confirmation' },
     })
   })
 })

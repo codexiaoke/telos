@@ -53,6 +53,18 @@ function managementSource(statement: string, sensitivity: MemoryClaimView['sensi
   }
 }
 
+function confirmationSource(claim: MemoryClaimView) {
+  const id = randomId()
+  return {
+    sourceKind: 'telos.user-confirmation',
+    runtimeId: 'dsh-web',
+    sourceInstanceId: `memory-confirmation:${id}`,
+    observedAt: new Date().toISOString(),
+    content: `Confirmed candidate: ${claim.statement}`,
+    sensitivity: claim.sensitivity,
+  }
+}
+
 /** Browser application boundary; every mutation remains an explicit user action. */
 export class ContinuityClientController {
   private snapshot: ContinuityClientSnapshot = EMPTY_SNAPSHOT
@@ -163,6 +175,23 @@ export class ContinuityClientController {
       this.update({ selectedClaimId: replacement.id, notice: '已保留原记录，并创建纠正后的新版本。' })
       await this.refresh()
       await this.selectClaim(replacement.id)
+    } catch (error) {
+      this.update({ loading: false, error: messageOf(error) })
+    }
+  }
+
+  async confirm(claim: MemoryClaimView): Promise<void> {
+    this.update({ loading: true, error: undefined, notice: undefined })
+    try {
+      const confirmed = await this.request<MemoryClaimView>('memory/confirm', {
+        claimId: claim.id,
+        source: confirmationSource(claim),
+        actor: 'user',
+        idempotencyKey: `ui:confirm:${randomId()}`,
+      })
+      this.update({ selectedClaimId: confirmed.id, notice: '候选记忆已由你确认，之后可以参与正常召回。' })
+      await this.refresh()
+      await this.selectClaim(confirmed.id)
     } catch (error) {
       this.update({ loading: false, error: messageOf(error) })
     }

@@ -6,6 +6,126 @@ import { defineTool } from "@deepseek-ai/dsh-tools";
 // src/contracts.ts
 var CONTINUITY_RPC_CHANNEL = "/telos-continuity";
 
+// src/formation.ts
+var PATTERNS = [
+  { expression: /^我(?:更|一直|通常)?(?:偏好|喜欢|习惯|常用)\s*(.+)$/u, kind: "semantic", predicate: "preference.stated", importance: 0.7 },
+  { expression: /^我的(?:长期|当前|近期)?目标是\s*(.+)$/u, kind: "prospective", predicate: "goal.stated", importance: 0.85 },
+  { expression: /^我(?:已经)?决定(?:了)?\s*(.+)$/u, kind: "episodic", predicate: "decision.stated", importance: 0.8 },
+  { expression: /^(?:以后)?请(?:一直|总是|优先)?\s*(.+)$/u, kind: "procedural", predicate: "procedure.requested", importance: 0.75 },
+  { expression: /^不要(?:再)?\s*(.+)$/u, kind: "constraint", predicate: "constraint.stated", importance: 0.9 },
+  { expression: /^提醒我\s*(.+)$/u, kind: "prospective", predicate: "commitment.stated", importance: 0.8 },
+  { expression: /^I (?:strongly )?(?:prefer|like|usually use)\s+(.+)$/iu, kind: "semantic", predicate: "preference.stated", importance: 0.7 },
+  { expression: /^My (?:long-term |current )?goal is\s+(.+)$/iu, kind: "prospective", predicate: "goal.stated", importance: 0.85 },
+  { expression: /^I (?:have )?decided(?: to)?\s+(.+)$/iu, kind: "episodic", predicate: "decision.stated", importance: 0.8 },
+  { expression: /^Please (?:always |preferentially )?\s*(.+)$/iu, kind: "procedural", predicate: "procedure.requested", importance: 0.75 },
+  { expression: /^(?:Do not|Never)\s+(.+)$/iu, kind: "constraint", predicate: "constraint.stated", importance: 0.9 },
+  { expression: /^Remind me(?: to| about)?\s+(.+)$/iu, kind: "prospective", predicate: "commitment.stated", importance: 0.8 }
+];
+var EXPLICIT_MEMORY_PATTERN = /(?:记住|记下来|写入记忆|remember|save (?:this|that))/iu;
+var SECRET_PATTERN = /(?:api[ _-]?key|password|passwd|secret|access[ _-]?token|refresh[ _-]?token|private[ _-]?key|密码|口令|密钥|令牌|sk-[a-z0-9_-]{8,})/iu;
+var QUESTION_VALUE_PATTERN = /(?:什么|吗|呢|是否|为什么|怎么|哪一个|what|why|which|should i)$/iu;
+function segments(text2) {
+  return text2.normalize("NFKC").slice(0, 2e4).split(/[。！？!?\n]+/u).map((segment) => segment.trim()).filter((segment) => segment.length >= 4 && segment.length <= 240);
+}
+function matchSegment(segment, scope2) {
+  if (EXPLICIT_MEMORY_PATTERN.test(segment) || SECRET_PATTERN.test(segment)) return void 0;
+  for (const pattern of PATTERNS) {
+    const match = pattern.expression.exec(segment);
+    const objectValue = match?.[1]?.trim();
+    if (objectValue === void 0 || objectValue.length < 2 || objectValue.length > 240 || QUESTION_VALUE_PATTERN.test(objectValue)) continue;
+    return {
+      kind: pattern.kind,
+      statement: segment,
+      predicate: pattern.predicate,
+      objectValue,
+      confidence: 0.92,
+      importance: pattern.importance,
+      sensitivity: "personal",
+      scope: scope2
+    };
+  }
+  return void 0;
+}
+function candidateEvidence(text2) {
+  const seen = /* @__PURE__ */ new Set();
+  const results = [];
+  for (const segment of segments(text2)) {
+    if (matchSegment(segment, { type: "session", id: "evidence-only" }) === void 0) continue;
+    const key = segment.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    results.push(segment);
+    if (results.length >= 6) break;
+  }
+  return results;
+}
+function extractCandidateEnvelope(input) {
+  const seen = /* @__PURE__ */ new Set();
+  const proposals = [];
+  for (const segment of segments(input.evidence)) {
+    const proposal2 = matchSegment(segment, input.scope);
+    if (proposal2 === void 0) continue;
+    const key = `${proposal2.predicate}\0${proposal2.objectValue.toLocaleLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    proposals.push(proposal2);
+    if (proposals.length >= 6) break;
+  }
+  return { schemaVersion: 1, sourceEpisodeId: input.sourceEpisodeId, proposals };
+}
+
+// src/formation-worker.ts
+function requiredString(value, field) {
+  if (typeof value !== "string" || value.trim().length === 0) throw new TypeError(`${field} must be a non-empty string`);
+  return value.trim();
+}
+function optionalString(value, field) {
+  if (value === void 0) return void 0;
+  return requiredString(value, field);
+}
+function processJob(gateway, job) {
+  const sourceEpisodeId = requiredString(job.payload.sourceEpisodeId, "sourceEpisodeId");
+  const sessionId = requiredString(job.payload.sessionId, "sessionId");
+  const workspaceId = optionalString(job.payload.workspaceId, "workspaceId");
+  const source2 = gateway.store.getSourceEpisode(sourceEpisodeId);
+  if (source2 === void 0) throw new Error(`unknown source episode ${sourceEpisodeId}`);
+  const envelope = extractCandidateEnvelope({
+    sourceEpisodeId,
+    evidence: source2.content ?? "",
+    scope: workspaceId === void 0 ? { type: "session", id: sessionId } : { type: "workspace", id: workspaceId }
+  });
+  const reconciliation = gateway.store.applyExtractionBatch(envelope, {
+    subjectEntityId: gateway.ownerEntity.id,
+    actor: "agent",
+    idempotencyKey: job.idempotencyKey
+  });
+  return reconciliation.outcomes.filter((outcome) => outcome.decision === "created-candidate").length;
+}
+function processInferenceJobs(gateway, options = {}) {
+  const jobs = gateway.store.claimOutbox(options.limit ?? 4, 6e4, "infer-turn-candidates");
+  let completed = 0;
+  let failed = 0;
+  let candidatesCreated = 0;
+  for (const job of jobs) {
+    try {
+      candidatesCreated += processJob(gateway, job);
+      gateway.store.completeOutbox(job.id);
+      completed += 1;
+    } catch (error) {
+      try {
+        gateway.store.failOutbox(job.id, error, { maxAttempts: 5, retryDelayMs: 1e3 });
+      } catch {
+      }
+      try {
+        options.onFailure?.(error, job);
+      } catch {
+      }
+      failed += 1;
+    }
+  }
+  return { claimed: jobs.length, completed, failed, candidatesCreated };
+}
+
 // ../../packages/personal-core/dist/schema.js
 var PERSONAL_CORE_SCHEMA_VERSION = 1;
 var MIGRATION_1 = `
@@ -227,6 +347,98 @@ import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+
+// ../../packages/personal-core/dist/extraction.js
+var CLAIM_KINDS = ["semantic", "episodic", "procedural", "prospective", "constraint"];
+var MAX_PROPOSALS = 6;
+var MAX_TEXT_LENGTH = 240;
+var PREDICATE_PATTERN = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
+var SECRET_PATTERN2 = /(?:api[ _-]?key|password|passwd|secret|access[ _-]?token|refresh[ _-]?token|private[ _-]?key|密码|口令|密钥|令牌|sk-[a-z0-9_-]{8,})/iu;
+function record(value, field) {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    throw new TypeError(`${field} must be an object`);
+  return value;
+}
+function text(value, field, maximum = MAX_TEXT_LENGTH) {
+  if (typeof value !== "string" || value.trim().length === 0)
+    throw new TypeError(`${field} must be a non-empty string`);
+  const normalized = value.trim().normalize("NFKC");
+  if (normalized.length > maximum)
+    throw new RangeError(`${field} exceeds ${String(maximum)} characters`);
+  return normalized;
+}
+function unit(value, field) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
+    throw new RangeError(`${field} must be between 0 and 1`);
+  }
+  return value;
+}
+function optionalIso(value, field) {
+  if (value === void 0)
+    return void 0;
+  const result = text(value, field, 64);
+  if (!Number.isFinite(Date.parse(result)))
+    throw new TypeError(`${field} must be an ISO-8601 timestamp`);
+  return result;
+}
+function boundedScope(value, field) {
+  const input = record(value, field);
+  if (input.type !== "workspace" && input.type !== "session")
+    throw new TypeError(`${field}.type must be workspace or session`);
+  return { type: input.type, id: text(input.id, `${field}.id`, 160) };
+}
+function proposal(value, index) {
+  const input = record(value, `proposals[${String(index)}]`);
+  if (typeof input.kind !== "string" || !CLAIM_KINDS.includes(input.kind)) {
+    throw new TypeError(`proposals[${String(index)}].kind is invalid`);
+  }
+  const statement = text(input.statement, `proposals[${String(index)}].statement`);
+  const objectValue = text(input.objectValue, `proposals[${String(index)}].objectValue`);
+  if (SECRET_PATTERN2.test(`${statement}
+${objectValue}`)) {
+    throw new TypeError(`proposals[${String(index)}] contains credential-like content`);
+  }
+  const predicate = text(input.predicate, `proposals[${String(index)}].predicate`, 80).toLocaleLowerCase();
+  if (!PREDICATE_PATTERN.test(predicate))
+    throw new TypeError(`proposals[${String(index)}].predicate is invalid`);
+  const validFrom = optionalIso(input.validFrom, `proposals[${String(index)}].validFrom`);
+  const validTo = optionalIso(input.validTo, `proposals[${String(index)}].validTo`);
+  if (validFrom !== void 0 && validTo !== void 0 && validTo < validFrom) {
+    throw new RangeError(`proposals[${String(index)}].validTo precedes validFrom`);
+  }
+  if (input.sensitivity !== "personal") {
+    throw new TypeError(`proposals[${String(index)}].sensitivity must be personal`);
+  }
+  return {
+    kind: input.kind,
+    statement,
+    predicate,
+    objectValue,
+    confidence: unit(input.confidence, `proposals[${String(index)}].confidence`),
+    importance: unit(input.importance, `proposals[${String(index)}].importance`),
+    sensitivity: "personal",
+    scope: boundedScope(input.scope, `proposals[${String(index)}].scope`),
+    ...validFrom === void 0 ? {} : { validFrom },
+    ...validTo === void 0 ? {} : { validTo }
+  };
+}
+function validateExtractionEnvelope(value) {
+  const input = record(value, "extraction envelope");
+  if (input.schemaVersion !== 1)
+    throw new TypeError("extraction envelope schemaVersion must be 1");
+  const sourceEpisodeId = text(input.sourceEpisodeId, "sourceEpisodeId", 160);
+  if (!Array.isArray(input.proposals))
+    throw new TypeError("proposals must be an array");
+  if (input.proposals.length > MAX_PROPOSALS)
+    throw new RangeError(`proposals exceeds ${String(MAX_PROPOSALS)} items`);
+  return {
+    schemaVersion: 1,
+    sourceEpisodeId,
+    proposals: input.proposals.map((entry, index) => proposal(entry, index))
+  };
+}
+
+// ../../packages/personal-core/dist/store.js
 var ACTIVE_CLAIM_STATUSES = /* @__PURE__ */ new Set(["confirmed"]);
 var DEFAULT_ALLOWED_SENSITIVITIES = ["personal"];
 var DEFAULT_MAX_CLAIMS = 8;
@@ -275,8 +487,8 @@ function canonicalJson(value) {
     return JSON.stringify(value);
   if (Array.isArray(value))
     return `[${value.map(canonicalJson).join(",")}]`;
-  const record2 = value;
-  return `{${Object.keys(record2).filter((key) => record2[key] !== void 0).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record2[key])}`).join(",")}}`;
+  const record3 = value;
+  return `{${Object.keys(record3).filter((key) => record3[key] !== void 0).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record3[key])}`).join(",")}}`;
 }
 function scopeColumns(scope2) {
   if (scope2.type === "global")
@@ -528,6 +740,69 @@ var PersonalContinuityStore = class {
       sourceEpisodeIds: input.sourceEpisodeIds ?? []
     });
   }
+  confirmCandidate(input) {
+    this.assertOpen();
+    const existing = this.eventByIdempotencyKey(input.idempotencyKey);
+    if (existing !== void 0)
+      return this.requireClaim(input.claimId);
+    const claim = this.requireClaim(input.claimId);
+    if (claim.status !== "candidate")
+      throw new Error(`claim ${claim.id} cannot be confirmed from status ${claim.status}`);
+    this.assertSources(input.sourceEpisodeIds);
+    const occurredAt = assertIso(input.occurredAt ?? this.isoNow(), "occurredAt");
+    this.transaction(() => {
+      this.db.prepare("UPDATE memory_claim SET status = 'confirmed', revision = revision + 1 WHERE id = ?").run(claim.id);
+      const attach = this.db.prepare("INSERT OR IGNORE INTO claim_source (claim_id, source_episode_id) VALUES (?, ?)");
+      for (const sourceEpisodeId of new Set(input.sourceEpisodeIds))
+        attach.run(claim.id, sourceEpisodeId);
+      this.projectClaim(this.requireClaim(claim.id));
+      this.insertEvent({
+        eventType: "claim.confirmed",
+        aggregateId: claim.id,
+        payload: { claimId: claim.id, contentHash: claim.contentHash, status: "confirmed" },
+        scope: claim.scope,
+        sourceEpisodeIds: input.sourceEpisodeIds,
+        actor: input.actor ?? "user",
+        occurredAt,
+        idempotencyKey: input.idempotencyKey
+      });
+    });
+    return this.requireClaim(claim.id);
+  }
+  applyExtractionBatch(value, input) {
+    this.assertOpen();
+    const envelope = validateExtractionEnvelope(value);
+    this.requireEntity(input.subjectEntityId);
+    this.requireSourceEpisode(envelope.sourceEpisodeId);
+    const outcomes = [];
+    this.transaction(() => {
+      for (const [proposalIndex, proposal2] of envelope.proposals.entries()) {
+        const { scopeType, scopeId } = scopeColumns(proposal2.scope);
+        const rows = this.db.prepare(`
+          SELECT * FROM memory_claim
+          WHERE subject_entity_id = ? AND status IN ('candidate', 'confirmed')
+            AND scope_type = ? AND ifnull(scope_id, '') = ifnull(?, '')
+        `).all(input.subjectEntityId, scopeType, scopeId);
+        const related = rows.map((row) => this.claimFromRow(row)).filter((claim2) => normalizedText(claim2.predicate) === normalizedText(proposal2.predicate));
+        const duplicate = related.find((claim2) => normalizedText(claim2.objectValue ?? "") === normalizedText(proposal2.objectValue));
+        const conflictingClaimIds = related.filter((claim2) => normalizedText(claim2.objectValue ?? "") !== normalizedText(proposal2.objectValue)).map((claim2) => claim2.id).sort();
+        if (duplicate !== void 0) {
+          outcomes.push({ proposalIndex, decision: "duplicate", claimId: duplicate.id, conflictingClaimIds });
+          continue;
+        }
+        const claim = this.remember({
+          ...proposal2,
+          subjectEntityId: input.subjectEntityId,
+          status: "candidate",
+          sourceEpisodeIds: [envelope.sourceEpisodeId],
+          actor: input.actor ?? "agent",
+          idempotencyKey: `${assertNonEmpty(input.idempotencyKey, "idempotencyKey")}:${String(proposalIndex)}`
+        });
+        outcomes.push({ proposalIndex, decision: "created-candidate", claimId: claim.id, conflictingClaimIds });
+      }
+    });
+    return { schemaVersion: 1, sourceEpisodeId: envelope.sourceEpisodeId, outcomes };
+  }
   getClaim(id) {
     this.assertOpen();
     const row = this.db.prepare("SELECT * FROM memory_claim WHERE id = ?").get(id);
@@ -628,13 +903,13 @@ var PersonalContinuityStore = class {
     }
     const contradictionSets = this.findContradictionSets(selected);
     const id = this.newId("recall");
-    const text = this.renderContextPack(id, selected, contradictionSets);
+    const text2 = this.renderContextPack(id, selected, contradictionSets);
     const contextPack = {
       recallId: id,
-      text,
+      text: text2,
       claimIds: selected.map((claim) => claim.id),
-      contentHash: hash(text),
-      charCount: text.length
+      contentHash: hash(text2),
+      charCount: text2.length
     };
     const latencyMs = performance.now() - started;
     this.transaction(() => {
@@ -644,7 +919,7 @@ var PersonalContinuityStore = class {
           context_pack_text, context_pack_hash, selected_claim_ids_json, char_count,
           latency_ms, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, query, hash(normalizedText(query)), canonicalJson({ ...context, at, allowedSensitivities }), canonicalJson(contradictionSets), text, contextPack.contentHash, canonicalJson(contextPack.claimIds), contextPack.charCount, latencyMs, createdAt);
+      `).run(id, query, hash(normalizedText(query)), canonicalJson({ ...context, at, allowedSensitivities }), canonicalJson(contradictionSets), text2, contextPack.contentHash, canonicalJson(contextPack.claimIds), contextPack.charCount, latencyMs, createdAt);
       const insert = this.db.prepare("INSERT INTO recall_candidate (recall_id, claim_id, score, reason) VALUES (?, ?, ?, ?)");
       for (const candidate of candidates)
         insert.run(id, candidate.claimId, candidate.score, candidate.reason);
@@ -675,7 +950,7 @@ var PersonalContinuityStore = class {
       reason: asString(candidate.reason, "reason")
     }));
     const selectedClaims = selectedIds.map((claimId) => this.getClaim(claimId)).filter((claim) => claim !== void 0);
-    const text = asString(row.context_pack_text, "context_pack_text");
+    const text2 = asString(row.context_pack_text, "context_pack_text");
     return {
       id,
       query: asString(row.query_text, "query_text"),
@@ -686,7 +961,7 @@ var PersonalContinuityStore = class {
       contradictionSets: parseJson(row.contradiction_sets_json, "contradiction_sets_json"),
       contextPack: {
         recallId: id,
-        text,
+        text: text2,
         claimIds: selectedIds,
         contentHash: asString(row.context_pack_hash, "context_pack_hash"),
         charCount: asNumber(row.char_count, "char_count")
@@ -890,7 +1165,7 @@ var PersonalContinuityStore = class {
     `).run(id, assertNonEmpty(jobType, "jobType"), canonicalJson(payload), assertIso(availableAt, "availableAt"), idempotencyKey, now, now);
     return this.requireOutbox(id);
   }
-  claimOutbox(limit = 10, leaseMs = 6e4) {
+  claimOutbox(limit = 10, leaseMs = 6e4, jobType) {
     this.assertOpen();
     const boundedLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
     if (!Number.isFinite(leaseMs) || leaseMs < 1e3)
@@ -901,11 +1176,12 @@ var PersonalContinuityStore = class {
     this.transaction(() => {
       const rows = this.db.prepare(`
         SELECT id FROM continuity_outbox
-        WHERE (status = 'pending' AND available_at <= ?)
-           OR (status = 'processing' AND lease_until <= ?)
+        WHERE ((status = 'pending' AND available_at <= ?)
+           OR (status = 'processing' AND lease_until <= ?))
+          AND (? IS NULL OR job_type = ?)
         ORDER BY available_at, created_at, id
         LIMIT ?
-      `).all(now, now, boundedLimit);
+      `).all(now, now, jobType ?? null, jobType ?? null, boundedLimit);
       const update = this.db.prepare(`
         UPDATE continuity_outbox
         SET status = 'processing', attempts = attempts + 1, lease_until = ?, updated_at = ?
@@ -1436,6 +1712,8 @@ ${lines.join("\n")}${contradiction}
     };
   }
   transaction(work) {
+    if (this.db.isTransaction)
+      return work();
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const value = work();
@@ -1460,11 +1738,11 @@ ${lines.join("\n")}${contradiction}
 
 // src/gateway.ts
 var OWNER_ENTITY_ID = "telos:owner";
-var CLAIM_KINDS = ["semantic", "episodic", "procedural", "prospective", "constraint"];
+var CLAIM_KINDS2 = ["semantic", "episodic", "procedural", "prospective", "constraint"];
 var CLAIM_STATUSES = ["candidate", "confirmed", "superseded", "contradicted", "revoked", "expired"];
 var SENSITIVITIES = ["personal", "sensitive", "secret"];
 var ENTITY_KINDS = ["person", "workspace", "project", "topic", "goal", "commitment", "decision", "constraint", "preference", "artifact"];
-function record(value, field = "payload") {
+function record2(value, field = "payload") {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`${field} must be an object`);
   return value;
 }
@@ -1472,7 +1750,7 @@ function string(value, field) {
   if (typeof value !== "string" || value.trim().length === 0) throw new TypeError(`${field} must be a non-empty string`);
   return value.trim();
 }
-function optionalString(value, field) {
+function optionalString2(value, field) {
   return value === void 0 ? void 0 : string(value, field);
 }
 function boolean(value, field, fallback) {
@@ -1499,7 +1777,7 @@ function stringArray(value, values, field) {
   return value.map((entry, index) => member(entry, values, `${field}[${String(index)}]`));
 }
 function scope(value) {
-  const input = record(value, "scope");
+  const input = record2(value, "scope");
   const type = member(input.type, ["global", "workspace", "session"], "scope.type");
   if (type === "global") return { type };
   return { type, id: string(input.id, "scope.id") };
@@ -1508,27 +1786,27 @@ function optionalScope(value) {
   return value === void 0 ? void 0 : scope(value);
 }
 function source(value) {
-  const input = record(value, "source");
+  const input = record2(value, "source");
   return {
     sourceKind: string(input.sourceKind, "source.sourceKind"),
-    runtimeId: optionalString(input.runtimeId, "source.runtimeId"),
+    runtimeId: optionalString2(input.runtimeId, "source.runtimeId"),
     sourceInstanceId: string(input.sourceInstanceId, "source.sourceInstanceId"),
-    sessionId: optionalString(input.sessionId, "source.sessionId"),
+    sessionId: optionalString2(input.sessionId, "source.sessionId"),
     seqStart: optionalNumber(input.seqStart, "source.seqStart"),
     seqEnd: optionalNumber(input.seqEnd, "source.seqEnd"),
-    observedAt: optionalString(input.observedAt, "source.observedAt"),
-    content: optionalString(input.content, "source.content"),
-    contentHash: optionalString(input.contentHash, "source.contentHash"),
+    observedAt: optionalString2(input.observedAt, "source.observedAt"),
+    content: optionalString2(input.content, "source.content"),
+    contentHash: optionalString2(input.contentHash, "source.contentHash"),
     sensitivity: input.sensitivity === void 0 ? void 0 : member(input.sensitivity, SENSITIVITIES, "source.sensitivity")
   };
 }
 function rememberCommand(value) {
-  const input = record(value);
+  const input = record2(value);
   return {
     statement: string(input.statement, "statement"),
     predicate: string(input.predicate, "predicate"),
     objectValue: string(input.objectValue, "objectValue"),
-    kind: member(input.kind, CLAIM_KINDS, "kind", "semantic"),
+    kind: member(input.kind, CLAIM_KINDS2, "kind", "semantic"),
     scope: scope(input.scope),
     sensitivity: member(input.sensitivity, SENSITIVITIES, "sensitivity", "personal"),
     confidence: number(input.confidence, "confidence", 1),
@@ -1537,19 +1815,28 @@ function rememberCommand(value) {
     source: source(input.source),
     actor: member(input.actor, ["user", "agent", "runtime"], "actor", "user"),
     idempotencyKey: string(input.idempotencyKey, "idempotencyKey"),
-    validFrom: optionalString(input.validFrom, "validFrom"),
-    validTo: optionalString(input.validTo, "validTo")
+    validFrom: optionalString2(input.validFrom, "validFrom"),
+    validTo: optionalString2(input.validTo, "validTo")
   };
 }
 function correctCommand(value) {
-  const input = record(value);
+  const input = record2(value);
   return {
     ...rememberCommand(input),
     claimId: string(input.claimId, "claimId")
   };
 }
+function confirmCommand(value) {
+  const input = record2(value);
+  return {
+    claimId: string(input.claimId, "claimId"),
+    source: source(input.source),
+    actor: member(input.actor, ["user"], "actor", "user"),
+    idempotencyKey: string(input.idempotencyKey, "idempotencyKey")
+  };
+}
 function forgetCommand(value) {
-  const input = record(value);
+  const input = record2(value);
   return {
     claimId: string(input.claimId, "claimId"),
     physical: boolean(input.physical, "physical", false),
@@ -1559,11 +1846,11 @@ function forgetCommand(value) {
   };
 }
 function recallCommand(value) {
-  const input = record(value);
+  const input = record2(value);
   return {
     query: string(input.query, "query"),
-    workspaceId: optionalString(input.workspaceId, "workspaceId"),
-    sessionId: optionalString(input.sessionId, "sessionId"),
+    workspaceId: optionalString2(input.workspaceId, "workspaceId"),
+    sessionId: optionalString2(input.sessionId, "sessionId"),
     includeCandidates: boolean(input.includeCandidates, "includeCandidates", false),
     allowedSensitivities: stringArray(input.allowedSensitivities, SENSITIVITIES, "allowedSensitivities"),
     maxClaims: optionalNumber(input.maxClaims, "maxClaims"),
@@ -1573,7 +1860,7 @@ function recallCommand(value) {
   };
 }
 function listClaimsCommand(value) {
-  const input = value === void 0 ? {} : record(value);
+  const input = value === void 0 ? {} : record2(value);
   return {
     statuses: stringArray(input.statuses, CLAIM_STATUSES, "statuses"),
     scope: optionalScope(input.scope),
@@ -1666,6 +1953,15 @@ var ContinuityGateway = class {
       idempotencyKey: command.idempotencyKey
     });
   }
+  confirm(command) {
+    const episode = this.store.createSourceEpisode(command.source);
+    return this.store.confirmCandidate({
+      claimId: command.claimId,
+      sourceEpisodeIds: [episode.id],
+      actor: command.actor,
+      idempotencyKey: command.idempotencyKey
+    });
+  }
   forget(command) {
     return this.store.forget(command.claimId, {
       physical: command.physical,
@@ -1696,6 +1992,8 @@ var ContinuityGateway = class {
           return success(this.store.listClaims(listClaimsCommand(payload)));
         case "memory/remember":
           return success(this.remember(rememberCommand(payload)));
+        case "memory/confirm":
+          return success(this.confirm(confirmCommand(payload)));
         case "memory/correct":
           return success(this.correct(correctCommand(payload)));
         case "memory/forget":
@@ -1703,32 +2001,32 @@ var ContinuityGateway = class {
         case "memory/recall":
           return success(this.recall(recallCommand(payload)));
         case "memory/explain": {
-          const input = record(payload);
+          const input = record2(payload);
           return success(this.store.explainRecall(string(input.recallId, "recallId")) ?? null);
         }
         case "recall/list": {
-          const input = payload === void 0 ? {} : record(payload);
+          const input = payload === void 0 ? {} : record2(payload);
           return success(this.store.listRecallDecisions({
-            sessionId: optionalString(input.sessionId, "sessionId"),
-            claimId: optionalString(input.claimId, "claimId"),
+            sessionId: optionalString2(input.sessionId, "sessionId"),
+            claimId: optionalString2(input.claimId, "claimId"),
             limit: optionalNumber(input.limit, "limit")
           }));
         }
         case "materialization/list": {
-          const input = payload === void 0 ? {} : record(payload);
+          const input = payload === void 0 ? {} : record2(payload);
           return success(this.store.listMaterializations({
-            recallId: optionalString(input.recallId, "recallId"),
-            claimId: optionalString(input.claimId, "claimId"),
-            sessionId: optionalString(input.sessionId, "sessionId"),
+            recallId: optionalString2(input.recallId, "recallId"),
+            claimId: optionalString2(input.claimId, "claimId"),
+            sessionId: optionalString2(input.sessionId, "sessionId"),
             limit: optionalNumber(input.limit, "limit")
           }));
         }
         case "source/get": {
-          const input = record(payload);
+          const input = record2(payload);
           return success(this.store.getSourceEpisode(string(input.sourceEpisodeId, "sourceEpisodeId")) ?? null);
         }
         case "entity/list": {
-          const input = payload === void 0 ? {} : record(payload);
+          const input = payload === void 0 ? {} : record2(payload);
           return success(this.store.listEntities({
             scope: optionalScope(input.scope),
             kinds: stringArray(input.kinds, ENTITY_KINDS, "kinds"),
@@ -1736,23 +2034,23 @@ var ContinuityGateway = class {
           }));
         }
         case "graph/list": {
-          const input = payload === void 0 ? {} : record(payload);
+          const input = payload === void 0 ? {} : record2(payload);
           return success(this.store.listRelations({
-            entityId: optionalString(input.entityId, "entityId"),
+            entityId: optionalString2(input.entityId, "entityId"),
             statuses: stringArray(input.statuses, CLAIM_STATUSES, "statuses"),
             limit: optionalNumber(input.limit, "limit")
           }));
         }
         case "receipt/list": {
-          const input = payload === void 0 ? {} : record(payload);
+          const input = payload === void 0 ? {} : record2(payload);
           return success(this.store.listActionReceipts({
             scope: optionalScope(input.scope),
             limit: optionalNumber(input.limit, "limit")
           }));
         }
         case "deletion/list": {
-          const input = payload === void 0 ? {} : record(payload);
-          return success(this.store.listForgetReports(optionalString(input.claimId, "claimId")));
+          const input = payload === void 0 ? {} : record2(payload);
+          return success(this.store.listForgetReports(optionalString2(input.claimId, "claimId")));
         }
         default:
           throw new TypeError(`unknown continuity endpoint ${endpoint}`);
@@ -1770,7 +2068,7 @@ var TEXT_OUTPUT = {
   schema: { type: "string" },
   render: (_args, value) => [{ type: "text", text: value }]
 };
-var CLAIM_KINDS2 = ["semantic", "episodic", "procedural", "prospective", "constraint"];
+var CLAIM_KINDS3 = ["semantic", "episodic", "procedural", "prospective", "constraint"];
 var SENSITIVITIES2 = ["personal", "sensitive"];
 function boundedInteger(value, fallback, minimum, maximum, field) {
   const resolved = value ?? fallback;
@@ -1878,12 +2176,12 @@ function assertClaimAccessible(ctx, agent, claim) {
 function installTools(ctx, gateway) {
   ctx.tools.register(defineTool({
     name: "continuity_remember",
-    description: "Persist one personal fact only when the direct human explicitly asks Telos to remember it or clearly states a durable decision, preference, commitment, or constraint. Never store secrets or inferred private attributes.",
+    description: "Persist one personal fact only when the direct human explicitly asks Telos to remember it. Ordinary durable statements are handled separately as reviewable candidates. Never store secrets or inferred private attributes.",
     parameters: {
       statement: { type: "string", required: true, description: "Concise natural-language memory statement." },
       predicate: { type: "string", required: true, description: "Stable dotted relation name such as prefers.evidence or project.requires." },
       value: { type: "string", required: true, description: "Literal value of the fact." },
-      kind: { type: "string", enum: [...CLAIM_KINDS2], description: "Memory form; defaults to semantic." },
+      kind: { type: "string", enum: [...CLAIM_KINDS3], description: "Memory form; defaults to semantic." },
       scope: { type: "string", enum: ["global", "workspace", "session"], description: "Availability boundary; defaults to workspace." },
       sensitivity: { type: "string", enum: [...SENSITIVITIES2], description: "personal or sensitive; secrets are rejected." },
       importance: { type: "number", description: "0 to 1; defaults to 0.7." },
@@ -1920,7 +2218,7 @@ function installTools(ctx, gateway) {
       statement: { type: "string", required: true },
       predicate: { type: "string", required: true },
       value: { type: "string", required: true },
-      kind: { type: "string", enum: [...CLAIM_KINDS2] },
+      kind: { type: "string", enum: [...CLAIM_KINDS3] },
       scope: { type: "string", enum: ["global", "workspace", "session"] },
       sensitivity: { type: "string", enum: [...SENSITIVITIES2] },
       importance: { type: "number" }
@@ -2034,7 +2332,7 @@ function installRecallHook(ctx, gateway, config, reportBackgroundError) {
     return { kind: "enter", messages: [...downstream.messages, recallMessage] };
   });
 }
-function installSessionObserver(ctx, gateway, config, reportBackgroundError) {
+function installSessionObserver(ctx, gateway, config, reportBackgroundError, scheduleInference) {
   const turns = /* @__PURE__ */ new WeakMap();
   const toolCalls = /* @__PURE__ */ new WeakMap();
   ctx.on("session/event", (session, event) => {
@@ -2042,7 +2340,7 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError) {
       if (event.type === "turn/start") {
         const digest = createHash2("sha256");
         digest.update(JSON.stringify(event));
-        turns.set(session, { turn: event.data.turn, startSeq: event.seq, digest });
+        turns.set(session, { turn: event.data.turn, startSeq: event.seq, digest, candidateEvidence: [] });
       } else {
         turns.get(session)?.digest.update(JSON.stringify(event));
       }
@@ -2080,9 +2378,17 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError) {
           toolCalls.get(session)?.delete(callId);
         }
       }
+      if (event.type === "user/message" && event.data.source.kind === "user" && config.queueInference) {
+        const trace = turns.get(session);
+        if (trace !== void 0) {
+          for (const evidence of candidateEvidence(textOf(event.data.content))) {
+            trace.candidateEvidence.push({ seq: event.seq, text: evidence });
+          }
+        }
+      }
       if (event.type === "user/message" && event.data.source.kind === "plugin" && event.data.source.plugin === "telos-continuity" && event.data.source.form === "recall") {
-        const text = textOf(event.data.content);
-        const recallId = /<telos_continuity recall_id="([^"]+)">/.exec(text)?.[1];
+        const text2 = textOf(event.data.content);
+        const recallId = /<telos_continuity recall_id="([^"]+)">/.exec(text2)?.[1];
         if (recallId !== void 0) {
           gateway.store.recordMaterialization({
             recallId,
@@ -2090,7 +2396,7 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError) {
             sessionId: String(session.id),
             seqStart: event.seq,
             seqEnd: event.seq,
-            renderedContentHash: createHash2("sha256").update(text).digest("hex")
+            renderedContentHash: createHash2("sha256").update(text2).digest("hex")
           });
         }
       }
@@ -2098,7 +2404,7 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError) {
         const trace = turns.get(session);
         turns.delete(session);
         if (trace !== void 0 && trace.turn === event.data.turn && config.captureTurnSources) {
-          const episode = gateway.store.createSourceEpisode({
+          gateway.store.createSourceEpisode({
             sourceKind: "dsh.turn",
             runtimeId: "dsh",
             sourceInstanceId: `${String(session.id)}:turn:${String(trace.turn)}`,
@@ -2108,13 +2414,26 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError) {
             observedAt: new Date(event.time).toISOString(),
             contentHash: trace.digest.digest("hex")
           });
-          if (config.queueInference) {
+          if (config.queueInference && trace.candidateEvidence.length > 0) {
+            const evidence = trace.candidateEvidence;
+            const workspace = workspaceFor(ctx, String(session.id));
+            const episode = gateway.store.createSourceEpisode({
+              sourceKind: "dsh.turn-candidates",
+              runtimeId: "dsh",
+              sourceInstanceId: `${String(session.id)}:turn:${String(trace.turn)}:candidates`,
+              sessionId: String(session.id),
+              seqStart: evidence[0].seq,
+              seqEnd: evidence.at(-1).seq,
+              observedAt: new Date(event.time).toISOString(),
+              content: evidence.map((entry) => entry.text).join("\n")
+            });
             gateway.store.enqueue("infer-turn-candidates", {
               sourceEpisodeId: episode.id,
               sessionId: String(session.id),
-              workspaceId: workspaceFor(ctx, String(session.id))?.id,
+              workspaceId: workspace === void 0 ? void 0 : String(workspace.id),
               turn: trace.turn
             }, `infer:${String(session.id)}:${String(trace.turn)}`);
+            scheduleInference();
           }
         }
       }
@@ -2134,6 +2453,26 @@ function apply(ctx, input) {
     databasePath: config.databasePath,
     onBackgroundError: () => lastBackgroundError
   });
+  let inferenceScheduled = false;
+  const scheduleInference = () => {
+    if (!config.queueInference || inferenceScheduled) return;
+    inferenceScheduled = true;
+    queueMicrotask(() => {
+      inferenceScheduled = false;
+      try {
+        const result = processInferenceJobs(gateway, {
+          onFailure: (error, job) => {
+            reportBackgroundError(error);
+            ctx.logger.warn(`telos-continuity inference job ${job.id} failed: ${String(error)}`);
+          }
+        });
+        if (result.claimed === 4 && result.failed === 0) scheduleInference();
+      } catch (error) {
+        reportBackgroundError(error);
+        ctx.logger.warn(`telos-continuity inference worker failed: ${String(error)}`);
+      }
+    });
+  };
   ctx.provide("telosContinuity", gateway);
   ctx.effect(() => () => gateway.close(), "telos-continuity: close personal core");
   ctx.connection.rpc.handle(
@@ -2143,12 +2482,13 @@ function apply(ctx, input) {
   );
   installTools(ctx, gateway);
   installRecallHook(ctx, gateway, config, reportBackgroundError);
-  installSessionObserver(ctx, gateway, config, reportBackgroundError);
+  installSessionObserver(ctx, gateway, config, reportBackgroundError, scheduleInference);
+  scheduleInference();
   ctx.inject(["systemPrompt"], (promptCtx) => {
     promptCtx.systemPrompt.section({
       name: "tool:telos-continuity",
       order: 112,
-      text: "Telos personal continuity is distinct from DSH session history. Use continuity_remember only for direct-human durable intent, continuity_correct instead of overwriting history, continuity_forget for explicit revocation, and continuity_search or continuity_explain for evidence. Never store credentials, secrets, inferred sensitive attributes, or an entire conversation."
+      text: "Telos personal continuity is distinct from DSH session history. Use continuity_remember only when the direct human explicitly asks to remember something, continuity_correct instead of overwriting history, continuity_forget for explicit revocation, and continuity_search or continuity_explain for evidence. Never store credentials, secrets, inferred sensitive attributes, or an entire conversation."
     });
   });
 }

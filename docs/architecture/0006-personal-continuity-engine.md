@@ -199,6 +199,14 @@ Core validates its output, resolves aliases, finds duplicate or contradictory
 claims, applies policy, then emits events transactionally. Failed extraction is
 recorded and retryable; it must never fail or delay the original DSH turn.
 
+V1 uses a deliberately conservative local extractor for direct first-person
+preferences, goals, decisions, instructions, constraints, and reminders. It
+requires no model or external service. Only matched snippets (at most six,
+240 characters each) are retained as evidence; the full turn is represented by
+a hash-only SourceEpisode. Inferred claims are restricted to the current
+workspace or session, reject credential-like content, and remain candidates
+until the user confirms, corrects, or revokes them in the continuity view.
+
 ## Retrieval and context assembly
 
 Recall is a policy-gated pipeline, not a dump of all memories:

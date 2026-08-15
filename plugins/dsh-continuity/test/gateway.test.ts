@@ -124,6 +124,25 @@ describe('ContinuityGateway', () => {
     })
   })
 
+  it('requires an explicit user confirmation to promote an inferred candidate', async () => {
+    const { gateway } = fixture()
+    const candidate = await gateway.handle('memory/remember', rememberPayload('candidate', { status: 'candidate' }))
+    if (!candidate.ok) throw new Error('fixture candidate failed')
+    const claimId = (candidate.value as { id: string }).id
+
+    const confirmed = await gateway.handle('memory/confirm', {
+      claimId,
+      source: {
+        sourceKind: 'telos.user-confirmation',
+        sourceInstanceId: 'confirm-candidate',
+        content: '用户确认候选记忆',
+      },
+      actor: 'user',
+      idempotencyKey: 'confirm-candidate',
+    })
+    expect(confirmed).toMatchObject({ ok: true, value: { id: claimId, status: 'confirmed', revision: 2 } })
+  })
+
   it('exposes source, entity, graph and receipt management views without direct table access', async () => {
     const { gateway, store } = fixture()
     const remembered = await gateway.handle('memory/remember', rememberPayload('views'))

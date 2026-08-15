@@ -187,6 +187,46 @@ export interface CorrectClaimInput extends Omit<RememberClaimInput, 'status'> {
   status?: 'confirmed' | 'candidate'
 }
 
+export interface ConfirmClaimInput {
+  claimId: string
+  sourceEpisodeIds: readonly string[]
+  actor?: ActorKind
+  occurredAt?: string
+  idempotencyKey: string
+}
+
+export interface ExtractionProposal {
+  kind: ClaimKind
+  statement: string
+  predicate: string
+  objectValue: string
+  confidence: number
+  importance: number
+  sensitivity: Extract<Sensitivity, 'personal'>
+  scope: Exclude<ContinuityScope, { type: 'global' }>
+  validFrom?: string
+  validTo?: string
+}
+
+export interface ExtractionEnvelopeV1 {
+  schemaVersion: 1
+  sourceEpisodeId: string
+  proposals: readonly ExtractionProposal[]
+}
+
+export interface ExtractionOutcome {
+  proposalIndex: number
+  decision: 'created-candidate' | 'duplicate'
+  claimId: string
+  conflictingClaimIds: readonly string[]
+}
+
+export interface ExtractionReconciliation {
+  schemaVersion: 1
+  sourceEpisodeId: string
+  outcomes: readonly ExtractionOutcome[]
+}
+
 export interface RecallContext {
   workspaceId?: string
   sessionId?: string

@@ -239,6 +239,20 @@ function ClaimDetail({ controller, state, claim }: {
         {claim.sourceEpisodeIds.map(id => <SourceCard key={id} source={state.sourcesById[id]} />)}
       </section>
 
+      {claim.status === 'candidate' ? (
+        <section className="telosContinuitySection">
+          <h3 className="telosContinuitySectionTitle">候选记忆</h3>
+          <p className="telosContinuityMuted">这是从你的直接陈述中提取的候选项。确认前不会进入正常召回。</p>
+          <button
+            className="telosContinuityButton"
+            data-primary
+            disabled={state.loading}
+            onClick={() => { void controller.confirm(claim) }}
+            type="button"
+          >确认这条候选记忆</button>
+        </section>
+      ) : null}
+
       {editable ? (
         <section className="telosContinuitySection">
           <h3 className="telosContinuitySectionTitle">纠正，不覆盖历史</h3>

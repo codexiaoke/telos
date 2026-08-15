@@ -271,6 +271,23 @@ function ClaimDetail({ controller, state, claim }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { className: "telosContinuitySectionTitle", children: "\u8BC1\u636E\u6765\u6E90" }),
       claim.sourceEpisodeIds.map((id) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SourceCard, { source: state.sourcesById[id] }, id))
     ] }),
+    claim.status === "candidate" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "telosContinuitySection", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { className: "telosContinuitySectionTitle", children: "\u5019\u9009\u8BB0\u5FC6" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "telosContinuityMuted", children: "\u8FD9\u662F\u4ECE\u4F60\u7684\u76F4\u63A5\u9648\u8FF0\u4E2D\u63D0\u53D6\u7684\u5019\u9009\u9879\u3002\u786E\u8BA4\u524D\u4E0D\u4F1A\u8FDB\u5165\u6B63\u5E38\u53EC\u56DE\u3002" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "button",
+        {
+          className: "telosContinuityButton",
+          "data-primary": true,
+          disabled: state.loading,
+          onClick: () => {
+            void controller.confirm(claim);
+          },
+          type: "button",
+          children: "\u786E\u8BA4\u8FD9\u6761\u5019\u9009\u8BB0\u5FC6"
+        }
+      )
+    ] }) : null,
     editable ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "telosContinuitySection", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { className: "telosContinuitySectionTitle", children: "\u7EA0\u6B63\uFF0C\u4E0D\u8986\u76D6\u5386\u53F2" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosContinuityEditGrid", children: [
@@ -544,6 +561,17 @@ function managementSource(statement, sensitivity) {
     sensitivity
   };
 }
+function confirmationSource(claim) {
+  const id = randomId();
+  return {
+    sourceKind: "telos.user-confirmation",
+    runtimeId: "dsh-web",
+    sourceInstanceId: `memory-confirmation:${id}`,
+    observedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    content: `Confirmed candidate: ${claim.statement}`,
+    sensitivity: claim.sensitivity
+  };
+}
 var ContinuityClientController = class {
   constructor(rpc) {
     this.rpc = rpc;
@@ -644,6 +672,22 @@ var ContinuityClientController = class {
       this.update({ selectedClaimId: replacement.id, notice: "\u5DF2\u4FDD\u7559\u539F\u8BB0\u5F55\uFF0C\u5E76\u521B\u5EFA\u7EA0\u6B63\u540E\u7684\u65B0\u7248\u672C\u3002" });
       await this.refresh();
       await this.selectClaim(replacement.id);
+    } catch (error) {
+      this.update({ loading: false, error: messageOf(error) });
+    }
+  }
+  async confirm(claim) {
+    this.update({ loading: true, error: void 0, notice: void 0 });
+    try {
+      const confirmed = await this.request("memory/confirm", {
+        claimId: claim.id,
+        source: confirmationSource(claim),
+        actor: "user",
+        idempotencyKey: `ui:confirm:${randomId()}`
+      });
+      this.update({ selectedClaimId: confirmed.id, notice: "\u5019\u9009\u8BB0\u5FC6\u5DF2\u7531\u4F60\u786E\u8BA4\uFF0C\u4E4B\u540E\u53EF\u4EE5\u53C2\u4E0E\u6B63\u5E38\u53EC\u56DE\u3002" });
+      await this.refresh();
+      await this.selectClaim(confirmed.id);
     } catch (error) {
       this.update({ loading: false, error: messageOf(error) });
     }

@@ -186,6 +186,20 @@ try {
   })
   const graph = await rpc(baseUrl, 'graph/list', { limit: 20 })
   assert(graph.some(relation => relation.predicate === 'tests.graph_projection'), 'Host graph projection omitted the smoke relation')
+  const candidate = await rpc(baseUrl, 'memory/remember', {
+    statement: 'Smoke candidate requires explicit confirmation',
+    predicate: 'tests.candidate_confirmation',
+    objectValue: 'explicit confirmation',
+    kind: 'semantic',
+    scope: { type: 'global' },
+    sensitivity: 'personal',
+    confidence: 0.92,
+    importance: 0.7,
+    status: 'candidate',
+    source: source('candidate'),
+    actor: 'agent',
+    idempotencyKey: 'smoke:candidate',
+  })
 
   browser = existsSync(chromium.executablePath())
     ? await chromium.launch({ headless: true })
@@ -210,6 +224,9 @@ try {
   const dialog = page.getByRole('dialog', { name: '连续记忆' })
   await dialog.waitFor({ state: 'visible' })
   await dialog.getByRole('button', { name: '全部', exact: true }).click()
+  await dialog.getByText('Smoke candidate requires explicit confirmation', { exact: true }).click()
+  await dialog.getByRole('button', { name: '确认这条候选记忆' }).click()
+  await dialog.getByText('已确认', { exact: true }).first().waitFor()
   await dialog.getByText('Smoke user prefers evidence-backed answers', { exact: true }).click()
   await dialog.getByText('telos.smoke', { exact: true }).waitFor()
   await dialog.getByRole('tab', { name: '关系图' }).click()
@@ -223,6 +240,8 @@ try {
   await dialog.getByText('已撤销', { exact: true }).first().waitFor()
   await page.getByRole('button', { name: '关闭连续记忆' }).click()
   assert(pageErrors.length === 0, `continuity Client page errors:\n${pageErrors.join('\n')}`)
+  const confirmedClaims = await rpc(baseUrl, 'memory/list', { statuses: ['confirmed'], limit: 20 })
+  assert(confirmedClaims.some(claim => claim.id === candidate.id), 'Client confirmation did not promote the candidate')
 
   process.stdout.write(`${JSON.stringify({
     status: 'PASS',
@@ -232,6 +251,7 @@ try {
     schemaVersion: health.schemaVersion,
     rememberedClaimId: remembered.id,
     correctedClaimId: corrected.id,
+    confirmedCandidateId: candidate.id,
     recallId: recall.id,
     selectedClaims: recall.selectedClaims.length,
   }, null, 2)}\n`)

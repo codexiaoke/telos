@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { chmodSync, mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { validateExtractionEnvelope } from './extraction.js'
 import { MIGRATION_1, PERSONAL_CORE_SCHEMA_VERSION } from './schema.js'
 import type {
   ActionReceipt,
@@ -12,6 +13,7 @@ import type {
   ClaimStatus,
   ContextPack,
   ContinuityScope,
+  ConfirmClaimInput,
   CorrectClaimInput,
   CreateEntityInput,
   CreateSourceEpisodeInput,
@@ -19,6 +21,7 @@ import type {
   EntityAlias,
   EntityEvent,
   EntityEventType,
+  ExtractionReconciliation,
   ForgetReport,
   MemoryClaim,
   OutboxJob,
@@ -372,6 +375,75 @@ export class PersonalContinuityStore {
       ...input,
       sourceEpisodeIds: input.sourceEpisodeIds ?? [],
     })
+  }
+
+  confirmCandidate(input: ConfirmClaimInput): MemoryClaim {
+    this.assertOpen()
+    const existing = this.eventByIdempotencyKey(input.idempotencyKey)
+    if (existing !== undefined) return this.requireClaim(input.claimId)
+    const claim = this.requireClaim(input.claimId)
+    if (claim.status !== 'candidate') throw new Error(`claim ${claim.id} cannot be confirmed from status ${claim.status}`)
+    this.assertSources(input.sourceEpisodeIds)
+    const occurredAt = assertIso(input.occurredAt ?? this.isoNow(), 'occurredAt')
+    this.transaction(() => {
+      this.db.prepare("UPDATE memory_claim SET status = 'confirmed', revision = revision + 1 WHERE id = ?").run(claim.id)
+      const attach = this.db.prepare('INSERT OR IGNORE INTO claim_source (claim_id, source_episode_id) VALUES (?, ?)')
+      for (const sourceEpisodeId of new Set(input.sourceEpisodeIds)) attach.run(claim.id, sourceEpisodeId)
+      this.projectClaim(this.requireClaim(claim.id))
+      this.insertEvent({
+        eventType: 'claim.confirmed',
+        aggregateId: claim.id,
+        payload: { claimId: claim.id, contentHash: claim.contentHash, status: 'confirmed' },
+        scope: claim.scope,
+        sourceEpisodeIds: input.sourceEpisodeIds,
+        actor: input.actor ?? 'user',
+        occurredAt,
+        idempotencyKey: input.idempotencyKey,
+      })
+    })
+    return this.requireClaim(claim.id)
+  }
+
+  applyExtractionBatch(
+    value: unknown,
+    input: { subjectEntityId: string; idempotencyKey: string; actor?: ActorKind },
+  ): ExtractionReconciliation {
+    this.assertOpen()
+    const envelope = validateExtractionEnvelope(value)
+    this.requireEntity(input.subjectEntityId)
+    this.requireSourceEpisode(envelope.sourceEpisodeId)
+    const outcomes: ExtractionReconciliation['outcomes'][number][] = []
+    this.transaction(() => {
+      for (const [proposalIndex, proposal] of envelope.proposals.entries()) {
+        const { scopeType, scopeId } = scopeColumns(proposal.scope)
+        const rows = this.db.prepare(`
+          SELECT * FROM memory_claim
+          WHERE subject_entity_id = ? AND status IN ('candidate', 'confirmed')
+            AND scope_type = ? AND ifnull(scope_id, '') = ifnull(?, '')
+        `).all(input.subjectEntityId, scopeType, scopeId) as Row[]
+        const related = rows.map(row => this.claimFromRow(row))
+          .filter(claim => normalizedText(claim.predicate) === normalizedText(proposal.predicate))
+        const duplicate = related.find(claim => normalizedText(claim.objectValue ?? '') === normalizedText(proposal.objectValue))
+        const conflictingClaimIds = related
+          .filter(claim => normalizedText(claim.objectValue ?? '') !== normalizedText(proposal.objectValue))
+          .map(claim => claim.id)
+          .sort()
+        if (duplicate !== undefined) {
+          outcomes.push({ proposalIndex, decision: 'duplicate', claimId: duplicate.id, conflictingClaimIds })
+          continue
+        }
+        const claim = this.remember({
+          ...proposal,
+          subjectEntityId: input.subjectEntityId,
+          status: 'candidate',
+          sourceEpisodeIds: [envelope.sourceEpisodeId],
+          actor: input.actor ?? 'agent',
+          idempotencyKey: `${assertNonEmpty(input.idempotencyKey, 'idempotencyKey')}:${String(proposalIndex)}`,
+        })
+        outcomes.push({ proposalIndex, decision: 'created-candidate', claimId: claim.id, conflictingClaimIds })
+      }
+    })
+    return { schemaVersion: 1, sourceEpisodeId: envelope.sourceEpisodeId, outcomes }
   }
 
   getClaim(id: string): MemoryClaim | undefined {
@@ -788,7 +860,7 @@ export class PersonalContinuityStore {
     return this.requireOutbox(id)
   }
 
-  claimOutbox(limit = 10, leaseMs = 60_000): OutboxJob[] {
+  claimOutbox(limit = 10, leaseMs = 60_000, jobType?: string): OutboxJob[] {
     this.assertOpen()
     const boundedLimit = Math.max(1, Math.min(Math.trunc(limit), 100))
     if (!Number.isFinite(leaseMs) || leaseMs < 1_000) throw new RangeError('leaseMs must be at least 1000')
@@ -798,11 +870,12 @@ export class PersonalContinuityStore {
     this.transaction(() => {
       const rows = this.db.prepare(`
         SELECT id FROM continuity_outbox
-        WHERE (status = 'pending' AND available_at <= ?)
-           OR (status = 'processing' AND lease_until <= ?)
+        WHERE ((status = 'pending' AND available_at <= ?)
+           OR (status = 'processing' AND lease_until <= ?))
+          AND (? IS NULL OR job_type = ?)
         ORDER BY available_at, created_at, id
         LIMIT ?
-      `).all(now, now, boundedLimit) as Row[]
+      `).all(now, now, jobType ?? null, jobType ?? null, boundedLimit) as Row[]
       const update = this.db.prepare(`
         UPDATE continuity_outbox
         SET status = 'processing', attempts = attempts + 1, lease_until = ?, updated_at = ?
@@ -1412,6 +1485,7 @@ export class PersonalContinuityStore {
   }
 
   private transaction<T>(work: () => T): T {
+    if (this.db.isTransaction) return work()
     this.db.exec('BEGIN IMMEDIATE')
     try {
       const value = work()

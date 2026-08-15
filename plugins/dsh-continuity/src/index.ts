@@ -16,6 +16,8 @@ import type {
   Sensitivity,
 } from '@telos/personal-core'
 import { CONTINUITY_RPC_CHANNEL, type CorrectCommand, type RememberCommand } from './contracts.js'
+import { candidateEvidence } from './formation.js'
+import { processInferenceJobs } from './formation-worker.js'
 import { ContinuityGateway } from './gateway.js'
 
 export { CONTINUITY_RPC_CHANNEL } from './contracts.js'
@@ -52,6 +54,7 @@ interface TurnTrace {
   turn: number
   startSeq: number
   digest: ReturnType<typeof createHash>
+  candidateEvidence: { seq: number; text: string }[]
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -188,7 +191,7 @@ function assertClaimAccessible(ctx: Context, agent: Agent, claim: MemoryClaim): 
 function installTools(ctx: Context, gateway: ContinuityGateway): void {
   ctx.tools.register(defineTool({
     name: 'continuity_remember',
-    description: 'Persist one personal fact only when the direct human explicitly asks Telos to remember it or clearly states a durable decision, preference, commitment, or constraint. Never store secrets or inferred private attributes.',
+    description: 'Persist one personal fact only when the direct human explicitly asks Telos to remember it. Ordinary durable statements are handled separately as reviewable candidates. Never store secrets or inferred private attributes.',
     parameters: {
       statement: { type: 'string', required: true, description: 'Concise natural-language memory statement.' },
       predicate: { type: 'string', required: true, description: 'Stable dotted relation name such as prefers.evidence or project.requires.' },
@@ -365,6 +368,7 @@ function installSessionObserver(
   gateway: ContinuityGateway,
   config: ResolvedConfig,
   reportBackgroundError: (error: unknown) => void,
+  scheduleInference: () => void,
 ): void {
   const turns = new WeakMap<Session, TurnTrace>()
   const toolCalls = new WeakMap<Session, Map<string, { seq: number; name: string }>>()
@@ -374,7 +378,7 @@ function installSessionObserver(
       if (event.type === 'turn/start') {
         const digest = createHash('sha256')
         digest.update(JSON.stringify(event))
-        turns.set(session, { turn: event.data.turn, startSeq: event.seq, digest })
+        turns.set(session, { turn: event.data.turn, startSeq: event.seq, digest, candidateEvidence: [] })
       } else {
         turns.get(session)?.digest.update(JSON.stringify(event))
       }
@@ -417,6 +421,15 @@ function installSessionObserver(
         }
       }
 
+      if (event.type === 'user/message' && event.data.source.kind === 'user' && config.queueInference) {
+        const trace = turns.get(session)
+        if (trace !== undefined) {
+          for (const evidence of candidateEvidence(textOf(event.data.content))) {
+            trace.candidateEvidence.push({ seq: event.seq, text: evidence })
+          }
+        }
+      }
+
       if (event.type === 'user/message' && event.data.source.kind === 'plugin'
         && event.data.source.plugin === 'telos-continuity' && event.data.source.form === 'recall') {
         const text = textOf(event.data.content)
@@ -437,7 +450,7 @@ function installSessionObserver(
         const trace = turns.get(session)
         turns.delete(session)
         if (trace !== undefined && trace.turn === event.data.turn && config.captureTurnSources) {
-          const episode = gateway.store.createSourceEpisode({
+          gateway.store.createSourceEpisode({
             sourceKind: 'dsh.turn',
             runtimeId: 'dsh',
             sourceInstanceId: `${String(session.id)}:turn:${String(trace.turn)}`,
@@ -447,13 +460,26 @@ function installSessionObserver(
             observedAt: new Date(event.time).toISOString(),
             contentHash: trace.digest.digest('hex'),
           })
-          if (config.queueInference) {
+          if (config.queueInference && trace.candidateEvidence.length > 0) {
+            const evidence = trace.candidateEvidence
+            const workspace = workspaceFor(ctx, String(session.id))
+            const episode = gateway.store.createSourceEpisode({
+              sourceKind: 'dsh.turn-candidates',
+              runtimeId: 'dsh',
+              sourceInstanceId: `${String(session.id)}:turn:${String(trace.turn)}:candidates`,
+              sessionId: String(session.id),
+              seqStart: evidence[0]!.seq,
+              seqEnd: evidence.at(-1)!.seq,
+              observedAt: new Date(event.time).toISOString(),
+              content: evidence.map(entry => entry.text).join('\n'),
+            })
             gateway.store.enqueue('infer-turn-candidates', {
               sourceEpisodeId: episode.id,
               sessionId: String(session.id),
-              workspaceId: workspaceFor(ctx, String(session.id))?.id,
+              workspaceId: workspace === undefined ? undefined : String(workspace.id),
               turn: trace.turn,
             }, `infer:${String(session.id)}:${String(trace.turn)}`)
+            scheduleInference()
           }
         }
       }
@@ -474,6 +500,26 @@ export function apply(ctx: Context, input: Config): void {
     databasePath: config.databasePath,
     onBackgroundError: () => lastBackgroundError,
   })
+  let inferenceScheduled = false
+  const scheduleInference = (): void => {
+    if (!config.queueInference || inferenceScheduled) return
+    inferenceScheduled = true
+    queueMicrotask(() => {
+      inferenceScheduled = false
+      try {
+        const result = processInferenceJobs(gateway, {
+          onFailure: (error, job) => {
+            reportBackgroundError(error)
+            ctx.logger.warn(`telos-continuity inference job ${job.id} failed: ${String(error)}`)
+          },
+        })
+        if (result.claimed === 4 && result.failed === 0) scheduleInference()
+      } catch (error) {
+        reportBackgroundError(error)
+        ctx.logger.warn(`telos-continuity inference worker failed: ${String(error)}`)
+      }
+    })
+  }
   ctx.provide('telosContinuity', gateway)
   ctx.effect(() => () => gateway.close(), 'telos-continuity: close personal core')
 
@@ -484,13 +530,14 @@ export function apply(ctx: Context, input: Config): void {
   )
   installTools(ctx, gateway)
   installRecallHook(ctx, gateway, config, reportBackgroundError)
-  installSessionObserver(ctx, gateway, config, reportBackgroundError)
+  installSessionObserver(ctx, gateway, config, reportBackgroundError, scheduleInference)
+  scheduleInference()
 
   ctx.inject(['systemPrompt'], (promptCtx) => {
     promptCtx.systemPrompt.section({
       name: 'tool:telos-continuity',
       order: 112,
-      text: 'Telos personal continuity is distinct from DSH session history. Use continuity_remember only for direct-human durable intent, '
+      text: 'Telos personal continuity is distinct from DSH session history. Use continuity_remember only when the direct human explicitly asks to remember something, '
         + 'continuity_correct instead of overwriting history, continuity_forget for explicit revocation, and continuity_search or '
         + 'continuity_explain for evidence. Never store credentials, secrets, inferred sensitive attributes, or an entire conversation.',
     })

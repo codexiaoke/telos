@@ -84,6 +84,21 @@ describe('McpManager', () => {
     expect(readFileSync(path, 'utf8')).not.toContain('secret-value')
   })
 
+  it('removes writable credentials when their binding is removed', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'telos-mcp-manager-'))
+    roots.push(root)
+    const { ctx, secrets } = harness()
+    const manager = new McpManager(ctx as never, new McpServerStore(join(root, 'servers.json')))
+    const ref = 'TELOS_MCP_CODEGRAPH_ENV_TOKEN'
+    await manager.handle('save', {
+      server: { ...server(false), env: [{ name: 'TOKEN', credentialRef: ref }] },
+      credentialValues: { [ref]: 'secret-value' },
+    })
+    await manager.handle('save', { server: server(false) })
+    expect(secrets.has(ref)).toBe(false)
+    expect(ctx.credentials.unset).toHaveBeenCalledWith(ref)
+  })
+
   it('disposes a running fiber before deletion', async () => {
     const root = mkdtempSync(join(tmpdir(), 'telos-mcp-manager-'))
     roots.push(root)

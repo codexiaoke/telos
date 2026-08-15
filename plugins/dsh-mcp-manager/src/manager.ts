@@ -149,6 +149,11 @@ export class McpManager {
     this.store.save(next)
     this.servers = next
     await this.stopServer(input.server.serverName)
+    if (existing !== undefined) {
+      const retainedRefs = new Set([...input.server.env, ...input.server.headers].map(binding => binding.credentialRef))
+      const removed = [...existing.env, ...existing.headers].filter(binding => !retainedRefs.has(binding.credentialRef))
+      await this.unsetWritableBindings(removed)
+    }
     this.runtime.set(input.server.serverName, { runtime: input.server.enabled ? 'connecting' : 'disabled' })
     if (input.server.enabled) await this.startServer(input.server.serverName)
     return this.list()
@@ -178,14 +183,19 @@ export class McpManager {
   private async delete(name: string): Promise<McpServerView[]> {
     const server = this.find(name)
     await this.stopServer(name)
-    for (const binding of [...server.env, ...server.headers]) {
-      const info = await this.ctx.credentials.describe(credentialRef(binding.credentialRef))
-      if (info.configured && info.writable) await this.ctx.credentials.unset(credentialRef(binding.credentialRef))
-    }
+    await this.unsetWritableBindings([...server.env, ...server.headers])
     this.servers = this.servers.filter(candidate => candidate.serverName !== name)
     this.store.save(this.servers)
     this.runtime.delete(name)
     return this.list()
+  }
+
+  private async unsetWritableBindings(bindings: readonly CredentialBinding[]): Promise<void> {
+    for (const binding of bindings) {
+      const ref = credentialRef(binding.credentialRef)
+      const info = await this.ctx.credentials.describe(ref)
+      if (info.configured && info.writable) await this.ctx.credentials.unset(ref)
+    }
   }
 
   private async resolveBindings(bindings: readonly CredentialBinding[]): Promise<Record<string, string>> {

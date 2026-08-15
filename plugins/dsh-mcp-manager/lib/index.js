@@ -248,6 +248,11 @@ var McpManager = class {
     this.store.save(next);
     this.servers = next;
     await this.stopServer(input.server.serverName);
+    if (existing !== void 0) {
+      const retainedRefs = new Set([...input.server.env, ...input.server.headers].map((binding2) => binding2.credentialRef));
+      const removed = [...existing.env, ...existing.headers].filter((binding2) => !retainedRefs.has(binding2.credentialRef));
+      await this.unsetWritableBindings(removed);
+    }
     this.runtime.set(input.server.serverName, { runtime: input.server.enabled ? "connecting" : "disabled" });
     if (input.server.enabled) await this.startServer(input.server.serverName);
     return this.list();
@@ -274,14 +279,18 @@ var McpManager = class {
   async delete(name2) {
     const server = this.find(name2);
     await this.stopServer(name2);
-    for (const binding2 of [...server.env, ...server.headers]) {
-      const info = await this.ctx.credentials.describe(credentialRef(binding2.credentialRef));
-      if (info.configured && info.writable) await this.ctx.credentials.unset(credentialRef(binding2.credentialRef));
-    }
+    await this.unsetWritableBindings([...server.env, ...server.headers]);
     this.servers = this.servers.filter((candidate) => candidate.serverName !== name2);
     this.store.save(this.servers);
     this.runtime.delete(name2);
     return this.list();
+  }
+  async unsetWritableBindings(bindings2) {
+    for (const binding2 of bindings2) {
+      const ref = credentialRef(binding2.credentialRef);
+      const info = await this.ctx.credentials.describe(ref);
+      if (info.configured && info.writable) await this.ctx.credentials.unset(ref);
+    }
   }
   async resolveBindings(bindings2) {
     const result2 = {};

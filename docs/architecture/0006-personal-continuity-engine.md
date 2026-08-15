@@ -201,22 +201,38 @@ when that exact model advertises a reasoning-off mode, the bounded auxiliary
 call uses it to avoid paying for conversation-grade reasoning. No tools are
 available to the formation call.
 
-The model owns the semantic decision: whether a human statement is durable,
-what kind of memory it represents, and how it should be normalized. Temporary
-format/tool controls are ignored, but they do not erase an otherwise durable
-clause in the same message. Deterministic code is limited to enforcing the
-versioned shape, exact human-message evidence, current scope, size limits,
-credential rejection, and transactional policy. It does not use regular
-expressions to decide what the user meant.
+The model owns the semantic decision: whether a human statement is useful
+beyond the current turn, what entities and event/claim edges it contains, how
+relative time should be resolved, and how it should be normalized. This
+includes concrete time-bounded events such as visits, appointments, deadlines,
+trips and promised follow-ups; they do not need to be permanent or repeated to
+qualify. The formation frame carries the direct human messages, the turn's
+reference time, local time zone and locale. The assistant's final text may be
+included only as non-authoritative disambiguation context and can never become
+evidence or introduce a fact.
+
+The v2 output separates evidence-grounded identity handles from time-aware
+memory events. `owner` is a reserved product-owned identity; every other entity
+name and alias must occur in an exact direct-human excerpt. Events connect a
+subject entity to either another entity or a literal, with optional validity
+bounds. Personal Core resolves or creates those identities and writes candidate
+edges plus entity/claim audit events in one transaction. Temporary format/tool
+controls are ignored, but they do not erase an otherwise useful clause in the
+same message. Deterministic code is limited to enforcing the versioned shape,
+exact human-message evidence, current scope, size limits, credential rejection,
+referential integrity, idempotency and transactional policy. It does not use
+regular expressions to decide what the user meant.
 
 The completed human turn is held only in a retryable outbox job. On success the
-job payload is scrubbed; if the model selects durable content, only its exact
-bounded evidence excerpts are retained in a `dsh.llm-memory-formation`
-SourceEpisode. An empty model decision creates an auditable formation receipt
-without creating a SourceEpisode or claim. Inferred claims are restricted to
-the current workspace or session and always remain candidates until the user
-confirms, corrects, or revokes them in the continuity view. They never
-participate in normal recall merely because the model assigned high confidence.
+job payload is scrubbed; if the model selects an event, only exact bounded
+direct-human evidence excerpts are retained in a
+`dsh.llm-memory-formation` SourceEpisode. Assistant text is not retained. An
+empty model decision creates an auditable formation receipt without creating a
+SourceEpisode, entity or claim. Inferred claims are restricted to the current
+workspace or session and always remain candidates until the user confirms,
+corrects, or revokes them in the continuity view. Candidate edges do not appear
+in the effective graph or participate in normal recall merely because the model
+assigned high confidence.
 
 ## Retrieval and context assembly
 

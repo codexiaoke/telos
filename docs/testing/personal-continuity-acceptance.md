@@ -9,16 +9,16 @@ Runtime baseline: DSH `0.1.0-rc.5`, source commit
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Unit and integration tests | PASS | 75 tests: packages 23, plugins 16, desktop 34, scripts 2 |
+| Unit and integration tests | PASS | 79 tests: packages 25, plugins 18, desktop 34, scripts 2 |
 | TypeScript | PASS | `pnpm typecheck` |
 | Lint | PASS | `pnpm lint` |
 | Production build | PASS | `pnpm build` |
 | ContinuityBench | PASS | 12/12 scenarios; precision 1.0; stale error 0; scope leak 0; provenance 1.0; correction 1.0; continuation 1.0; deletion 1.0; duplicate injection 0 |
-| Recall performance fixture | PASS | p95 0.817 ms; maximum ContextPack 506 characters |
+| Recall performance fixture | PASS | p95 0.979 ms; maximum ContextPack 506 characters |
 | DSH provenance | PASS | gitlink, clean Submodule, fork origin, derivative hashes, licenses and notices |
 | DSH Web parity | PASS | 129 default rows; only `ui-sidebar` replaced; `telos-ui-sidebar` and `telos-continuity` are the two explained additions |
 | Source-built continuity smoke | PASS | Real DSH Web, Host RPC, Client module and Chromium UI; remember, recall, correct, candidate confirm, graph, receipts and forget |
-| Main-model memory formation | PASS | Real configured `DeepSeek-V4-Pro` route: durable constraint produced a reviewable candidate; one-turn test control produced no claim or retained source; both jobs completed once and scrubbed their payloads |
+| Main-model memory formation | PASS | Real configured `DeepSeek-V4-Pro` route: one-turn test control produced no memory; `我爸爸明天来我家` produced a `person` entity and a reviewable `prospective` edge for the correct local day; both jobs completed once and scrubbed their payloads |
 | Packaged runtime smoke | PASS | Packaged Node ran DSH `0.1.0-rc.5`; packaged DSH Web loaded the continuity Client and returned schema 1 with SQLite integrity `ok` |
 | DMG integrity | PASS | `hdiutil verify` |
 | ZIP integrity | PASS | `unzip -tq` |
@@ -33,11 +33,17 @@ session deletion.
 
 The live formation check used the main conversation provider/model through the
 DSH LLM service, with the model-advertised `off` reasoning effort recorded in
-the action receipt. The positive case retained only the exact durable clause,
-not the adjacent one-turn tool instruction. The negative case returned the
-requested chat response while leaving both `memory_claim` and
-`source_episode` without the test marker. No API key or credential value was
-read into the evidence report.
+the action receipt. At reference time `2026-08-15T05:03:33.804Z` in
+`Asia/Shanghai`, the positive case created entity `爸爸`, connected it to the
+reserved owner through a `prospective` candidate edge, and resolved `明天` to
+`2026-08-16T00:00:00+08:00` through `2026-08-16T23:59:59+08:00`. The retained
+SourceEpisode contains only `我爸爸明天来我家`; the assistant reply was used as
+non-authoritative context and was not retained. The negative case returned the
+requested chat response while leaving both `memory_claim` and `source_episode`
+without the test marker. Both outbox jobs completed with one attempt and an
+empty payload. The candidate appeared only under `待确认`, not under `有效` or
+the effective relation graph. No API key or credential value was read into the
+evidence report.
 
 ## Local artifacts
 

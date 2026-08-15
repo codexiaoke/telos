@@ -207,6 +207,15 @@ pnpm package:desktop
 
 ## 发布方式
 
+先统一产品、安装包和侧边栏展示的版本：
+
+```bash
+pnpm release:bump 0.2.0
+```
+
+提交版本变化后再推送同名 `v0.2.0` 标签。工作流会拒绝标签、根
+`package.json` 和桌面应用版本不一致的发布。
+
 仓库的 [Desktop release workflow](./.github/workflows/desktop-release.yml) 使用原生 Runner 构建：
 
 | 平台 | 架构 | 产物 |

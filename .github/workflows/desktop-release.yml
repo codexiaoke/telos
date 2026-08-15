@@ -26,6 +26,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       publish: ${{ steps.version.outputs.publish }}
     steps:
+      - uses: actions/checkout@v4
       - id: version
         shell: bash
         env:
@@ -40,8 +41,15 @@ jobs:
             tag="v${version}"
             publish=false
           fi
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid semantic version: $version" >&2
+            exit 1
+          fi
+          product_version="$(node -p "require('./package.json').version")"
+          desktop_version="$(node -p "require('./apps/desktop/package.json').version")"
+          if [[ "$version" != "$product_version" || "$version" != "$desktop_version" ]]; then
+            echo "Release version $version does not match package versions ($product_version, $desktop_version)." >&2
+            echo "Run pnpm release:bump $version and commit the result before releasing." >&2
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"

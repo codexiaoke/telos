@@ -16,6 +16,7 @@
     "lint": "oxlint .",
     "package:desktop": "node scripts/package-desktop.mjs",
     "package:desktop:dir": "node scripts/package-desktop.mjs --dir",
+    "release:bump": "node scripts/bump-release.mjs",
     "release:prepare-artifacts": "node scripts/prepare-release-artifacts.mjs",
     "dsh:build": "node scripts/build-dsh-runtime.mjs",
     "dsh:audit": "node scripts/audit-dsh-sync.mjs",

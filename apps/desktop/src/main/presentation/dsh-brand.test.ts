@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { createTelosDshThemeCss, TELOS_DSH_THEME_CSS, toTelosWindowTitle } from './dsh-brand.js'
 
 const repositoryRoot = resolve(__dirname, '../../../../..')
+const telosVersion = JSON.parse(readFileSync(resolve(repositoryRoot, 'package.json'), 'utf8')).version
 
 describe('toTelosWindowTitle', () => {
   it('replaces only the DSH product identity', () => {
@@ -35,7 +36,7 @@ describe('TELOS_DSH_THEME_CSS', () => {
     )
     expect(sidebarBundle).toContain('--dsh-sidebar-inline-padding:16px')
     expect(sidebarBundle).toContain('height:82px')
-    expect(sidebarBundle).toContain('Telos v0.1.0')
+    expect(sidebarBundle).toContain(`Telos v${telosVersion}`)
   })
 
   it('reserves only the top-right native caption rectangle on Windows', () => {

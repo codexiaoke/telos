@@ -4,7 +4,7 @@ copyright: Copyright © 2026 Telos contributors
 asar: true
 npmRebuild: false
 compression: normal
-afterPack: ../../scripts/after-pack-desktop.mjs
+afterPack: build/after-pack.mjs
 
 directories:
   output: ../../dist

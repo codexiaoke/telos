@@ -1,7 +1,7 @@
 import { constants, cpSync, existsSync, rmSync } from 'node:fs'
 import { join, relative, resolve, sep } from 'node:path'
 
-const repositoryRoot = resolve(import.meta.dirname, '..')
+const repositoryRoot = resolve(import.meta.dirname, '../../..')
 const excludedDirectoryNames = new Set(['.git', '.codegraph', '.cache', 'coverage'])
 
 function assertContained(parent, child) {

@@ -21,6 +21,10 @@
       name: '@telos/dsh-mcp-manager'
       config:
         storePath: !!js dshHomePath('telos', 'mcp-servers.json')
+    - id: telos-multimodal
+      name: '@telos/dsh-multimodal'
+      config:
+        storePath: !!js dshHomePath('telos', 'multimodal-settings.json')
     - id: telos-workbench-files
       name: '@telos/dsh-workbench-files'
     - id: telos-work-report

@@ -45,6 +45,12 @@ export function resolveTelosDshMcpManagerPackageRoot(): string {
     : join(developmentRepositoryRoot(), 'plugins/dsh-mcp-manager')
 }
 
+export function resolveTelosDshMultimodalPackageRoot(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'dsh-overlays/telos-multimodal')
+    : join(developmentRepositoryRoot(), 'plugins/dsh-multimodal')
+}
+
 export function resolveTelosDshWorkbenchFilesPackageRoot(): string {
   return app.isPackaged
     ? join(process.resourcesPath, 'dsh-overlays/telos-workbench-files')

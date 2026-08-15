@@ -10,6 +10,7 @@ import {
   resolveDshSourceRoot,
   resolveTelosDshContinuityPackageRoot,
   resolveTelosDshMcpManagerPackageRoot,
+  resolveTelosDshMultimodalPackageRoot,
   resolveTelosDshWorkbenchFilesPackageRoot,
   resolveTelosDshWorkReportPackageRoot,
   resolveTelosDshLayoutPackageRoot,
@@ -146,6 +147,7 @@ async function startApplication(): Promise<void> {
     layoutPackageRoot: resolveTelosDshLayoutPackageRoot(),
     continuityPackageRoot: resolveTelosDshContinuityPackageRoot(),
     mcpManagerPackageRoot: resolveTelosDshMcpManagerPackageRoot(),
+    multimodalPackageRoot: resolveTelosDshMultimodalPackageRoot(),
     workbenchFilesPackageRoot: resolveTelosDshWorkbenchFilesPackageRoot(),
     workReportPackageRoot: resolveTelosDshWorkReportPackageRoot(),
   })

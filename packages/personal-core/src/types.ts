@@ -114,6 +114,17 @@ export interface MemoryClaim {
   revision: number
 }
 
+export interface RelationProjection {
+  claimId: string
+  fromEntityId: string
+  predicate: string
+  toEntityId?: string
+  objectValue?: string
+  validFrom?: string
+  validTo?: string
+  status: ClaimStatus
+}
+
 export interface CreateSourceEpisodeInput {
   id?: string
   sourceKind: string

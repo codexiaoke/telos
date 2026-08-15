@@ -29,6 +29,7 @@ import type {
   RecallMaterialization,
   RecallOptions,
   RecallReason,
+  RelationProjection,
   RecordMaterializationInput,
   RememberClaimInput,
   ScopeType,
@@ -222,6 +223,24 @@ export class PersonalContinuityStore {
     return row === undefined ? undefined : this.sourceEpisodeFromRow(row)
   }
 
+  listSourceEpisodes(options: { sessionId?: string; deletionStates?: readonly SourceEpisode['deletionState'][]; limit?: number } = {}): SourceEpisode[] {
+    this.assertOpen()
+    const conditions: string[] = []
+    const params: SqlValue[] = []
+    if (options.sessionId !== undefined) {
+      conditions.push('session_id = ?')
+      params.push(options.sessionId)
+    }
+    if (options.deletionStates !== undefined && options.deletionStates.length > 0) {
+      conditions.push(`deletion_state IN (${options.deletionStates.map(() => '?').join(',')})`)
+      params.push(...options.deletionStates)
+    }
+    const limit = Math.max(1, Math.min(options.limit ?? 100, 1_000))
+    const sql = `SELECT * FROM source_episode ${conditions.length === 0 ? '' : `WHERE ${conditions.join(' AND ')}`} ORDER BY observed_at DESC, id DESC LIMIT ?`
+    params.push(limit)
+    return (this.db.prepare(sql).all(...params) as Row[]).map(row => this.sourceEpisodeFromRow(row))
+  }
+
   createEntity(input: CreateEntityInput): Entity {
     this.assertOpen()
     const existingEvent = this.eventByIdempotencyKey(input.idempotencyKey)
@@ -256,6 +275,27 @@ export class PersonalContinuityStore {
     this.assertOpen()
     const row = this.db.prepare('SELECT * FROM entity WHERE id = ?').get(id) as Row | undefined
     return row === undefined ? undefined : this.entityFromRow(row)
+  }
+
+  listEntities(options: { scope?: ContinuityScope; kinds?: readonly Entity['kind'][]; limit?: number } = {}): Entity[] {
+    this.assertOpen()
+    const conditions: string[] = ["status <> 'deleted'"]
+    const params: SqlValue[] = []
+    if (options.scope !== undefined) {
+      const { scopeType, scopeId } = scopeColumns(options.scope)
+      conditions.push("scope_type = ? AND ifnull(scope_id, '') = ifnull(?, '')")
+      params.push(scopeType, scopeId)
+    }
+    if (options.kinds !== undefined && options.kinds.length > 0) {
+      conditions.push(`kind IN (${options.kinds.map(() => '?').join(',')})`)
+      params.push(...options.kinds)
+    }
+    const limit = Math.max(1, Math.min(options.limit ?? 100, 1_000))
+    params.push(limit)
+    return (this.db.prepare(`
+      SELECT * FROM entity WHERE ${conditions.join(' AND ')}
+      ORDER BY updated_at DESC, id DESC LIMIT ?
+    `).all(...params) as Row[]).map(row => this.entityFromRow(row))
   }
 
   addAlias(input: AddAliasInput): EntityAlias {
@@ -363,6 +403,36 @@ export class PersonalContinuityStore {
       ? this.db.prepare('SELECT * FROM entity_event ORDER BY recorded_at, id').all()
       : this.db.prepare('SELECT * FROM entity_event WHERE aggregate_id = ? ORDER BY recorded_at, id').all(aggregateId)
     return (rows as Row[]).map(row => this.eventFromRow(row))
+  }
+
+  listRelations(options: { entityId?: string; statuses?: readonly ClaimStatus[]; limit?: number } = {}): RelationProjection[] {
+    this.assertOpen()
+    const conditions: string[] = []
+    const params: SqlValue[] = []
+    if (options.entityId !== undefined) {
+      conditions.push('(from_entity_id = ? OR to_entity_id = ?)')
+      params.push(options.entityId, options.entityId)
+    }
+    if (options.statuses !== undefined && options.statuses.length > 0) {
+      conditions.push(`status IN (${options.statuses.map(() => '?').join(',')})`)
+      params.push(...options.statuses)
+    }
+    const limit = Math.max(1, Math.min(options.limit ?? 200, 2_000))
+    params.push(limit)
+    return (this.db.prepare(`
+      SELECT * FROM relation_projection
+      ${conditions.length === 0 ? '' : `WHERE ${conditions.join(' AND ')}`}
+      ORDER BY claim_id LIMIT ?
+    `).all(...params) as Row[]).map(row => ({
+      claimId: asString(row.claim_id, 'claim_id'),
+      fromEntityId: asString(row.from_entity_id, 'from_entity_id'),
+      predicate: asString(row.predicate, 'predicate'),
+      toEntityId: asOptionalString(row.to_entity_id),
+      objectValue: asOptionalString(row.object_value),
+      validFrom: asOptionalString(row.valid_from),
+      validTo: asOptionalString(row.valid_to),
+      status: asString(row.status, 'status') as ClaimStatus,
+    }))
   }
 
   recall(query: string, context: RecallContext = {}, options: RecallOptions = {}): RecallDecision {
@@ -632,6 +702,23 @@ export class PersonalContinuityStore {
       })
     })
     return this.requireActionReceipt(id)
+  }
+
+  listActionReceipts(options: { scope?: ContinuityScope; limit?: number } = {}): ActionReceipt[] {
+    this.assertOpen()
+    const params: SqlValue[] = []
+    let where = ''
+    if (options.scope !== undefined) {
+      const { scopeType, scopeId } = scopeColumns(options.scope)
+      where = "WHERE scope_type = ? AND ifnull(scope_id, '') = ifnull(?, '')"
+      params.push(scopeType, scopeId)
+    }
+    const limit = Math.max(1, Math.min(options.limit ?? 100, 1_000))
+    params.push(limit)
+    return (this.db.prepare(`
+      SELECT * FROM action_receipt ${where}
+      ORDER BY recorded_at DESC, id DESC LIMIT ?
+    `).all(...params) as Row[]).map(row => this.actionReceiptFromRow(row))
   }
 
   enqueue(jobType: string, payload: Readonly<Record<string, unknown>>, idempotencyKey: string, availableAt = this.isoNow()): OutboxJob {

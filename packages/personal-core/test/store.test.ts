@@ -354,6 +354,8 @@ describe('recall policy and graph projection', () => {
 
     const first = f.store.recall('个人超级系统', {}, { minScore: 0, graphDepth: 2, maxClaims: 10 })
     expect(first.selectedClaims.map(claim => claim.id)).toEqual(expect.arrayContaining([owns.id, includes.id]))
+    expect(f.store.listRelations({ entityId: telosId }).map(relation => relation.claimId))
+      .toEqual(expect.arrayContaining([owns.id, includes.id]))
     f.store.rebuildProjections()
     const rebuilt = f.store.recall('个人超级系统', {}, { minScore: 0, graphDepth: 2, maxClaims: 10 })
     expect(rebuilt.selectedClaims.map(claim => claim.id)).toEqual(expect.arrayContaining([owns.id, includes.id]))
@@ -479,6 +481,10 @@ describe('privacy, receipts and recovery', () => {
     const event = f.store.listEvents(first.id)[0]
     expect(event).toMatchObject({ eventType: 'action.received', actor: 'runtime' })
     expect(JSON.stringify(event)).not.toContain('/private/path')
+    expect(f.store.listActionReceipts({ scope: { type: 'workspace', id: 'workspace-a' } })).toEqual([first])
+    expect(f.store.listActionReceipts({ scope: { type: 'workspace', id: 'workspace-b' } })).toEqual([])
+    expect(f.store.listEntities({ kinds: ['person'] }).map(item => item.id)).toEqual([personId])
+    expect(f.store.listSourceEpisodes({ sessionId: 'session-receipt' }).map(item => item.id)).toEqual([episodeId])
   })
 
   it('reclaims expired leases, retries failed jobs and marks exhausted jobs dead', () => {

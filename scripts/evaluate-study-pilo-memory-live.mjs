@@ -305,6 +305,37 @@ function evaluateCase(row, state) {
     claimKinds: state.claims.map(claim => claim.kind),
     statements: state.claims.map(claim => claim.statement),
     receiptActions: state.receipts.map(receipt => receipt.action),
+    executionError: null,
+  }
+}
+
+function evaluateExecutionError(row, error) {
+  const expected = row.expected_events[0]
+  const input = row.input.content
+  const shouldRemember = expected.memory_action !== 'ignore' && expected.is_qualified_event === true
+  const expectedEntities = expectedEntityNames(expected, input)
+  const timeExpected = shouldRemember && (expected.time_hints ?? []).some(hint => TIME_HINT_TYPES.has(hint.type))
+  return {
+    caseId: row.case_id,
+    expectedDecision: shouldRemember ? 'remember' : 'ignore',
+    actualDecision: 'execution-error',
+    decisionPass: false,
+    expectedEntityNames: expectedEntities.map(entity => entity.name),
+    actualEntityNames: [],
+    matchedEntityNames: [],
+    entityRecall: expectedEntities.length === 0 ? 1 : 0,
+    timeExpected,
+    timeBounded: false,
+    timePass: !timeExpected,
+    candidateSafe: false,
+    sourceTraceComplete: false,
+    evidenceGrounded: false,
+    claimCount: 0,
+    claimStatuses: [],
+    claimKinds: [],
+    statements: [],
+    receiptActions: [],
+    executionError: error instanceof Error ? error.message : String(error),
   }
 }
 
@@ -318,6 +349,7 @@ function summarize(cases) {
   const timeCases = cases.filter(item => item.timeExpected)
   const entityCases = cases.filter(item => item.expectedEntityNames.length > 0)
   const metrics = {
+    executionReliability: ratio(cases, item => item.executionError === null),
     decisionAccuracy: ratio(cases, item => item.decisionPass),
     rememberRecall: ratio(rememberCases, item => item.actualDecision === 'remember'),
     explicitIgnoreAccuracy: ratio(ignoreCases, item => item.actualDecision === 'ignore'),
@@ -330,6 +362,7 @@ function summarize(cases) {
     evidenceGrounding: ratio(cases, item => item.evidenceGrounded),
   }
   const thresholds = {
+    executionReliability: 1,
     decisionAccuracy: 0.9,
     rememberRecall: 0.9,
     explicitIgnoreAccuracy: 1,
@@ -411,6 +444,15 @@ try {
         entities: `${String(evaluated.matchedEntityNames.length)}/${String(evaluated.expectedEntityNames.length)}`,
         timePass: evaluated.timePass,
         candidateSafe: evaluated.candidateSafe,
+      })}\n`)
+    } catch (error) {
+      const evaluated = evaluateExecutionError(row, error)
+      results.push(evaluated)
+      process.stdout.write(`${JSON.stringify({
+        progress: `${String(index + 1)}/${String(selectedCases.length)}`,
+        caseId: row.case_id,
+        decision: `${evaluated.expectedDecision}->${evaluated.actualDecision}`,
+        error: evaluated.executionError,
       })}\n`)
     } finally {
       if (page !== undefined) await page.close()

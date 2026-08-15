@@ -47,7 +47,7 @@ const DEFAULT_CASE_IDS = [
 ]
 
 const TIME_HINT_TYPES = new Set([
-  'today', 'today_afternoon', 'tonight', 'noon', 'recent', 'yesterday',
+  'today', 'today_afternoon', 'tonight', 'noon', 'yesterday',
   'tomorrow', 'tomorrow_morning', 'next_week', 'next_month', 'specific_date',
   'week', 'weekend', 'this_month',
 ])
@@ -234,7 +234,6 @@ async function waitForCase(databasePath) {
   while (Date.now() < deadline) {
     const state = caseState(databasePath)
     if (state.receipts.some(receipt => receipt.action === 'memory.formation'
-      || receipt.action === 'continuity_remember'
       || receipt.action === 'continuity_correct'
       || receipt.action === 'continuity_forget')) return state
     await new Promise(resolveTimeout => setTimeout(resolveTimeout, 250))

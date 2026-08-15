@@ -14,6 +14,8 @@ export type ActorKind = 'user' | 'agent' | 'system' | 'runtime'
 
 export type EntityKind =
   | 'person'
+  | 'place'
+  | 'organization'
   | 'workspace'
   | 'project'
   | 'topic'

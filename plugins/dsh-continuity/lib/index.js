@@ -236,6 +236,8 @@ var ENTITY_REF_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
 var SECRET_PATTERN = /(?:api[ _-]?key|password|passwd|secret|access[ _-]?token|refresh[ _-]?token|private[ _-]?key|密码|口令|密钥|令牌|sk-[a-z0-9_-]{8,})/iu;
 var ENTITY_KINDS = [
   "person",
+  "place",
+  "organization",
   "workspace",
   "project",
   "topic",
@@ -1889,6 +1891,17 @@ ${lines.join("\n")}${contradiction}
 // src/contracts.ts
 var CONTINUITY_RPC_CHANNEL = "/telos-continuity";
 
+// src/capture-policy.ts
+function joined(messages2) {
+  return messages2.map((message) => message.text).join("\n").normalize("NFKC");
+}
+function explicitReviewRequested(messages2) {
+  return /待确认|先(?:别|不要)确认|暂(?:不|时不)?确认|不确定|可能记错|暂定/u.test(joined(messages2));
+}
+function explicitMemoryVetoRequested(messages2) {
+  return /(?:先|暂时)?别进长期(?:记忆|计划)|(?:先|暂时)?不要(?:记住|记录|保存|进入长期)|(?:先|暂时)?别(?:记住|记录|保存)|不需要(?:记住|记录|保存)|最多放\s*mentions?|只(?:放|留)在\s*mentions?/iu.test(joined(messages2));
+}
+
 // src/formation.ts
 import {
   BlockAssembler,
@@ -1901,6 +1914,21 @@ var MAX_EVENTS = 6;
 var MAX_ENTITIES2 = 12;
 var MAX_ALIASES2 = 6;
 var MAX_EVIDENCE_LENGTH = 500;
+var ENTITY_REF_PATTERN2 = /^[a-z][a-z0-9_-]{0,63}$/u;
+var ENTITY_KINDS2 = /* @__PURE__ */ new Set([
+  "person",
+  "place",
+  "organization",
+  "workspace",
+  "project",
+  "topic",
+  "goal",
+  "commitment",
+  "decision",
+  "constraint",
+  "preference",
+  "artifact"
+]);
 var RESPONSE_KEYS = /* @__PURE__ */ new Set(["schemaVersion", "decision", "reason", "entities", "events"]);
 var ENTITY_KEYS = /* @__PURE__ */ new Set(["ref", "kind", "canonicalName", "aliases", "evidence"]);
 var EVENT_KEYS = /* @__PURE__ */ new Set([
@@ -1937,7 +1965,7 @@ var MEMORY_FORMATION_SYSTEM_PROMPT = [
   "Prefer a compact connected event graph. Create each explicitly named person, organization, project, goal, commitment, topic or artifact that participates in a durable event, but do not split one situation into redundant paraphrases.",
   "Return exactly one JSON object and no Markdown or commentary.",
   "The required shape is:",
-  '{"schemaVersion":2,"decision":"remember|ignore","reason":"short reason","entities":[{"ref":"local_ref","kind":"person|workspace|project|topic|goal|commitment|decision|constraint|preference|artifact","canonicalName":"exactly observed name","aliases":[],"evidence":"exact human substring"}],"events":[{"kind":"semantic|episodic|procedural|prospective|constraint","statement":"...","predicate":"lowercase.dotted_name","subjectEntityRef":"owner|local_ref","objectEntityRef":"owner|local_ref|null","objectValue":"literal|null","confidence":0.0,"importance":0.0,"sensitivity":"personal","evidence":"exact human substring","durability":"cross-session","validFrom":null,"validTo":null}]}',
+  '{"schemaVersion":2,"decision":"remember|ignore","reason":"short reason","entities":[{"ref":"local_ref","kind":"person|place|organization|workspace|project|topic|goal|commitment|decision|constraint|preference|artifact","canonicalName":"exactly observed name","aliases":[],"evidence":"exact human substring"}],"events":[{"kind":"semantic|episodic|procedural|prospective|constraint","statement":"...","predicate":"lowercase.dotted_name","subjectEntityRef":"owner|local_ref","objectEntityRef":"owner|local_ref|null","objectValue":"literal|null","confidence":0.0,"importance":0.0,"sensitivity":"personal","evidence":"exact human substring","durability":"cross-session","validFrom":null,"validTo":null}]}',
   `Return at most ${String(MAX_ENTITIES2)} entities and ${String(MAX_EVENTS)} events. When nothing qualifies, decision must be ignore and both arrays must be empty.`
 ].join("\n");
 function record2(value, field) {
@@ -1978,6 +2006,87 @@ function unwrapJson(textValue) {
   const trimmed = textValue.trim();
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/iu.exec(trimmed);
   return fenced?.[1]?.trim() ?? trimmed;
+}
+function comparableEvidence(value) {
+  return value.normalize("NFKC").toLocaleLowerCase().replace(/[\p{P}\p{Z}\s]/gu, "");
+}
+function zonedParts(instant, timeZone) {
+  const values = Object.fromEntries(new Intl.DateTimeFormat("en-CA-u-hc-h23", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(instant).filter((part) => part.type !== "literal").map((part) => [part.type, Number(part.value)]));
+  return {
+    year: values.year,
+    month: values.month,
+    day: values.day,
+    hour: values.hour,
+    minute: values.minute,
+    second: values.second
+  };
+}
+function calendarFromEpoch(value) {
+  const date = new Date(value);
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+}
+function shiftCalendar(date, days) {
+  return calendarFromEpoch(Date.UTC(date.year, date.month - 1, date.day + days));
+}
+function localInstant(date, timeZone, hour = 0) {
+  const desiredWallTime = Date.UTC(date.year, date.month - 1, date.day, hour);
+  let candidate = desiredWallTime;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const observed = zonedParts(new Date(candidate), timeZone);
+    const observedWallTime = Date.UTC(
+      observed.year,
+      observed.month - 1,
+      observed.day,
+      observed.hour,
+      observed.minute,
+      observed.second
+    );
+    candidate += desiredWallTime - observedWallTime;
+  }
+  return candidate;
+}
+function bounds(start, endExclusive, timeZone, startHour = 0) {
+  return {
+    validFrom: new Date(localInstant(start, timeZone, startHour)).toISOString(),
+    validTo: new Date(localInstant(endExclusive, timeZone) - 1).toISOString()
+  };
+}
+function inferRelativeTimeBounds(value, referenceTime, timeZone) {
+  const normalized = value.normalize("NFKC").toLocaleLowerCase();
+  const reference = new Date(referenceTime);
+  if (!Number.isFinite(reference.getTime())) throw new TypeError("referenceTime must be ISO-8601");
+  const local = zonedParts(reference, timeZone);
+  const today = { year: local.year, month: local.month, day: local.day };
+  if (/今晚|tonight/u.test(normalized)) return bounds(today, shiftCalendar(today, 1), timeZone, 18);
+  if (/下周|next\s+week/u.test(normalized)) {
+    const weekday = new Date(Date.UTC(today.year, today.month - 1, today.day)).getUTCDay();
+    const start = shiftCalendar(today, weekday === 0 ? 1 : 8 - weekday);
+    return bounds(start, shiftCalendar(start, 7), timeZone);
+  }
+  if (/下个月|next\s+month/u.test(normalized)) {
+    const start = calendarFromEpoch(Date.UTC(today.year, today.month, 1));
+    const end = calendarFromEpoch(Date.UTC(today.year, today.month + 1, 1));
+    return bounds(start, end, timeZone);
+  }
+  if (/明天|tomorrow/u.test(normalized)) {
+    const start = shiftCalendar(today, 1);
+    return bounds(start, shiftCalendar(start, 1), timeZone);
+  }
+  if (/昨天|yesterday/u.test(normalized)) {
+    const start = shiftCalendar(today, -1);
+    return bounds(start, today, timeZone);
+  }
+  if (/今天|今日|today/u.test(normalized)) return bounds(today, shiftCalendar(today, 1), timeZone);
+  return void 0;
 }
 function frameMessages(input) {
   return [
@@ -2039,74 +2148,117 @@ function parseMemoryFormationOutput(output, input) {
   const normalizedMessages = input.messages.map((message) => message.text.normalize("NFKC"));
   const exactHumanExcerpt = (value, field) => {
     const excerpt = text2(value, field, MAX_EVIDENCE_LENGTH);
-    if (!normalizedMessages.some((message) => message.includes(excerpt))) {
-      throw new TypeError(`${field} is not an exact human-message substring`);
+    const exact = normalizedMessages.find((message) => message.includes(excerpt));
+    if (exact !== void 0) {
+      if (containsCredentialLikeContent(excerpt)) throw new TypeError(`${field} contains credential-like content`);
+      return excerpt;
     }
-    if (containsCredentialLikeContent(excerpt)) throw new TypeError(`${field} contains credential-like content`);
-    return excerpt;
+    const comparable = comparableEvidence(excerpt);
+    const punctuationOnlyMatch = comparable.length >= 4 ? normalizedMessages.find((message) => message.length <= MAX_EVIDENCE_LENGTH && comparableEvidence(message).includes(comparable)) : void 0;
+    if (punctuationOnlyMatch === void 0) {
+      throw new TypeError(`${field} is not grounded in a human message`);
+    }
+    if (containsCredentialLikeContent(punctuationOnlyMatch)) throw new TypeError(`${field} contains credential-like content`);
+    return punctuationOnlyMatch;
   };
   const entityEvidence = [];
-  const rawEntities = envelope.entities.map((value, index) => {
+  const rawEntities = [];
+  const retainedRefs = /* @__PURE__ */ new Set();
+  for (const [index, value] of envelope.entities.entries()) {
     const entity = record2(value, `entities[${String(index)}]`);
     assertKnownKeys(entity, ENTITY_KEYS, `entities[${String(index)}]`);
     const canonicalName = text2(entity.canonicalName, `entities[${String(index)}].canonicalName`, 120);
-    const excerpt = exactHumanExcerpt(entity.evidence, `entities[${String(index)}].evidence`);
     if (!Array.isArray(entity.aliases) || entity.aliases.length > MAX_ALIASES2) {
       throw new TypeError(`entities[${String(index)}].aliases must contain at most ${String(MAX_ALIASES2)} items`);
     }
-    const aliases = entity.aliases.map((alias, aliasIndex) => {
+    const aliases = entity.aliases.flatMap((alias, aliasIndex) => {
       const result = text2(alias, `entities[${String(index)}].aliases[${String(aliasIndex)}]`, 120);
-      if (!normalizedMessages.some((message) => message.includes(result))) {
-        throw new TypeError(`entities[${String(index)}].aliases[${String(aliasIndex)}] is not an exact human-message substring`);
-      }
-      return result;
+      return normalizedMessages.some((message) => message.includes(result)) ? [result] : [];
     });
     const observedNames = [canonicalName, ...aliases].filter((name2) => normalizedMessages.some((message) => message.includes(name2)));
-    if (observedNames.length === 0) {
-      throw new TypeError(`entities[${String(index)}] has no canonicalName or alias in a human message`);
+    if (observedNames.length === 0) continue;
+    const proposedEvidence = text2(entity.evidence, `entities[${String(index)}].evidence`, MAX_EVIDENCE_LENGTH);
+    let excerpt;
+    try {
+      excerpt = exactHumanExcerpt(proposedEvidence, `entities[${String(index)}].evidence`);
+    } catch {
+      excerpt = observedNames[0];
     }
-    entityEvidence.push(observedNames.some((name2) => excerpt.includes(name2)) ? excerpt : observedNames[0]);
-    return {
-      ref: entity.ref,
+    if (typeof entity.ref !== "string" || typeof entity.kind !== "string") continue;
+    const ref = entity.ref.trim().toLocaleLowerCase();
+    if (!ENTITY_REF_PATTERN2.test(ref) || ref === "owner" || !ENTITY_KINDS2.has(entity.kind)) continue;
+    const proposal2 = {
+      ref,
       kind: entity.kind,
       canonicalName,
       aliases
     };
-  });
+    if (retainedRefs.has(proposal2.ref)) continue;
+    retainedRefs.add(proposal2.ref);
+    rawEntities.push(proposal2);
+    entityEvidence.push(observedNames.some((name2) => excerpt.includes(name2)) ? excerpt : observedNames[0]);
+  }
   const eventEvidence = [];
-  const rawEvents = envelope.events.map((value, index) => {
+  const rawEvents = [];
+  const availableRefs = /* @__PURE__ */ new Set(["owner", ...rawEntities.map((entity) => entity.ref)]);
+  for (const [index, value] of envelope.events.entries()) {
     const event = record2(value, `events[${String(index)}]`);
     assertKnownKeys(event, EVENT_KEYS, `events[${String(index)}]`);
     if (event.durability !== "cross-session") {
       throw new TypeError(`events[${String(index)}].durability must be cross-session`);
     }
     const excerpt = exactHumanExcerpt(event.evidence, `events[${String(index)}].evidence`);
-    eventEvidence.push(excerpt);
-    return {
+    const statement = text2(event.statement, `events[${String(index)}].statement`, 500);
+    const subjectEntityRef = text2(event.subjectEntityRef, `events[${String(index)}].subjectEntityRef`, 64);
+    if (!availableRefs.has(subjectEntityRef)) continue;
+    const proposedObjectEntityRef = optionalText(event.objectEntityRef, `events[${String(index)}].objectEntityRef`, 64);
+    const objectEntityRef = proposedObjectEntityRef !== void 0 && availableRefs.has(proposedObjectEntityRef) ? proposedObjectEntityRef : void 0;
+    const objectValue = optionalText(event.objectValue, `events[${String(index)}].objectValue`, 240);
+    const inferredBounds = input.referenceTime === void 0 || input.timeZone === void 0 ? void 0 : inferRelativeTimeBounds(`${excerpt}
+${statement}`, input.referenceTime, input.timeZone);
+    const proposal2 = {
       kind: event.kind,
-      statement: event.statement,
+      statement,
       predicate: event.predicate,
-      subjectEntityRef: event.subjectEntityRef,
-      objectEntityRef: optionalText(event.objectEntityRef, `events[${String(index)}].objectEntityRef`, 64),
-      objectValue: optionalText(event.objectValue, `events[${String(index)}].objectValue`, 240),
+      subjectEntityRef,
+      objectEntityRef,
+      objectValue: objectEntityRef === void 0 ? objectValue ?? statement : void 0,
       confidence: unit2(event.confidence, `events[${String(index)}].confidence`),
       importance: unit2(event.importance, `events[${String(index)}].importance`),
       sensitivity: event.sensitivity,
-      validFrom: optionalIso2(event.validFrom, `events[${String(index)}].validFrom`),
-      validTo: optionalIso2(event.validTo, `events[${String(index)}].validTo`)
+      validFrom: optionalIso2(event.validFrom, `events[${String(index)}].validFrom`) ?? inferredBounds?.validFrom,
+      validTo: optionalIso2(event.validTo, `events[${String(index)}].validTo`) ?? inferredBounds?.validTo
     };
-  });
+    try {
+      const eventRefs = new Set([subjectEntityRef, objectEntityRef].filter((ref) => ref !== void 0 && ref !== "owner"));
+      const validatedEvent = validateGraphExtractionEnvelope({
+        schemaVersion: 2,
+        sourceEpisodeId: "model-formation-event-validation",
+        scope: input.scope,
+        entities: rawEntities.filter((entity) => eventRefs.has(entity.ref)),
+        events: [proposal2]
+      }).events[0];
+      if (validatedEvent === void 0) continue;
+      rawEvents.push(validatedEvent);
+      eventEvidence.push(excerpt);
+    } catch {
+    }
+  }
+  const usedEntityRefs = new Set(rawEvents.flatMap((event) => [event.subjectEntityRef, event.objectEntityRef].filter((ref) => ref !== void 0 && ref !== "owner")));
+  const retainedEntityIndexes = rawEntities.map((entity, index) => ({ entity, index })).filter(({ entity }) => usedEntityRefs.has(entity.ref));
+  const graphEntities = retainedEntityIndexes.map(({ entity }) => entity);
+  const graphEntityEvidence = retainedEntityIndexes.map(({ index }) => entityEvidence[index]);
   const validated = validateGraphExtractionEnvelope({
     schemaVersion: 2,
     sourceEpisodeId: "model-formation-validation",
     scope: input.scope,
-    entities: rawEntities,
+    entities: graphEntities,
     events: rawEvents
   });
   return {
-    decision: envelope.decision,
+    decision: rawEvents.length === 0 ? "ignore" : envelope.decision,
     reason,
-    entities: validated.entities.map((entity, index) => ({ ...entity, evidence: entityEvidence[index] })),
+    entities: rawEvents.length === 0 ? [] : validated.entities.map((entity, index) => ({ ...entity, evidence: graphEntityEvidence[index] })),
     events: validated.events.map((event, index) => ({ ...event, evidence: eventEvidence[index] }))
   };
 }
@@ -2371,7 +2523,7 @@ var OWNER_ENTITY_ID = "telos:owner";
 var CLAIM_KINDS2 = ["semantic", "episodic", "procedural", "prospective", "constraint"];
 var CLAIM_STATUSES = ["candidate", "confirmed", "superseded", "contradicted", "revoked", "expired"];
 var SENSITIVITIES = ["personal", "sensitive", "secret"];
-var ENTITY_KINDS2 = ["person", "workspace", "project", "topic", "goal", "commitment", "decision", "constraint", "preference", "artifact"];
+var ENTITY_KINDS3 = ["person", "place", "organization", "workspace", "project", "topic", "goal", "commitment", "decision", "constraint", "preference", "artifact"];
 function record4(value, field = "payload") {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`${field} must be an object`);
   return value;
@@ -2667,7 +2819,7 @@ var ContinuityGateway = class {
           const input = payload === void 0 ? {} : record4(payload);
           return success(this.store.listEntities({
             scope: optionalScope(input.scope),
-            kinds: stringArray(input.kinds, ENTITY_KINDS2, "kinds"),
+            kinds: stringArray(input.kinds, ENTITY_KINDS3, "kinds"),
             limit: optionalNumber(input.limit, "limit")
           }));
         }
@@ -2802,10 +2954,6 @@ function rememberStatusFromArguments(value) {
   } catch {
     return "confirmed";
   }
-}
-function explicitReviewRequested(messages2) {
-  const directText = messages2.map((message) => message.text).join("\n");
-  return /待确认|先(?:别|不要)确认|暂(?:不|时不)?确认|不确定|可能记错|暂定/u.test(directText);
 }
 function recallSummary(decision) {
   return JSON.stringify({
@@ -3098,9 +3246,24 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError, sch
         }
         const directText = trace.directMessages.map((message) => message.text).join("\n");
         if (!config.queueInference || trace.directMessages.length === 0 || trace.continuityMutationCompleted || containsCredentialLikeContent(directText)) return;
+        const workspace = workspaceFor(ctx, String(session.id));
+        const scope2 = workspace === void 0 ? { type: "session", id: String(session.id) } : { type: "workspace", id: String(workspace.id) };
+        if (explicitMemoryVetoRequested(trace.directMessages)) {
+          gateway.store.recordActionReceipt({
+            action: "memory.formation",
+            authorization: "denied",
+            runtimeId: "dsh",
+            provider: "telos-durable-memory-policy",
+            result: "denied",
+            scope: scope2,
+            sourceEpisodeIds: [],
+            occurredAt: new Date(trace.directMessages.at(-1).time).toISOString(),
+            idempotencyKey: `receipt:infer:${String(session.id)}:${String(trace.turn)}:veto`
+          });
+          return;
+        }
         const route2 = session.requestHeader()?.config;
         if (route2 === void 0) return;
-        const workspace = workspaceFor(ctx, String(session.id));
         gateway.store.enqueue("infer-turn-candidates", {
           sessionId: String(session.id),
           workspaceId: workspace === void 0 ? void 0 : String(workspace.id),
@@ -3204,7 +3367,7 @@ function apply(ctx, input) {
     promptCtx.systemPrompt.section({
       name: "tool:telos-continuity",
       order: 112,
-      text: "Telos personal continuity is distinct from DSH session history. Use continuity_remember only as explicit human authorization to queue main-model entity/event formation; set confirmation=candidate for provisional, uncertain, or pending-review memory. continuity_correct instead of overwriting history, continuity_forget for explicit revocation, and continuity_search or continuity_explain for evidence. Never store credentials, secrets, inferred sensitive attributes, or an entire conversation."
+      text: "Telos personal continuity is distinct from DSH session history. Use continuity_remember only as explicit human authorization to queue main-model entity/event formation; never call it when the human says not to save something as long-term memory or says mentions only. Set confirmation=candidate for provisional, uncertain, or pending-review memory. continuity_correct instead of overwriting history, continuity_forget for explicit revocation, and continuity_search or continuity_explain for evidence. Never store credentials, secrets, inferred sensitive attributes, or an entire conversation."
     });
   });
 }

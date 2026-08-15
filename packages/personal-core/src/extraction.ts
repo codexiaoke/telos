@@ -18,7 +18,7 @@ const PREDICATE_PATTERN = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/
 const ENTITY_REF_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/
 const SECRET_PATTERN = /(?:api[ _-]?key|password|passwd|secret|access[ _-]?token|refresh[ _-]?token|private[ _-]?key|密码|口令|密钥|令牌|sk-[a-z0-9_-]{8,})/iu
 const ENTITY_KINDS: readonly EntityKind[] = [
-  'person', 'workspace', 'project', 'topic', 'goal', 'commitment', 'decision',
+  'person', 'place', 'organization', 'workspace', 'project', 'topic', 'goal', 'commitment', 'decision',
   'constraint', 'preference', 'artifact',
 ]
 

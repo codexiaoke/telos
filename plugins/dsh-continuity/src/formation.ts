@@ -21,6 +21,11 @@ const MAX_EVENTS = 6
 const MAX_ENTITIES = 12
 const MAX_ALIASES = 6
 const MAX_EVIDENCE_LENGTH = 500
+const ENTITY_REF_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/u
+const ENTITY_KINDS = new Set([
+  'person', 'place', 'organization', 'workspace', 'project', 'topic', 'goal', 'commitment', 'decision',
+  'constraint', 'preference', 'artifact',
+])
 const RESPONSE_KEYS = new Set(['schemaVersion', 'decision', 'reason', 'entities', 'events'])
 const ENTITY_KEYS = new Set(['ref', 'kind', 'canonicalName', 'aliases', 'evidence'])
 const EVENT_KEYS = new Set([
@@ -113,7 +118,7 @@ export const MEMORY_FORMATION_SYSTEM_PROMPT = [
   'Prefer a compact connected event graph. Create each explicitly named person, organization, project, goal, commitment, topic or artifact that participates in a durable event, but do not split one situation into redundant paraphrases.',
   'Return exactly one JSON object and no Markdown or commentary.',
   'The required shape is:',
-  '{"schemaVersion":2,"decision":"remember|ignore","reason":"short reason","entities":[{"ref":"local_ref","kind":"person|workspace|project|topic|goal|commitment|decision|constraint|preference|artifact","canonicalName":"exactly observed name","aliases":[],"evidence":"exact human substring"}],"events":[{"kind":"semantic|episodic|procedural|prospective|constraint","statement":"...","predicate":"lowercase.dotted_name","subjectEntityRef":"owner|local_ref","objectEntityRef":"owner|local_ref|null","objectValue":"literal|null","confidence":0.0,"importance":0.0,"sensitivity":"personal","evidence":"exact human substring","durability":"cross-session","validFrom":null,"validTo":null}]}',
+  '{"schemaVersion":2,"decision":"remember|ignore","reason":"short reason","entities":[{"ref":"local_ref","kind":"person|place|organization|workspace|project|topic|goal|commitment|decision|constraint|preference|artifact","canonicalName":"exactly observed name","aliases":[],"evidence":"exact human substring"}],"events":[{"kind":"semantic|episodic|procedural|prospective|constraint","statement":"...","predicate":"lowercase.dotted_name","subjectEntityRef":"owner|local_ref","objectEntityRef":"owner|local_ref|null","objectValue":"literal|null","confidence":0.0,"importance":0.0,"sensitivity":"personal","evidence":"exact human substring","durability":"cross-session","validFrom":null,"validTo":null}]}',
   `Return at most ${String(MAX_ENTITIES)} entities and ${String(MAX_EVENTS)} events. When nothing qualifies, decision must be ignore and both arrays must be empty.`,
 ].join('\n')
 
@@ -163,6 +168,110 @@ function unwrapJson(textValue: string): string {
   return fenced?.[1]?.trim() ?? trimmed
 }
 
+function comparableEvidence(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase().replace(/[\p{P}\p{Z}\s]/gu, '')
+}
+
+interface CalendarDate {
+  year: number
+  month: number
+  day: number
+}
+
+export interface RelativeTimeBounds {
+  validFrom: string
+  validTo: string
+}
+
+function zonedParts(instant: Date, timeZone: string): CalendarDate & { hour: number; minute: number; second: number } {
+  const values = Object.fromEntries(new Intl.DateTimeFormat('en-CA-u-hc-h23', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instant).filter(part => part.type !== 'literal').map(part => [part.type, Number(part.value)]))
+  return {
+    year: values.year!,
+    month: values.month!,
+    day: values.day!,
+    hour: values.hour!,
+    minute: values.minute!,
+    second: values.second!,
+  }
+}
+
+function calendarFromEpoch(value: number): CalendarDate {
+  const date = new Date(value)
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() }
+}
+
+function shiftCalendar(date: CalendarDate, days: number): CalendarDate {
+  return calendarFromEpoch(Date.UTC(date.year, date.month - 1, date.day + days))
+}
+
+function localInstant(date: CalendarDate, timeZone: string, hour = 0): number {
+  const desiredWallTime = Date.UTC(date.year, date.month - 1, date.day, hour)
+  let candidate = desiredWallTime
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const observed = zonedParts(new Date(candidate), timeZone)
+    const observedWallTime = Date.UTC(
+      observed.year,
+      observed.month - 1,
+      observed.day,
+      observed.hour,
+      observed.minute,
+      observed.second,
+    )
+    candidate += desiredWallTime - observedWallTime
+  }
+  return candidate
+}
+
+function bounds(start: CalendarDate, endExclusive: CalendarDate, timeZone: string, startHour = 0): RelativeTimeBounds {
+  return {
+    validFrom: new Date(localInstant(start, timeZone, startHour)).toISOString(),
+    validTo: new Date(localInstant(endExclusive, timeZone) - 1).toISOString(),
+  }
+}
+
+/** Resolve common relative-time phrases after the model has selected an event. */
+export function inferRelativeTimeBounds(
+  value: string,
+  referenceTime: string,
+  timeZone: string,
+): RelativeTimeBounds | undefined {
+  const normalized = value.normalize('NFKC').toLocaleLowerCase()
+  const reference = new Date(referenceTime)
+  if (!Number.isFinite(reference.getTime())) throw new TypeError('referenceTime must be ISO-8601')
+  const local = zonedParts(reference, timeZone)
+  const today = { year: local.year, month: local.month, day: local.day }
+  if (/今晚|tonight/u.test(normalized)) return bounds(today, shiftCalendar(today, 1), timeZone, 18)
+  if (/下周|next\s+week/u.test(normalized)) {
+    const weekday = new Date(Date.UTC(today.year, today.month - 1, today.day)).getUTCDay()
+    const start = shiftCalendar(today, weekday === 0 ? 1 : 8 - weekday)
+    return bounds(start, shiftCalendar(start, 7), timeZone)
+  }
+  if (/下个月|next\s+month/u.test(normalized)) {
+    const start = calendarFromEpoch(Date.UTC(today.year, today.month, 1))
+    const end = calendarFromEpoch(Date.UTC(today.year, today.month + 1, 1))
+    return bounds(start, end, timeZone)
+  }
+  if (/明天|tomorrow/u.test(normalized)) {
+    const start = shiftCalendar(today, 1)
+    return bounds(start, shiftCalendar(start, 1), timeZone)
+  }
+  if (/昨天|yesterday/u.test(normalized)) {
+    const start = shiftCalendar(today, -1)
+    return bounds(start, today, timeZone)
+  }
+  if (/今天|今日|today/u.test(normalized)) return bounds(today, shiftCalendar(today, 1), timeZone)
+  return undefined
+}
+
 function frameMessages(input: MemoryFormationInput): string {
   return [
     'Evaluate this turn for evidence-grounded personal entities and memory events.',
@@ -197,7 +306,8 @@ function finishError(finish: FinishReason): Error | undefined {
 /** Parse and evidence-ground one model response before it reaches Personal Core. */
 export function parseMemoryFormationOutput(
   output: string,
-  input: Pick<MemoryFormationInput, 'messages' | 'scope'>,
+  input: Pick<MemoryFormationInput, 'messages' | 'scope'>
+    & Partial<Pick<MemoryFormationInput, 'referenceTime' | 'timeZone'>>,
 ): Pick<MemoryFormationResult, 'decision' | 'reason' | 'entities' | 'events'> {
   let decoded: unknown
   try {
@@ -226,75 +336,129 @@ export function parseMemoryFormationOutput(
   const normalizedMessages = input.messages.map(message => message.text.normalize('NFKC'))
   const exactHumanExcerpt = (value: unknown, field: string): string => {
     const excerpt = text(value, field, MAX_EVIDENCE_LENGTH)
-    if (!normalizedMessages.some(message => message.includes(excerpt))) {
-      throw new TypeError(`${field} is not an exact human-message substring`)
+    const exact = normalizedMessages.find(message => message.includes(excerpt))
+    if (exact !== undefined) {
+      if (containsCredentialLikeContent(excerpt)) throw new TypeError(`${field} contains credential-like content`)
+      return excerpt
     }
-    if (containsCredentialLikeContent(excerpt)) throw new TypeError(`${field} contains credential-like content`)
-    return excerpt
+    const comparable = comparableEvidence(excerpt)
+    const punctuationOnlyMatch = comparable.length >= 4
+      ? normalizedMessages.find(message => message.length <= MAX_EVIDENCE_LENGTH
+        && comparableEvidence(message).includes(comparable))
+      : undefined
+    if (punctuationOnlyMatch === undefined) {
+      throw new TypeError(`${field} is not grounded in a human message`)
+    }
+    if (containsCredentialLikeContent(punctuationOnlyMatch)) throw new TypeError(`${field} contains credential-like content`)
+    return punctuationOnlyMatch
   }
   const entityEvidence: string[] = []
-  const rawEntities = envelope.entities.map((value, index) => {
+  const rawEntities: GraphExtractionEntityProposal[] = []
+  const retainedRefs = new Set<string>()
+  for (const [index, value] of envelope.entities.entries()) {
     const entity = record(value, `entities[${String(index)}]`)
     assertKnownKeys(entity, ENTITY_KEYS, `entities[${String(index)}]`)
     const canonicalName = text(entity.canonicalName, `entities[${String(index)}].canonicalName`, 120)
-    const excerpt = exactHumanExcerpt(entity.evidence, `entities[${String(index)}].evidence`)
     if (!Array.isArray(entity.aliases) || entity.aliases.length > MAX_ALIASES) {
       throw new TypeError(`entities[${String(index)}].aliases must contain at most ${String(MAX_ALIASES)} items`)
     }
-    const aliases = entity.aliases.map((alias, aliasIndex) => {
+    const aliases = entity.aliases.flatMap((alias, aliasIndex) => {
       const result = text(alias, `entities[${String(index)}].aliases[${String(aliasIndex)}]`, 120)
-      if (!normalizedMessages.some(message => message.includes(result))) {
-        throw new TypeError(`entities[${String(index)}].aliases[${String(aliasIndex)}] is not an exact human-message substring`)
-      }
-      return result
+      return normalizedMessages.some(message => message.includes(result)) ? [result] : []
     })
     const observedNames = [canonicalName, ...aliases]
       .filter(name => normalizedMessages.some(message => message.includes(name)))
-    if (observedNames.length === 0) {
-      throw new TypeError(`entities[${String(index)}] has no canonicalName or alias in a human message`)
+    if (observedNames.length === 0) continue
+    const proposedEvidence = text(entity.evidence, `entities[${String(index)}].evidence`, MAX_EVIDENCE_LENGTH)
+    let excerpt: string
+    try {
+      excerpt = exactHumanExcerpt(proposedEvidence, `entities[${String(index)}].evidence`)
+    } catch {
+      excerpt = observedNames[0]!
     }
-    entityEvidence.push(observedNames.some(name => excerpt.includes(name)) ? excerpt : observedNames[0]!)
-    return {
-      ref: entity.ref,
-      kind: entity.kind,
+    if (typeof entity.ref !== 'string' || typeof entity.kind !== 'string') continue
+    const ref = entity.ref.trim().toLocaleLowerCase()
+    if (!ENTITY_REF_PATTERN.test(ref) || ref === 'owner' || !ENTITY_KINDS.has(entity.kind)) continue
+    const proposal: GraphExtractionEntityProposal = {
+      ref,
+      kind: entity.kind as GraphExtractionEntityProposal['kind'],
       canonicalName,
       aliases,
     }
-  })
+    if (retainedRefs.has(proposal.ref)) continue
+    retainedRefs.add(proposal.ref)
+    rawEntities.push(proposal)
+    entityEvidence.push(observedNames.some(name => excerpt.includes(name)) ? excerpt : observedNames[0]!)
+  }
   const eventEvidence: string[] = []
-  const rawEvents = envelope.events.map((value, index) => {
+  const rawEvents: GraphExtractionEventProposal[] = []
+  const availableRefs = new Set(['owner', ...rawEntities.map(entity => entity.ref)])
+  for (const [index, value] of envelope.events.entries()) {
     const event = record(value, `events[${String(index)}]`)
     assertKnownKeys(event, EVENT_KEYS, `events[${String(index)}]`)
     if (event.durability !== 'cross-session') {
       throw new TypeError(`events[${String(index)}].durability must be cross-session`)
     }
     const excerpt = exactHumanExcerpt(event.evidence, `events[${String(index)}].evidence`)
-    eventEvidence.push(excerpt)
-    return {
+    const statement = text(event.statement, `events[${String(index)}].statement`, 500)
+    const subjectEntityRef = text(event.subjectEntityRef, `events[${String(index)}].subjectEntityRef`, 64)
+    if (!availableRefs.has(subjectEntityRef)) continue
+    const proposedObjectEntityRef = optionalText(event.objectEntityRef, `events[${String(index)}].objectEntityRef`, 64)
+    const objectEntityRef = proposedObjectEntityRef !== undefined && availableRefs.has(proposedObjectEntityRef)
+      ? proposedObjectEntityRef
+      : undefined
+    const objectValue = optionalText(event.objectValue, `events[${String(index)}].objectValue`, 240)
+    const inferredBounds = input.referenceTime === undefined || input.timeZone === undefined
+      ? undefined
+      : inferRelativeTimeBounds(`${excerpt}\n${statement}`, input.referenceTime, input.timeZone)
+    const proposal = {
       kind: event.kind,
-      statement: event.statement,
+      statement,
       predicate: event.predicate,
-      subjectEntityRef: event.subjectEntityRef,
-      objectEntityRef: optionalText(event.objectEntityRef, `events[${String(index)}].objectEntityRef`, 64),
-      objectValue: optionalText(event.objectValue, `events[${String(index)}].objectValue`, 240),
+      subjectEntityRef,
+      objectEntityRef,
+      objectValue: objectEntityRef === undefined ? (objectValue ?? statement) : undefined,
       confidence: unit(event.confidence, `events[${String(index)}].confidence`),
       importance: unit(event.importance, `events[${String(index)}].importance`),
       sensitivity: event.sensitivity,
-      validFrom: optionalIso(event.validFrom, `events[${String(index)}].validFrom`),
-      validTo: optionalIso(event.validTo, `events[${String(index)}].validTo`),
+      validFrom: optionalIso(event.validFrom, `events[${String(index)}].validFrom`) ?? inferredBounds?.validFrom,
+      validTo: optionalIso(event.validTo, `events[${String(index)}].validTo`) ?? inferredBounds?.validTo,
     }
-  })
+    try {
+      const eventRefs = new Set([subjectEntityRef, objectEntityRef].filter((ref): ref is string => ref !== undefined && ref !== 'owner'))
+      const validatedEvent = validateGraphExtractionEnvelope({
+        schemaVersion: 2,
+        sourceEpisodeId: 'model-formation-event-validation',
+        scope: input.scope,
+        entities: rawEntities.filter(entity => eventRefs.has(entity.ref)),
+        events: [proposal],
+      }).events[0]
+      if (validatedEvent === undefined) continue
+      rawEvents.push(validatedEvent)
+      eventEvidence.push(excerpt)
+    } catch {
+      // Drop only the malformed relation; never promote its unsupported structure.
+    }
+  }
+  const usedEntityRefs = new Set(rawEvents.flatMap(event => [event.subjectEntityRef, event.objectEntityRef]
+    .filter((ref): ref is string => ref !== undefined && ref !== 'owner')))
+  const retainedEntityIndexes = rawEntities.map((entity, index) => ({ entity, index }))
+    .filter(({ entity }) => usedEntityRefs.has(entity.ref))
+  const graphEntities = retainedEntityIndexes.map(({ entity }) => entity)
+  const graphEntityEvidence = retainedEntityIndexes.map(({ index }) => entityEvidence[index]!)
   const validated = validateGraphExtractionEnvelope({
     schemaVersion: 2,
     sourceEpisodeId: 'model-formation-validation',
     scope: input.scope,
-    entities: rawEntities,
+    entities: graphEntities,
     events: rawEvents,
   })
   return {
-    decision: envelope.decision,
+    decision: rawEvents.length === 0 ? 'ignore' : envelope.decision,
     reason,
-    entities: validated.entities.map((entity, index) => ({ ...entity, evidence: entityEvidence[index]! })),
+    entities: rawEvents.length === 0
+      ? []
+      : validated.entities.map((entity, index) => ({ ...entity, evidence: graphEntityEvidence[index]! })),
     events: validated.events.map((event, index) => ({ ...event, evidence: eventEvidence[index]! })),
   }
 }

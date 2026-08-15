@@ -238,12 +238,117 @@ describe('main-model memory formation', () => {
     })])
   })
 
+  it('grounds punctuation-only evidence drift and fills a missing next-week range', () => {
+    const output = JSON.parse(VISIT_OUTPUT) as {
+      entities: Array<Record<string, unknown>>
+      events: Array<Record<string, unknown>>
+    }
+    output.entities[0] = {
+      ...output.entities[0],
+      evidence: '爸爸下周来我家',
+    }
+    output.events[0] = {
+      ...output.events[0],
+      statement: '爸爸下周来我家',
+      evidence: '爸爸 下周来我家。',
+      validFrom: null,
+      validTo: null,
+    }
+
+    const result = parseMemoryFormationOutput(JSON.stringify(output), {
+      messages: [{ seq: 2, text: '爸爸下周来我家' }],
+      scope: { type: 'workspace', id: 'workspace-a' },
+      referenceTime: '2026-08-15T04:00:00.000Z',
+      timeZone: 'Asia/Shanghai',
+    })
+
+    expect(result.events).toEqual([expect.objectContaining({
+      evidence: '爸爸下周来我家',
+      validFrom: '2026-08-16T16:00:00.000Z',
+      validTo: '2026-08-23T15:59:59.999Z',
+    })])
+  })
+
+  it('repairs a selected event with no object into a grounded literal relation', () => {
+    const output = JSON.parse(POSITIVE_OUTPUT) as { events: Array<Record<string, unknown>> }
+    output.events[0] = {
+      ...output.events[0],
+      objectValue: null,
+      objectEntityRef: null,
+    }
+
+    const result = parseMemoryFormationOutput(JSON.stringify(output), {
+      messages: [{ seq: 2, text: '我长期偏好简洁且有证据的回答。' }],
+      scope: { type: 'workspace', id: 'workspace-a' },
+    })
+
+    expect(result.events[0]).toMatchObject({ objectValue: '用户长期偏好简洁且有证据的回答' })
+    expect(result.events[0]).not.toHaveProperty('objectEntityRef')
+  })
+
+  it('drops an ungrounded extra entity without discarding valid events', () => {
+    const output = JSON.parse(POSITIVE_OUTPUT) as {
+      entities: Array<Record<string, unknown>>
+    }
+    output.entities.push({
+      ref: 'hallucinated_goal',
+      kind: 'goal',
+      canonicalName: '长期目标',
+      aliases: [],
+      evidence: '我长期偏好简洁且有证据的回答',
+    })
+
+    const result = parseMemoryFormationOutput(JSON.stringify(output), {
+      messages: [{ seq: 2, text: '我长期偏好简洁且有证据的回答。' }],
+      scope: { type: 'workspace', id: 'workspace-a' },
+    })
+
+    expect(result.decision).toBe('remember')
+    expect(result.entities).toEqual([])
+    expect(result.events).toHaveLength(1)
+  })
+
+  it('forms place and organization nodes in the personal event graph', () => {
+    const prompt = '下周去医院复查，之后参加辩论队训练'
+    const result = parseMemoryFormationOutput(JSON.stringify({
+      schemaVersion: 2,
+      decision: 'remember',
+      reason: '两个跨会话安排',
+      entities: [
+        { ref: 'hospital', kind: 'place', canonicalName: '医院', aliases: [], evidence: prompt },
+        { ref: 'debate_team', kind: 'organization', canonicalName: '辩论队', aliases: [], evidence: prompt },
+      ],
+      events: [
+        {
+          kind: 'prospective', statement: '下周去医院复查', predicate: 'owner.visits',
+          subjectEntityRef: 'owner', objectEntityRef: 'hospital', objectValue: null,
+          confidence: 0.9, importance: 0.8, sensitivity: 'personal', evidence: prompt,
+          durability: 'cross-session', validFrom: null, validTo: null,
+        },
+        {
+          kind: 'prospective', statement: '之后参加辩论队训练', predicate: 'owner.attends_training_with',
+          subjectEntityRef: 'owner', objectEntityRef: 'debate_team', objectValue: null,
+          confidence: 0.85, importance: 0.7, sensitivity: 'personal', evidence: prompt,
+          durability: 'cross-session', validFrom: null, validTo: null,
+        },
+      ],
+    }), {
+      messages: [{ seq: 2, text: prompt }],
+      scope: { type: 'workspace', id: 'workspace-a' },
+    })
+
+    expect(result.entities.map(entity => [entity.kind, entity.canonicalName])).toEqual([
+      ['place', '医院'],
+      ['organization', '辩论队'],
+    ])
+  })
+
   it('rejects hallucinated evidence, non-durable shapes and credential-like content', () => {
     const input = {
       messages: [{ seq: 1, text: '我长期喜欢喝咖啡' }],
       scope: { type: 'workspace' as const, id: 'workspace-a' },
     }
-    expect(() => parseMemoryFormationOutput(POSITIVE_OUTPUT, input)).toThrow(/exact human-message substring/)
+    expect(() => parseMemoryFormationOutput(POSITIVE_OUTPUT, input)).toThrow(/grounded in a human message/)
     expect(() => parseMemoryFormationOutput(JSON.stringify({
       schemaVersion: 2, decision: 'remember', reason: 'test', entities: [],
       events: [{

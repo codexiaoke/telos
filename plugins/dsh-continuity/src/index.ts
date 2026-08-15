@@ -17,6 +17,7 @@ import type {
 } from '@telos/personal-core'
 import { containsCredentialLikeContent } from '@telos/personal-core'
 import { CONTINUITY_RPC_CHANNEL, type CorrectCommand } from './contracts.js'
+import { explicitMemoryVetoRequested, explicitReviewRequested } from './capture-policy.js'
 import { formMemoriesWithMainModel } from './formation.js'
 import { processInferenceJobs } from './formation-worker.js'
 import { ContinuityGateway } from './gateway.js'
@@ -193,11 +194,6 @@ function rememberStatusFromArguments(value: string): 'candidate' | 'confirmed' {
   } catch {
     return 'confirmed'
   }
-}
-
-function explicitReviewRequested(messages: readonly { text: string }[]): boolean {
-  const directText = messages.map(message => message.text).join('\n')
-  return /待确认|先(?:别|不要)确认|暂(?:不|时不)?确认|不确定|可能记错|暂定/u.test(directText)
 }
 
 function recallSummary(decision: RecallDecision): string {
@@ -533,9 +529,26 @@ function installSessionObserver(
           || trace.directMessages.length === 0
           || trace.continuityMutationCompleted
           || containsCredentialLikeContent(directText)) return
+        const workspace = workspaceFor(ctx, String(session.id))
+        const scope = workspace === undefined
+          ? { type: 'session' as const, id: String(session.id) }
+          : { type: 'workspace' as const, id: String(workspace.id) }
+        if (explicitMemoryVetoRequested(trace.directMessages)) {
+          gateway.store.recordActionReceipt({
+            action: 'memory.formation',
+            authorization: 'denied',
+            runtimeId: 'dsh',
+            provider: 'telos-durable-memory-policy',
+            result: 'denied',
+            scope,
+            sourceEpisodeIds: [],
+            occurredAt: new Date(trace.directMessages.at(-1)!.time).toISOString(),
+            idempotencyKey: `receipt:infer:${String(session.id)}:${String(trace.turn)}:veto`,
+          })
+          return
+        }
         const route = session.requestHeader()?.config
         if (route === undefined) return
-        const workspace = workspaceFor(ctx, String(session.id))
         gateway.store.enqueue('infer-turn-candidates', {
           sessionId: String(session.id),
           workspaceId: workspace === undefined ? undefined : String(workspace.id),
@@ -644,7 +657,7 @@ export function apply(ctx: Context, input: Config): void {
     promptCtx.systemPrompt.section({
       name: 'tool:telos-continuity',
       order: 112,
-      text: 'Telos personal continuity is distinct from DSH session history. Use continuity_remember only as explicit human authorization to queue main-model entity/event formation; set confirmation=candidate for provisional, uncertain, or pending-review memory. '
+      text: 'Telos personal continuity is distinct from DSH session history. Use continuity_remember only as explicit human authorization to queue main-model entity/event formation; never call it when the human says not to save something as long-term memory or says mentions only. Set confirmation=candidate for provisional, uncertain, or pending-review memory. '
         + 'continuity_correct instead of overwriting history, continuity_forget for explicit revocation, and continuity_search or '
         + 'continuity_explain for evidence. Never store credentials, secrets, inferred sensitive attributes, or an entire conversation.',
     })

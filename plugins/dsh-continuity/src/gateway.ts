@@ -24,7 +24,7 @@ const OWNER_ENTITY_ID = 'telos:owner'
 const CLAIM_KINDS: readonly ClaimKind[] = ['semantic', 'episodic', 'procedural', 'prospective', 'constraint']
 const CLAIM_STATUSES: readonly ClaimStatus[] = ['candidate', 'confirmed', 'superseded', 'contradicted', 'revoked', 'expired']
 const SENSITIVITIES: readonly Sensitivity[] = ['personal', 'sensitive', 'secret']
-const ENTITY_KINDS: readonly EntityKind[] = ['person', 'workspace', 'project', 'topic', 'goal', 'commitment', 'decision', 'constraint', 'preference', 'artifact']
+const ENTITY_KINDS: readonly EntityKind[] = ['person', 'place', 'organization', 'workspace', 'project', 'topic', 'goal', 'commitment', 'decision', 'constraint', 'preference', 'artifact']
 
 type RecordValue = Record<string, unknown>
 

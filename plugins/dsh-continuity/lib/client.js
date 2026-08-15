@@ -146,7 +146,7 @@ var TABS = [
 function filteredClaims(state) {
   const query = state.query.trim().toLocaleLowerCase();
   return state.claims.filter((claim) => {
-    const statusMatch = state.statusFilter === "all" || state.statusFilter === "active" && ["confirmed", "candidate", "contradicted"].includes(claim.status) || claim.status === state.statusFilter;
+    const statusMatch = state.statusFilter === "all" || state.statusFilter === "active" && claim.status === "confirmed" || claim.status === state.statusFilter;
     const queryMatch = query.length === 0 || `${claim.statement} ${claim.predicate} ${claim.objectValue ?? ""}`.toLocaleLowerCase().includes(query);
     return statusMatch && queryMatch;
   });
@@ -353,7 +353,7 @@ function MemoriesView({ controller, state }) {
 }
 function GraphView({ state }) {
   const entities = new Map(state.entities.map((entity) => [entity.id, entity.canonicalName]));
-  const relations = state.relations.filter((relation) => state.query.trim() === "" || `${relation.predicate} ${relation.objectValue ?? ""} ${entities.get(relation.fromEntityId) ?? ""}`.toLocaleLowerCase().includes(state.query.trim().toLocaleLowerCase()));
+  const relations = state.relations.filter((relation) => relation.status === "confirmed" && (state.query.trim() === "" || `${relation.predicate} ${relation.objectValue ?? ""} ${entities.get(relation.fromEntityId) ?? ""}`.toLocaleLowerCase().includes(state.query.trim().toLocaleLowerCase())));
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosContinuityScrollPane telosContinuityContent", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { className: "telosContinuityContentTitle", children: "\u5B9E\u4F53\u5173\u7CFB\u6295\u5F71" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "telosContinuityContentSubtitle", children: "\u6BCF\u6761\u8FB9\u90FD\u80FD\u56DE\u5230 MemoryClaim\uFF1B\u56FE\u53EF\u91CD\u5EFA\uFF0C\u4E0D\u662F\u552F\u4E00\u4E8B\u5B9E\u6E90\u3002" }),

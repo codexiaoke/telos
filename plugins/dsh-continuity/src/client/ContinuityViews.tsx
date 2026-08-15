@@ -132,7 +132,7 @@ function filteredClaims(state: ContinuityClientSnapshot): MemoryClaimView[] {
   const query = state.query.trim().toLocaleLowerCase()
   return state.claims.filter((claim) => {
     const statusMatch = state.statusFilter === 'all'
-      || (state.statusFilter === 'active' && ['confirmed', 'candidate', 'contradicted'].includes(claim.status))
+      || (state.statusFilter === 'active' && claim.status === 'confirmed')
       || claim.status === state.statusFilter
     const queryMatch = query.length === 0
       || `${claim.statement} ${claim.predicate} ${claim.objectValue ?? ''}`.toLocaleLowerCase().includes(query)
@@ -316,9 +316,10 @@ function MemoriesView({ controller, state }: { controller: ContinuityClientContr
 
 function GraphView({ state }: { state: ContinuityClientSnapshot }) {
   const entities = new Map(state.entities.map(entity => [entity.id, entity.canonicalName]))
-  const relations = state.relations.filter(relation => state.query.trim() === ''
-    || `${relation.predicate} ${relation.objectValue ?? ''} ${entities.get(relation.fromEntityId) ?? ''}`
-      .toLocaleLowerCase().includes(state.query.trim().toLocaleLowerCase()))
+  const relations = state.relations.filter(relation => relation.status === 'confirmed'
+    && (state.query.trim() === ''
+      || `${relation.predicate} ${relation.objectValue ?? ''} ${entities.get(relation.fromEntityId) ?? ''}`
+        .toLocaleLowerCase().includes(state.query.trim().toLocaleLowerCase())))
   return (
     <div className="telosContinuityScrollPane telosContinuityContent">
       <h2 className="telosContinuityContentTitle">实体关系投影</h2>

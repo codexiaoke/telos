@@ -25,6 +25,12 @@ function sha256(value) {
   return createHash('sha256').update(value).digest('hex')
 }
 
+function canonicalizeSidebarCssModule(source) {
+  const match = /const css = "\.([A-Za-z0-9_-]+)_root\{/.exec(source)
+  assert(match !== null && match[1] !== undefined, 'upstream sidebar CSS module prefix is missing')
+  return source.replaceAll(match[1], 'telosSidebar')
+}
+
 function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
@@ -97,7 +103,7 @@ check('Overlay provenance points to the checked-out DSH commit', () => {
 })
 
 check('Derived sidebar source hash matches provenance', () => {
-  const source = readFileSync(resolve(dshRoot, sidebarProvenance.source))
+  const source = canonicalizeSidebarCssModule(readFileSync(resolve(dshRoot, sidebarProvenance.source), 'utf8'))
   const actual = sha256(source)
   assert(actual === sidebarProvenance.sourceSha256, `${actual} != ${sidebarProvenance.sourceSha256}`)
 })

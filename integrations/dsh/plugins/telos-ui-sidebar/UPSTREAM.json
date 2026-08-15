@@ -3,10 +3,11 @@
   "upstream": "https://github.com/deepseek-ai/deepseek-harness",
   "commit": "47f943859bef60e4160492346772ded9b24f765a",
   "source": "packages/client/ui-sidebar/lib/client.js",
-  "sourceSha256": "7e5487b06251b6b82d2c6da3c2fc838a84eb7ed64daf2a372526275f27ce5ea6",
-  "generatedSha256": "7d00c85c44aca16708312a6b6654aafbca890127dad8d7091af866ac9a41c31e",
+  "sourceSha256": "fcfeefb886b58578dd19614438f57e6a5b16c5d806e3925748a6440c0ab0dad5",
+  "generatedSha256": "acb8b957a9c09be786a2dd6e78ba1985bd394d1d05d84e75d4ed00c42e3a5446",
   "transformations": [
     "replace module id",
+    "canonicalize path-dependent CSS module prefix",
     "adopt compact WorkBuddy-style sidebar spacing",
     "add host-controlled expanded and collapsed sidebar top insets",
     "turn the expanded logo row into a productive draggable titlebar",

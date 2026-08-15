@@ -19,10 +19,19 @@ function replaceExactlyOnce(source, anchor, replacement, label) {
   return source.replace(anchor, replacement)
 }
 
+function canonicalizeSidebarCssModule(source) {
+  const match = /const css = "\.([A-Za-z0-9_-]+)_root\{/.exec(source)
+  if (match === null || match[1] === undefined) {
+    throw new Error('Telos DSH overlay could not locate the upstream sidebar CSS module prefix')
+  }
+  return source.replaceAll(match[1], 'telosSidebar')
+}
+
 const upstreamId = '@deepseek-ai/dsh-client-ui-sidebar'
 const telosId = '@telos/dsh-client-ui-sidebar'
 const upstream = readFileSync(sourceClient, 'utf8')
-let generated = upstream.replaceAll(upstreamId, telosId)
+const canonicalUpstream = canonicalizeSidebarCssModule(upstream)
+let generated = canonicalUpstream.replaceAll(upstreamId, telosId)
 
 generated = replaceExactlyOnce(
   generated,
@@ -68,8 +77,8 @@ generated = replaceExactlyOnce(
 )
 generated = replaceExactlyOnce(
   generated,
-  '.cC57AW_iconButton:hover{',
-  '.cC57AW_logoRow .cC57AW_toggle{position:absolute;z-index:7;top:12px;right:80px}.cC57AW_iconButton:hover{',
+  '.telosSidebar_iconButton:hover{',
+  '.telosSidebar_logoRow .telosSidebar_toggle{position:absolute;z-index:7;top:12px;right:80px}.telosSidebar_iconButton:hover{',
   'sidebar titlebar toggle position',
 )
 generated = replaceExactlyOnce(
@@ -144,10 +153,11 @@ const provenance = {
   upstream: 'https://github.com/deepseek-ai/deepseek-harness',
   commit,
   source: 'packages/client/ui-sidebar/lib/client.js',
-  sourceSha256: createHash('sha256').update(upstream).digest('hex'),
+  sourceSha256: createHash('sha256').update(canonicalUpstream).digest('hex'),
   generatedSha256: createHash('sha256').update(generated).digest('hex'),
   transformations: [
     'replace module id',
+    'canonicalize path-dependent CSS module prefix',
     'adopt compact WorkBuddy-style sidebar spacing',
     'add host-controlled expanded and collapsed sidebar top insets',
     'turn the expanded logo row into a productive draggable titlebar',

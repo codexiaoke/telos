@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { apply, inject } from '../src/client/index.js'
 import { MultimodalSettingsSection, routeValue } from '../src/client/MultimodalSettingsSection.js'
+import { MediaProgressDock } from '../src/client/MediaProgressDock.js'
 import type { ModelCatalogEntry } from '../src/contracts.js'
 
 describe('multimodal Client plugin', () => {
@@ -20,6 +21,8 @@ describe('multimodal Client plugin', () => {
     apply(ctx as never)
     expect(inject).toEqual(['slots', 'connection', 'conversation', 'modelDirectories', 'sessions'])
     expect(registrations).toEqual([expect.objectContaining({
+      name: 'conversation.input.dock', id: 'telos-multimodal-progress', order: 10, component: MediaProgressDock,
+    }), expect.objectContaining({
       name: 'settings.section', id: 'multimodal', order: 20, label: '多模态', component: MultimodalSettingsSection,
     })])
   })

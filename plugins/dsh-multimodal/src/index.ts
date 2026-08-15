@@ -5,6 +5,7 @@ import type {} from '@deepseek-ai/dsh-settings'
 import { TelosMultimodalAdapter } from './adapter.js'
 import { MULTIMODAL_RPC_CHANNEL, TELOS_MULTIMODAL_PROVIDER, type MultimodalRpcResult } from './contracts.js'
 import { MultimodalRouteUnavailableError, MultimodalSettingsService } from './service.js'
+import { MediaProgressRegistry } from './progress.js'
 import { MultimodalSettingsStore } from './store.js'
 
 export const name = 'telos-multimodal'
@@ -12,6 +13,7 @@ export const inject = ['connection', 'llm', 'settings']
 export { MULTIMODAL_RPC_CHANNEL } from './contracts.js'
 export type * from './contracts.js'
 export { TelosMultimodalAdapter } from './adapter.js'
+export { MediaProgressRegistry } from './progress.js'
 export { buildModelCatalog, buildSettingsView, MultimodalRouteUnavailableError, MultimodalSettingsService } from './service.js'
 export { defaultMultimodalSettings, MultimodalSettingsStore, parseMultimodalSettings } from './store.js'
 
@@ -37,8 +39,9 @@ export function apply(ctx: Context, config: Config): void {
     throw new TypeError('telos-multimodal storePath must be a non-empty string')
   }
   const store = new MultimodalSettingsStore(config.storePath)
-  const service = new MultimodalSettingsService(ctx, store)
-  ctx.llm.registerAdapter([TELOS_MULTIMODAL_PROVIDER], new TelosMultimodalAdapter(ctx, () => store.load()))
+  const progress = new MediaProgressRegistry()
+  const service = new MultimodalSettingsService(ctx, store, progress)
+  ctx.llm.registerAdapter([TELOS_MULTIMODAL_PROVIDER], new TelosMultimodalAdapter(ctx, () => store.load(), progress))
   ctx.connection.rpc.handle(
     MULTIMODAL_RPC_CHANNEL,
     (endpoint, payload) => result(() => service.handle(endpoint, payload)),

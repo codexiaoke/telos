@@ -2,6 +2,7 @@ import type { ClientContext, ISessions, SessionFace } from '@deepseek-ai/dsh-cli
 import type { IConversation, DraftAttachmentId } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ModelDirectoryResolver } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import type { MultimodalClientController } from './controller.js'
+import type { MediaProgressController } from './progress-controller.js'
 
 type InputSubmitMode = 'queue' | 'steer'
 
@@ -30,7 +31,11 @@ function notify(
 }
 
 /** Wrap the public DSH send seam without changing the pinned upstream package. */
-export function installImageRouting(ctx: ClientContext, controller: MultimodalClientController): () => void {
+export function installImageRouting(
+  ctx: ClientContext,
+  controller: MultimodalClientController,
+  progress: MediaProgressController,
+): () => void {
   const conversation = ctx.get('conversation') as ConversationSendFace | undefined
   const modelDirectories = ctx.get('modelDirectories') as ModelDirectoryResolver | undefined
   const sessions = ctx.get('sessions') as ISessions | undefined
@@ -40,23 +45,23 @@ export function installImageRouting(ctx: ClientContext, controller: MultimodalCl
 
   const original = conversation.sendSession
   const routed: ConversationSendFace['sendSession'] = async (session, text, imageIds, mode) => {
-    if (imageIds.length === 0) return original.call(conversation, session, text, imageIds, mode)
+    if (imageIds.length === 0) {
+      progress.clearTerminal(String(session.sessionId))
+      return original.call(conversation, session, text, imageIds, mode)
+    }
+    let operationId: string | undefined
     try {
       const directory = modelDirectories.directoryFor(session.sessionId)
       const current = (await directory.load()).current
-      const resolution = await controller.resolveImageRoute(current)
+      const resolution = await controller.resolveImageRoute(current, String(session.sessionId), imageIds.length)
       if (resolution.kind === 'bridge') {
+        operationId = resolution.operationId
+        progress.track(String(session.sessionId), resolution, imageIds.length)
         await directory.select(resolution.route as never)
-        notify(
-          conversation,
-          sessions,
-          session,
-          'info',
-          `已使用 ${resolution.perceptionName} 理解图片，仍由 ${resolution.routeName} 回答。`,
-        )
       }
       await original.call(conversation, session, text, imageIds, mode)
     } catch (error) {
+      if (operationId !== undefined) await progress.failBeforeRun(String(session.sessionId), operationId, error)
       notify(conversation, sessions, session, 'error', errorMessage(error))
       throw error
     }

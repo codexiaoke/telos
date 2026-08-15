@@ -1,6 +1,7 @@
 import {
   MULTIMODAL_RPC_CHANNEL,
   type ImageRouteResolution,
+  type ImageRouteRequest,
   type ModelSelectionRoute,
   type MultimodalSettings,
   type MultimodalSettingsView,
@@ -29,8 +30,9 @@ export class MultimodalClientController {
   async save(settings: MultimodalSettings): Promise<void> { await this.run('save', settings, '多模态模型配置已保存') }
   async reset(): Promise<void> { await this.run('reset', {}, '已恢复默认多模态配置') }
 
-  async resolveImageRoute(current: ModelSelectionRoute): Promise<ImageRouteResolution> {
-    const result = await this.rpc.call(MULTIMODAL_RPC_CHANNEL, 'resolve-image-route', current)
+  async resolveImageRoute(current: ModelSelectionRoute, sessionId: string, imageCount: number): Promise<ImageRouteResolution> {
+    const payload: ImageRouteRequest = { current, sessionId, imageCount }
+    const result = await this.rpc.call(MULTIMODAL_RPC_CHANNEL, 'resolve-image-route', payload)
     if (!result.ok) throw new Error(result.error.message)
     return result.value as ImageRouteResolution
   }

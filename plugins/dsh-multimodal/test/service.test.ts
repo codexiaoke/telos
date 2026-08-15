@@ -37,6 +37,10 @@ function serviceWith(settings = defaultMultimodalSettings()): MultimodalSettings
   return new MultimodalSettingsService({ llm } as never, store)
 }
 
+function routeRequest(current: { provider: string; model: string; reasoningEffort?: string }, imageCount = 1) {
+  return { current, sessionId: 'session-1', imageCount }
+}
+
 describe('MultimodalSettingsService', () => {
   it('keeps sound provider groups, excludes its logical provider, and reports catalog failures', async () => {
     const catalog = await buildModelCatalog({ llm } as never)
@@ -56,22 +60,33 @@ describe('MultimodalSettingsService', () => {
 
   it('keeps native image routes and bridges a text route through one logical provider model', async () => {
     const service = serviceWith({ schemaVersion: 2, enabled: true, defaultModel: { provider: 'vision', model: 'eyes' } })
-    await expect(service.resolveImageRoute({ provider: 'vision', model: 'eyes' })).resolves.toEqual({
+    await expect(service.resolveImageRoute(routeRequest({ provider: 'vision', model: 'eyes' }))).resolves.toEqual({
       kind: 'native', route: { provider: 'vision', model: 'eyes' },
     })
-    const bridge = await service.resolveImageRoute({ provider: 'deepseek', model: 'reasoner', reasoningEffort: 'high' })
+    const bridge = await service.resolveImageRoute(routeRequest({ provider: 'deepseek', model: 'reasoner', reasoningEffort: 'high' }))
     expect(bridge).toMatchObject({
       kind: 'bridge',
       route: { provider: 'telos-multimodal', reasoningEffort: 'high' },
       perceptionRoute: { provider: 'vision', model: 'eyes' },
+      operationId: expect.any(String),
     })
     if (bridge.kind === 'bridge') expect(decodeLogicalModel(bridge.route.model)).toEqual({ provider: 'deepseek', model: 'reasoner' })
+    if (bridge.kind === 'bridge') {
+      const next = await service.resolveImageRoute(routeRequest(bridge.route))
+      expect(next).toMatchObject({
+        kind: 'bridge', routeName: 'Reasoner', route: { provider: 'telos-multimodal' },
+      })
+      if (next.kind === 'bridge') {
+        expect(next.operationId).not.toBe(bridge.operationId)
+        expect(next.route.model).toBe(bridge.route.model)
+      }
+    }
   })
 
   it('fails before admission when a text model has no usable default', async () => {
-    await expect(serviceWith().resolveImageRoute({ provider: 'deepseek', model: 'reasoner' })).rejects.toThrow(/设置 → 多模态/u)
+    await expect(serviceWith().resolveImageRoute(routeRequest({ provider: 'deepseek', model: 'reasoner' }))).rejects.toThrow(/设置 → 多模态/u)
     await expect(serviceWith({ schemaVersion: 2, enabled: true, defaultModel: { provider: 'deepseek', model: 'reasoner' } })
-      .resolveImageRoute({ provider: 'deepseek', model: 'reasoner' })).rejects.toThrow(/没有声明图片/u)
+      .resolveImageRoute(routeRequest({ provider: 'deepseek', model: 'reasoner' }))).rejects.toThrow(/没有声明图片/u)
   })
 
   it('declares a selected custom pi-ai model as text plus image through the Settings API', async () => {

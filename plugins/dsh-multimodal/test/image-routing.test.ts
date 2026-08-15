@@ -19,8 +19,9 @@ function fixture(resolveImageRoute: ReturnType<typeof vi.fn>) {
     ['sessions', { scope: () => ({}) }],
   ])
   const ctx = { get: (name: string) => services.get(name) }
-  const dispose = installImageRouting(ctx as never, { resolveImageRoute } as never)
-  return { conversation, directory, dispose, notices, select, sendSession }
+  const progress = { track: vi.fn(), clearTerminal: vi.fn(), failBeforeRun: vi.fn().mockResolvedValue(undefined) }
+  const dispose = installImageRouting(ctx as never, { resolveImageRoute } as never, progress as never)
+  return { conversation, directory, dispose, notices, progress, select, sendSession }
 }
 
 describe('client image routing', () => {
@@ -31,13 +32,18 @@ describe('client image routing', () => {
       routeName: 'DeepSeek Reasoner',
       perceptionRoute: { provider: 'vision', model: 'eyes' },
       perceptionName: 'Qwen Vision',
+      operationId: 'op-1',
     })
     const state = fixture(resolveImageRoute)
     const session = { sessionId: 'session-1' }
     await state.conversation.sendSession(session, '看图', ['image-1'], 'queue')
     expect(state.select).toHaveBeenCalledWith({ provider: 'telos-multimodal', model: 'encoded', reasoningEffort: 'high' })
     expect(state.select.mock.invocationCallOrder[0]).toBeLessThan(state.sendSession.mock.invocationCallOrder[0] as number)
-    expect(state.notices).toContainEqual({ level: 'info', text: '已使用 Qwen Vision 理解图片，仍由 DeepSeek Reasoner 回答。' })
+    expect(resolveImageRoute).toHaveBeenCalledWith(
+      { provider: 'deepseek', model: 'reasoner', reasoningEffort: 'high' }, 'session-1', 1,
+    )
+    expect(state.progress.track).toHaveBeenCalledWith('session-1', expect.objectContaining({ operationId: 'op-1' }), 1)
+    expect(state.notices).toEqual([])
     state.dispose()
   })
 
@@ -46,6 +52,7 @@ describe('client image routing', () => {
     const state = fixture(resolveImageRoute)
     const session = { sessionId: 'session-1' }
     await state.conversation.sendSession(session, '纯文本', [], 'queue')
+    expect(state.progress.clearTerminal).toHaveBeenCalledWith('session-1')
     expect(resolveImageRoute).not.toHaveBeenCalled()
     await expect(state.conversation.sendSession(session, '看图', ['image-1'], 'queue')).rejects.toThrow(/请先配置/u)
     expect(state.sendSession).toHaveBeenCalledTimes(1)

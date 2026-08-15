@@ -77,23 +77,17 @@ jobs:
         include:
           - runner: macos-14
             artifact: macos-arm64
-            platform: macos
           - runner: macos-15-intel
             artifact: macos-x64
-            platform: macos
           - runner: windows-2025
             artifact: windows-x64
-            platform: windows
           - runner: ubuntu-24.04
             artifact: linux-x64
-            platform: linux
     runs-on: ${{ matrix.runner }}
     env:
-      CSC_LINK: ${{ matrix.platform == 'macos' && secrets.MAC_CSC_LINK || matrix.platform == 'windows' && secrets.WIN_CSC_LINK || '' }}
-      CSC_KEY_PASSWORD: ${{ matrix.platform == 'macos' && secrets.MAC_CSC_KEY_PASSWORD || matrix.platform == 'windows' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
-      APPLE_ID: ${{ matrix.platform == 'macos' && secrets.APPLE_ID || '' }}
-      APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'macos' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-      APPLE_TEAM_ID: ${{ matrix.platform == 'macos' && secrets.APPLE_TEAM_ID || '' }}
+      # Telos is distributed as a free open-source build. Do not discover or
+      # import paid Apple/Windows identities on GitHub-hosted runners.
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -105,18 +99,6 @@ jobs:
         run: corepack enable
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Require signing for tagged desktop releases
-        if: needs.metadata.outputs.publish == 'true' && (runner.os == 'macOS' || runner.os == 'Windows')
-        shell: bash
-        run: |
-          if [[ -z "$CSC_LINK" || -z "$CSC_KEY_PASSWORD" ]]; then
-            echo "Tagged macOS and Windows releases require signing secrets." >&2
-            exit 1
-          fi
-          if [[ "$RUNNER_OS" == "macOS" && ( -z "$APPLE_ID" || -z "$APPLE_APP_SPECIFIC_PASSWORD" || -z "$APPLE_TEAM_ID" ) ]]; then
-            echo "Tagged macOS releases require notarization secrets." >&2
-            exit 1
-          fi
       - name: Build complete DSH runtime
         run: pnpm dsh:build
       - name: Package desktop
@@ -156,6 +138,9 @@ jobs:
           path: downloaded-artifacts
       - name: Prepare cross-platform release artifacts
         run: pnpm release:prepare-artifacts -- downloaded-artifacts release-artifacts
+      - name: Generate release checksums
+        working-directory: release-artifacts
+        run: find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
       - name: Create draft GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

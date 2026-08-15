@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import type { AppUpdater, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater'
+import type { AppUpdater, UpdateInfo } from 'electron-updater'
 import { describe, expect, it, vi } from 'vitest'
 import type { ApplicationLogger } from '../logging/application-logger.js'
 import { UpdateService } from './update-service.js'
@@ -46,9 +46,10 @@ describe('UpdateService', () => {
     expect(updater.checkForUpdates).not.toHaveBeenCalled()
   })
 
-  it('requires explicit download and install actions', async () => {
+  it('detects updates and opens the public release page without downloading an installer', async () => {
     const updater = createUpdater()
-    const service = new UpdateService({ enabled: true, updater, logger: createLogger() })
+    const openReleasePage = vi.fn().mockResolvedValue(undefined)
+    const service = new UpdateService({ enabled: true, updater, logger: createLogger(), openReleasePage })
 
     expect(updater.autoDownload).toBe(false)
     expect(updater.autoInstallOnAppQuit).toBe(false)
@@ -60,27 +61,11 @@ describe('UpdateService', () => {
     updater.emit('update-available', updateInfo('0.2.0'))
     expect(service.getSnapshot()).toMatchObject({ status: 'available', version: '0.2.0' })
 
-    await service.downloadUpdate()
-    expect(updater.downloadUpdate).toHaveBeenCalledOnce()
-    expect(service.getSnapshot()).toMatchObject({ status: 'downloading', progressPercent: 0 })
-
-    updater.emit('download-progress', {
-      percent: 53.4,
-      total: 100,
-      delta: 10,
-      transferred: 53.4,
-      bytesPerSecond: 1_024,
-    })
-    expect(service.getSnapshot()).toMatchObject({ status: 'downloading', progressPercent: 53.4 })
-
-    updater.emit('update-downloaded', {
-      ...updateInfo('0.2.0'),
-      downloadedFile: '/tmp/telos-update.zip',
-    } satisfies UpdateDownloadedEvent)
-    expect(service.getSnapshot()).toMatchObject({ status: 'downloaded', version: '0.2.0' })
-
-    service.installUpdate()
-    expect(updater.quitAndInstall).toHaveBeenCalledWith(false, true)
+    await service.openReleasePage()
+    expect(openReleasePage).toHaveBeenCalledOnce()
+    expect(updater.downloadUpdate).not.toHaveBeenCalled()
+    expect(updater.quitAndInstall).not.toHaveBeenCalled()
+    expect(service.getSnapshot()).toMatchObject({ status: 'available', version: '0.2.0' })
   })
 
   it('redacts credentials from observable errors', () => {

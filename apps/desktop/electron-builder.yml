@@ -25,12 +25,11 @@ publish:
 
 mac:
   category: public.app-category.productivity
-  hardenedRuntime: true
+  # Free open-source distribution: the first launch is approved by the user in
+  # macOS Privacy & Security instead of relying on a paid Developer ID.
+  identity: null
+  hardenedRuntime: false
   gatekeeperAssess: false
-  binaries:
-    - Contents/Resources/dsh-node/bin/node
-  entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.plist
   target:
     - dmg
     - zip
@@ -39,6 +38,8 @@ dmg:
   sign: false
 
 win:
+  # With CSC identity discovery disabled in CI, this produces an unsigned NSIS
+  # community installer and does not require an Authenticode certificate.
   target:
     - nsis
 

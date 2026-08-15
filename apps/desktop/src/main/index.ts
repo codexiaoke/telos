@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -34,6 +34,7 @@ app.setName('Telos')
 app.setAppLogsPath()
 
 const logger = configureApplicationLogger(app.isPackaged)
+const RELEASE_PAGE_URL = 'https://github.com/codexiaoke/telos/releases/latest'
 logger.info('Telos main process starting', { version: app.getVersion(), packaged: app.isPackaged })
 autoUpdater.logger = logger
 const updateConfigurationAvailable = app.isPackaged && existsSync(join(process.resourcesPath, 'app-update.yml'))
@@ -44,6 +45,7 @@ const updateService = new UpdateService({
   enabled: updateConfigurationAvailable,
   updater: autoUpdater,
   logger,
+  openReleasePage: () => shell.openExternal(RELEASE_PAGE_URL),
 })
 
 let dshWeb: DshWebSupervisor | undefined
@@ -107,18 +109,6 @@ function requestQuit(): void {
   app.quit()
 }
 
-function installReadyUpdate(): void {
-  quitRequested = true
-  updateService.stop()
-  void stopDshRuntime().then(
-    () => updateService.installUpdate(),
-    (error: unknown) => {
-      logger.error('Failed to stop DSH before installing an update', error)
-      updateService.installUpdate()
-    },
-  )
-}
-
 async function startApplication(): Promise<void> {
   loadDevelopmentEnvironment()
   installApplicationIcon()
@@ -176,8 +166,7 @@ async function startApplication(): Promise<void> {
   tray = createApplicationTray({
     showMainWindow,
     checkForUpdates: () => updateService.checkForUpdates(),
-    downloadUpdate: () => updateService.downloadUpdate(),
-    installUpdate: installReadyUpdate,
+    openReleasePage: () => updateService.openReleasePage(),
     quit: requestQuit,
     getUpdateSnapshot: () => updateService.getSnapshot(),
     subscribeToUpdates: observer => updateService.subscribe(observer),

@@ -6,7 +6,7 @@ Status: Accepted for the first distributable Telos desktop baseline
 
 Telos is not only an Electron renderer. A usable desktop release also owns the
 application lifecycle, the system tray, a single running instance, diagnostics,
-signed installers, release metadata, updates, and the complete source-pinned DSH
+installers, release metadata, update discovery, and the complete source-pinned DSH
 runtime that the desktop starts as a child process.
 
 The DSH runtime cannot be placed inside Electron's `asar` archive. It contains
@@ -24,7 +24,7 @@ must not be optimized by silently removing runtime capabilities.
 ### Packaging stack
 
 Telos uses `electron-builder` with the existing `electron-vite` build. This keeps
-the current application architecture intact and supplies installers, signing,
+the current application architecture intact and supplies installers,
 GitHub Release publishing metadata, and `electron-updater` compatibility without
 introducing a second Electron build system.
 
@@ -72,16 +72,18 @@ The update service is main-process only. Renderer code does not import
 
 - development builds report updates as unavailable;
 - packaged builds check after a startup delay and then at a bounded interval;
-- downloads require an explicit user action in the first release;
-- an update is installed only after the user chooses restart and install;
+- an available update opens the public GitHub Release page after explicit user action;
+- unsigned community builds never replace the installed application in place;
 - failures are logged and represented as observable state, never as an unhandled
   rejection;
 - tray and application menu actions call the same update service.
 
 GitHub Releases is the first update provider. Release tags use `vX.Y.Z`. The
 release workflow creates a draft release so installers can be checked before
-publication. macOS updates are produced only from signed and notarized builds;
-Windows releases are signed before public distribution.
+publication. The initial community distribution is free and unsigned: macOS
+requires first-launch approval in Privacy & Security, while Windows may show an
+Unknown Publisher warning. Apple Developer ID and Windows Authenticode signing
+remain optional future trust upgrades rather than release prerequisites.
 
 ### Release workflow
 
@@ -92,11 +94,15 @@ Each operating system builds its own payload on a native runner. A release job:
 3. runs Telos tests, type checks, lint, and DSH sync/parity checks;
 4. builds DSH and the Telos overlays;
 5. stages an official Node distribution compatible with DSH;
-6. packages and signs the target installer;
-7. uploads installers, blockmaps, and update metadata to one draft release.
+6. packages the unsigned community installer explicitly, without discovering
+   identities from the runner;
+7. uploads installers, blockmaps, update metadata, and one SHA-256 checksum
+   manifest to a draft release.
 
-Signing identities, notarization credentials, and GitHub tokens are CI secrets.
-They are never stored in repository files or local environment examples.
+The workflow uses the scoped GitHub token to create the draft release. It does
+not require Apple or Windows certificate secrets. If trusted signing is added in
+the future, it must be an explicit release mode and secrets must never be stored
+in repository files or local environment examples.
 
 ## Initial target matrix
 
@@ -117,6 +123,9 @@ is not acceptance evidence.
   than relying on Electron's default `window-all-closed` behavior.
 - Update behavior is testable without contacting GitHub by injecting an updater
   adapter into the state machine.
+- Free community distribution carries platform trust friction: users approve the
+  first macOS launch or accept the Windows publisher warning, and install updates
+  manually from GitHub Releases.
 - DSH updates remain source-pinned. A Telos release never downloads an arbitrary
   new DSH runtime at application startup.
 - Publishing a release remains a deliberate action. Merging the workflow does

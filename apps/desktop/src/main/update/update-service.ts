@@ -1,4 +1,4 @@
-import type { AppUpdater, ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater'
+import type { AppUpdater, UpdateInfo } from 'electron-updater'
 import type { UpdateSnapshot } from '../../shared/update.js'
 import type { ApplicationLogger } from '../logging/application-logger.js'
 
@@ -9,6 +9,7 @@ export interface UpdateServiceOptions {
   enabled: boolean
   updater?: AppUpdater
   logger: ApplicationLogger
+  openReleasePage?: () => Promise<void>
   startupDelayMs?: number
   checkIntervalMs?: number
 }
@@ -36,8 +37,6 @@ export class UpdateService {
     options.updater.on('checking-for-update', () => this.publish({ status: 'checking' }))
     options.updater.on('update-available', info => this.onAvailable(info))
     options.updater.on('update-not-available', info => this.onNotAvailable(info))
-    options.updater.on('download-progress', info => this.onDownloadProgress(info))
-    options.updater.on('update-downloaded', info => this.onDownloaded(info))
     options.updater.on('error', error => this.fail(error))
   }
 
@@ -76,7 +75,7 @@ export class UpdateService {
   async checkForUpdates(): Promise<void> {
     const updater = this.options.updater
     if (!this.options.enabled || updater === undefined) return
-    if (this.snapshot.status === 'checking' || this.snapshot.status === 'downloading') return
+    if (this.snapshot.status === 'checking') return
 
     this.publish({ status: 'checking' })
     try {
@@ -86,25 +85,13 @@ export class UpdateService {
     }
   }
 
-  async downloadUpdate(): Promise<void> {
-    const updater = this.options.updater
-    if (!this.options.enabled || updater === undefined || this.snapshot.status !== 'available') return
-
-    this.publish({
-      status: 'downloading',
-      ...(this.snapshot.version === undefined ? {} : { version: this.snapshot.version }),
-      progressPercent: 0,
-    })
+  async openReleasePage(): Promise<void> {
+    if (!this.options.enabled || this.snapshot.status !== 'available' || this.options.openReleasePage === undefined) return
     try {
-      await updater.downloadUpdate()
+      await this.options.openReleasePage()
     } catch (error: unknown) {
       this.fail(error)
     }
-  }
-
-  installUpdate(): void {
-    if (!this.options.enabled || this.options.updater === undefined || this.snapshot.status !== 'downloaded') return
-    this.options.updater.quitAndInstall(false, true)
   }
 
   private onAvailable(info: UpdateInfo): void {
@@ -122,23 +109,6 @@ export class UpdateService {
       status: 'not-available',
       version: info.version,
       checkedAt: new Date().toISOString(),
-    })
-  }
-
-  private onDownloadProgress(info: ProgressInfo): void {
-    this.publish({
-      status: 'downloading',
-      ...(this.snapshot.version === undefined ? {} : { version: this.snapshot.version }),
-      progressPercent: Math.max(0, Math.min(100, info.percent)),
-    })
-  }
-
-  private onDownloaded(info: UpdateDownloadedEvent): void {
-    this.options.logger.info(`Telos update ${info.version} is ready to install`)
-    this.publish({
-      status: 'downloaded',
-      version: info.version,
-      progressPercent: 100,
     })
   }
 

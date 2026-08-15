@@ -4,8 +4,7 @@ import type { UpdateSnapshot } from '../../shared/update.js'
 export interface ApplicationTrayActions {
   showMainWindow: () => void
   checkForUpdates: () => Promise<void>
-  downloadUpdate: () => Promise<void>
-  installUpdate: () => void
+  openReleasePage: () => Promise<void>
   quit: () => void
   getUpdateSnapshot: () => UpdateSnapshot
   subscribeToUpdates: (observer: (snapshot: UpdateSnapshot) => void) => () => void
@@ -22,8 +21,6 @@ export function describeUpdate(snapshot: UpdateSnapshot): string {
     case 'checking': return '正在检查更新…'
     case 'available': return `发现新版本 ${snapshot.version ?? ''}`.trim()
     case 'not-available': return 'Telos 已是最新版本'
-    case 'downloading': return `正在下载更新 ${Math.round(snapshot.progressPercent ?? 0)}%`
-    case 'downloaded': return `版本 ${snapshot.version ?? ''} 已准备安装`.trim()
     case 'error': return '更新检查失败'
   }
 }
@@ -52,14 +49,11 @@ export function createApplicationTray(actions: ApplicationTrayActions): Applicat
       { label: describeUpdate(update), enabled: false },
       {
         label: '检查更新',
-        enabled: update.status !== 'disabled' && update.status !== 'checking' && update.status !== 'downloading',
+        enabled: update.status !== 'disabled' && update.status !== 'checking',
         click: () => void actions.checkForUpdates(),
       },
       ...(update.status === 'available'
-        ? [{ label: `下载 ${update.version ?? '新版本'}`, click: () => void actions.downloadUpdate() } satisfies MenuItemConstructorOptions]
-        : []),
-      ...(update.status === 'downloaded'
-        ? [{ label: '重启并安装更新', click: actions.installUpdate } satisfies MenuItemConstructorOptions]
+        ? [{ label: `前往 GitHub 下载 ${update.version ?? '新版本'}`, click: () => void actions.openReleasePage() } satisfies MenuItemConstructorOptions]
         : []),
       { type: 'separator' },
       { label: '退出 Telos', click: actions.quit },

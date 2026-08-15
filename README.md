@@ -42,7 +42,7 @@ Telos 不打算成为：
 | Telos 自有界面层 | 已接入 | 三栏布局、启动与恢复界面、主题、品牌和侧栏兼容组件 |
 | 会话、工作区、设置和活动面板 | 已保留 | 继续复用固定版本 DSH 的 Session、Projection、Tool 和 Web Runtime |
 | 桌面生命周期 | 已实现 | 单实例、关闭后驻留、系统托盘、显式退出和 DSH 优雅停止 |
-| 打包与更新 | macOS arm64 已验证 | DMG、ZIP、更新元数据、包内 Node.js 和包内 DSH 真实启动已验证 |
+| 打包与版本检查 | macOS arm64 已验证 | DMG、ZIP、更新元数据、包内 Node.js 和包内 DSH 真实启动已验证 |
 | macOS x64、Windows、Linux | CI 已配置，尚未验收 | 必须以各平台原生 CI 结果为准 |
 | 个人连续记忆 v1 | 已实现 | 本地 SQLite 事实源、实体事件、候选确认、来源、作用域、纠正、召回回执和删除报告 |
 | 关系图投影 | 已实现基础能力 | 从 MemoryClaim 重建实体关系；图不是唯一事实源，也不等同于完整个人知识库 |
@@ -216,9 +216,12 @@ pnpm package:desktop
 | Linux | x64 | AppImage、deb 和更新元数据 |
 
 - 手动运行 Workflow：只生成 CI Artifact，不创建 GitHub Release；
-- 推送 `vX.Y.Z` 标签：要求签名与公证 Secrets，通过后创建或更新草稿 Release；
+- 推送 `vX.Y.Z` 标签：构建免费的无商业签名社区版，并创建或更新草稿 Release；
 - 草稿 Release 需要人工检查后才能发布给用户；
-- 当前仓库尚未提供经过签名与多平台验收的正式公开版本。
+- Release 同时提供 `SHA256SUMS.txt`，用于核对下载文件完整性；
+- macOS 首次启动需要用户在“隐私与安全性”中批准，Windows 可能显示“未知发布者”提醒；
+- 应用发现新版本后打开 GitHub Release，由用户手动下载安装，不执行无签名的静默覆盖更新；
+- 当前仓库尚未提供经过多平台 CI 验收的正式公开版本。
 
 详细边界见 [Desktop distribution and lifecycle](./docs/architecture/0005-desktop-distribution-and-lifecycle.md)。
 

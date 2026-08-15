@@ -70,6 +70,8 @@ jobs:
         run: corepack enable
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build complete DSH runtime
+        run: pnpm dsh:build
       - name: Verify Telos
         run: |
           pnpm typecheck

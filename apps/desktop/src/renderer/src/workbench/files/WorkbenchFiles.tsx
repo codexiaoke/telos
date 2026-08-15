@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { MaterialFileIcon } from './material-file-icons'
 import { MonacoCodeEditor } from './MonacoCodeEditor'
+import { editorContextStore, type EditorSelectionContext } from './editor-context'
 
 const WORKBENCH_FILES_RPC_CHANNEL = '/telos-workbench-files'
 
@@ -188,9 +189,28 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
   const [loading, setLoading] = useState<Set<string>>(() => new Set())
   const [files, setFiles] = useState<OpenFile[]>([])
   const [activePath, setActivePath] = useState<string>()
+  const [selection, setSelection] = useState<EditorSelectionContext>()
   const [tabContextMenu, setTabContextMenu] = useState<TabContextMenu>()
   const [error, setError] = useState<string>()
   const activeFile = files.find(file => file.path === activePath)
+
+  useEffect(() => {
+    if (!active || sessionId === undefined || activeFile === undefined) {
+      if (sessionId !== undefined) editorContextStore.clear(sessionId)
+      return
+    }
+    editorContextStore.publish({
+      sessionId,
+      path: activeFile.path,
+      content: activeFile.content,
+      revision: activeFile.revision,
+      ...(selection === undefined ? {} : { selection }),
+    })
+  }, [active, activeFile, selection, sessionId])
+
+  useEffect(() => () => {
+    if (sessionId !== undefined) editorContextStore.clear(sessionId)
+  }, [sessionId])
 
   const loadDirectory = useCallback(async (path: string, signal?: AbortSignal) => {
     if (sessionId === undefined) return
@@ -237,6 +257,7 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
 
   const openFile = useCallback(async (path: string) => {
     if (files.some(file => file.path === path)) {
+      setSelection(undefined)
       setActivePath(path)
       return
     }
@@ -247,6 +268,7 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
         ...current,
         { ...opened, savedContent: opened.content, saving: false },
       ])
+      setSelection(undefined)
       setActivePath(path)
       setError(undefined)
     } catch (reason) {
@@ -360,7 +382,7 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
                   }}
                   role="tab"
                 >
-                  <button onClick={() => setActivePath(file.path)} title={file.path} type="button">
+                  <button onClick={() => { setSelection(undefined); setActivePath(file.path) }} title={file.path} type="button">
                     <MaterialFileIcon kind="file" name={file.path} />
                     <span className="telos-editor-tab-label">{basename(file.path)}</span>
                   </button>
@@ -429,6 +451,7 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
               content={activeFile.content}
               onChange={updateActiveFile}
               onSave={() => void saveActiveFile()}
+              onSelectionChange={setSelection}
               openPaths={files.map(file => file.path)}
               path={activeFile.path}
             />

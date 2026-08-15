@@ -8,7 +8,7 @@
       "upstream": "packages/client/ui-layout/src/client/index.ts",
       "telos": "apps/desktop/src/renderer/src/workbench/dsh-client.ts",
       "upstreamSha256": "52c272941e8eb8fc6aad539ba9fc6a7d77f3d46604f29a8be9921d3c2dcc9158",
-      "telosSha256": "8d7a0ca10a551cac99e83ed44feee6fd2e727773195fddbcc6ae7e6eab2b9a1e"
+      "telosSha256": "7de9745df715e1a2072d8aca56c40e421a991b5136361808519c423c25baf3d5"
     },
     {
       "upstream": "packages/client/ui-layout/src/client/AppFrame.tsx",
@@ -48,7 +48,7 @@
     }
   ],
   "generated": "integrations/dsh/plugins/telos-ui-layout/lib/client.js",
-  "generatedSha256": "043cb6536696a70741cfb280bcc7827fdba7d9405710e1faa931d78c2b9d2799",
+  "generatedSha256": "5af494648b8a3afdc2845508dde68886ca10195c2d3e3ee9b269c2199c472baf",
   "externalModules": [
     "react",
     "react/jsx-runtime",

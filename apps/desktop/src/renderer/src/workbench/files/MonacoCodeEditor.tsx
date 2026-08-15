@@ -83,21 +83,24 @@ interface MonacoCodeEditorProps {
   content: string
   onChange: (content: string) => void
   onSave: () => void
+  onSelectionChange?: (selection: { startLine: number; endLine: number; content: string } | undefined) => void
   openPaths: readonly string[]
   path: string
 }
 
-export function MonacoCodeEditor({ content, onChange, onSave, openPaths, path }: MonacoCodeEditorProps) {
+export function MonacoCodeEditor({ content, onChange, onSave, onSelectionChange, openPaths, path }: MonacoCodeEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | undefined>(undefined)
   const modelsRef = useRef(new Map<string, monaco.editor.ITextModel>())
   const changeRef = useRef(onChange)
   const saveRef = useRef(onSave)
+  const selectionRef = useRef(onSelectionChange)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string>()
 
   changeRef.current = onChange
   saveRef.current = onSave
+  selectionRef.current = onSelectionChange
 
   useEffect(() => {
     let disposed = false
@@ -136,6 +139,14 @@ export function MonacoCodeEditor({ content, onChange, onSave, openPaths, path }:
       const value = editor.getValue()
       changeRef.current(value)
     })
+    const selectionListener = editor.onDidChangeCursorSelection(({ selection }) => {
+      const content = editor.getModel()?.getValueInRange(selection) ?? ''
+      selectionRef.current?.(content === '' ? undefined : {
+        startLine: selection.startLineNumber,
+        endLine: selection.endLineNumber,
+        content,
+      })
+    })
     editorRef.current = editor
 
     const observer = new MutationObserver(applyEditorTheme)
@@ -144,6 +155,7 @@ export function MonacoCodeEditor({ content, onChange, onSave, openPaths, path }:
     return () => {
       observer.disconnect()
       contentListener.dispose()
+      selectionListener.dispose()
       editor.dispose()
       editorRef.current = undefined
       for (const model of modelsRef.current.values()) model.dispose()

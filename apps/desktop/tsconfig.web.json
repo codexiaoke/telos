@@ -12,6 +12,8 @@
     "paths": {
       "@deepseek-ai/cordis": ["../../third_party/deepseek-harness/vendor/cordis/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-client-runtime/client": ["../../third_party/deepseek-harness/packages/client/runtime/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-conversation/client": ["../../third_party/deepseek-harness/packages/client/ui-conversation/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-input-trigger/client": ["../../third_party/deepseek-harness/packages/client/ui-input-trigger/lib/types/client/index.d.ts"],
       "@deepseek-ai/dsh-client-ui-layout/client": ["../../third_party/deepseek-harness/packages/client/ui-layout/lib/types/client/index.d.ts"],
       "@deepseek-ai/dsh-client-ui-slots": ["../../third_party/deepseek-harness/packages/client/ui-slots/lib/types/index.d.ts"],
       "@deepseek-ai/dsh-client-ui-theme/client": ["../../third_party/deepseek-harness/packages/client/ui-theme/lib/types/client/index.d.ts"]

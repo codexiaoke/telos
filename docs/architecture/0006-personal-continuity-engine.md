@@ -294,7 +294,7 @@ visualization is not an acceptance requirement; relationship-backed behavior is.
 
 ## ContinuityBench
 
-The repository will ship deterministic fixtures and executable scenarios for:
+The repository ships deterministic fixtures and executable scenarios for:
 
 1. cross-session decision recovery;
 2. same-workspace sharing and cross-workspace isolation;

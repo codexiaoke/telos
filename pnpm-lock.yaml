@@ -97,6 +97,19 @@ importers:
         specifier: 8.2.1
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.25.12)(jiti@2.7.0)(yaml@2.9.0)
 
+  packages/continuity-bench:
+    dependencies:
+      '@telos/personal-core':
+        specifier: workspace:*
+        version: link:../personal-core
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
   packages/personal-core:
     devDependencies:
       '@types/node':

@@ -1150,6 +1150,35 @@ var PersonalContinuityStore = class {
       ORDER BY recorded_at DESC, id DESC LIMIT ?
     `).all(...params).map((row) => this.actionReceiptFromRow(row));
   }
+  evaluateActionConstraints(action, context = {}) {
+    this.assertOpen();
+    const normalizedAction = normalizedText(assertNonEmpty(action, "action"));
+    const at = assertIso(context.at ?? this.isoNow(), "context.at");
+    const allowedSensitivities = context.allowedSensitivities ?? DEFAULT_ALLOWED_SENSITIVITIES;
+    const rows = this.db.prepare(`
+      SELECT * FROM memory_claim
+      WHERE kind = 'constraint' AND status = 'confirmed'
+        AND predicate IN ('constraint.forbids', 'constraint.requires_confirmation')
+      ORDER BY importance DESC, recorded_at DESC, id
+    `).all();
+    const conflicts = [];
+    for (const row of rows) {
+      const claim = this.claimFromRow(row);
+      if (this.recallDenialReason(claim, context, at, allowedSensitivities) !== void 0)
+        continue;
+      const matchedTerm = normalizedText(claim.objectValue ?? "");
+      if (matchedTerm.length === 0 || !normalizedAction.includes(matchedTerm))
+        continue;
+      conflicts.push({
+        claimId: claim.id,
+        reason: claim.predicate === "constraint.forbids" ? "forbidden-action-match" : "confirmation-required",
+        matchedTerm: claim.objectValue,
+        statement: claim.statement,
+        scope: claim.scope
+      });
+    }
+    return conflicts;
+  }
   enqueue(jobType, payload, idempotencyKey, availableAt = this.isoNow()) {
     this.assertOpen();
     const existing = this.db.prepare("SELECT * FROM continuity_outbox WHERE idempotency_key = ?").get(idempotencyKey);

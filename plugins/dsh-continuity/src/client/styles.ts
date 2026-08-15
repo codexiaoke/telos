@@ -109,6 +109,28 @@ export const CONTINUITY_CLIENT_CSS = `
 .telosContinuityScrollPane {
   min-height: 0;
   overflow: auto;
+  scrollbar-gutter: stable;
+}
+.telosContinuityScrollPane { box-sizing: border-box; height: 100%; }
+.telosContinuityListPane::-webkit-scrollbar,
+.telosContinuityDetailPane::-webkit-scrollbar,
+.telosContinuityScrollPane::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.telosContinuityListPane::-webkit-scrollbar-track,
+.telosContinuityDetailPane::-webkit-scrollbar-track,
+.telosContinuityScrollPane::-webkit-scrollbar-track { background: transparent; }
+.telosContinuityListPane::-webkit-scrollbar-thumb,
+.telosContinuityDetailPane::-webkit-scrollbar-thumb,
+.telosContinuityScrollPane::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 45%, transparent);
+  border-radius: 999px;
+}
+.telosContinuityListPane::-webkit-scrollbar-thumb:hover,
+.telosContinuityDetailPane::-webkit-scrollbar-thumb:hover,
+.telosContinuityScrollPane::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--dsw-alias-label-secondary) 58%, transparent);
 }
 .telosContinuityListPane { border-right: 1px solid var(--dsw-alias-border-l1); }
 .telosContinuityFilters {
@@ -293,8 +315,60 @@ export const CONTINUITY_CLIENT_CSS = `
 .telosContinuityReceiptHeader { display: flex; align-items: center; gap: 8px; }
 .telosContinuityReceiptQuery { margin: 8px 0 0; font-size: 13px; line-height: 20px; }
 .telosContinuityReceiptClaims { margin: 8px 0 0; color: var(--dsw-alias-label-secondary); font-size: 11px; }
-.telosContinuityAuditGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.telosContinuityAuditGrid { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 24px; }
 .telosContinuityAuditColumn { min-width: 0; }
+.telosContinuityAuditTableWrap {
+  min-width: 0;
+  overflow-x: auto;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  scrollbar-gutter: stable;
+}
+.telosContinuityAuditTable {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 17px;
+}
+.telosContinuityAuditTable th,
+.telosContinuityAuditTable td {
+  padding: 9px 8px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  overflow-wrap: anywhere;
+}
+.telosContinuityAuditTable th {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+}
+.telosContinuityAuditTable th:first-child { width: 100px; }
+.telosContinuityAuditTable th:nth-child(2) { width: 30%; }
+.telosContinuityDeletionTable th:nth-child(2) { width: 82px; }
+.telosContinuityDeletionTable th:nth-child(3) { width: 34%; }
+.telosContinuityAuditCode {
+  display: block;
+  color: var(--dsw-alias-label-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.telosContinuityAuditMeta {
+  display: block;
+  margin-top: 2px;
+  color: var(--dsw-alias-label-tertiary);
+}
+.telosContinuityAuditEmpty {
+  margin: 0;
+  padding: 22px 8px;
+  color: var(--dsw-alias-label-tertiary);
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  font-size: 12px;
+}
 .telosContinuitySpinner { animation: telosContinuitySpin .8s linear infinite; }
 @keyframes telosContinuitySpin { to { transform: rotate(360deg); } }
 @media (max-width: 820px) {

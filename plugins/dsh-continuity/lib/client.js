@@ -350,35 +350,44 @@ function AuditView({ state }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosContinuityAuditGrid", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "telosContinuityAuditColumn", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { className: "telosContinuitySectionTitle", children: "\u884C\u52A8\u56DE\u6267" }),
-        state.receipts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosContinuityEmpty", children: "\u6682\u65E0\u884C\u52A8\u56DE\u6267\u3002" }) : state.receipts.map((receipt) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { className: "telosContinuityReceipt", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosContinuityReceiptHeader", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "telosContinuityChip", children: receipt.result }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "telosContinuityChip", children: receipt.authorization }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "telosContinuityMuted", children: formatDate(receipt.occurredAt) })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "telosContinuityReceiptQuery", children: receipt.action }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "telosContinuityReceiptClaims", children: [
-            receipt.runtimeId,
-            " \xB7 ",
-            scopeLabel(receipt.scope)
-          ] })
-        ] }, receipt.id))
+        state.receipts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "telosContinuityAuditEmpty", children: "\u6682\u65E0\u884C\u52A8\u56DE\u6267\u3002" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosContinuityAuditTableWrap", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "telosContinuityAuditTable", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "\u65F6\u95F4" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "\u52A8\u4F5C" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "\u7ED3\u679C" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "\u6388\u6743" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "\u8303\u56F4" })
+          ] }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: state.receipts.map((receipt) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: formatDate(receipt.occurredAt) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { className: "telosContinuityAuditCode", children: receipt.action }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "telosContinuityAuditMeta", children: receipt.runtimeId })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: receipt.result }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: receipt.authorization }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: scopeLabel(receipt.scope) })
+          ] }, receipt.id)) })
+        ] }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "telosContinuityAuditColumn", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { className: "telosContinuitySectionTitle", children: "\u5220\u9664\u56DE\u6267" }),
-        state.deletions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosContinuityEmpty", children: "\u6682\u65E0\u5220\u9664\u8BB0\u5F55\u3002" }) : state.deletions.map((report) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { className: "telosContinuityReceipt", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosContinuityReceiptHeader", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "telosContinuityChip", children: report.physicallyPurged ? "\u5DF2\u5F7B\u5E95\u5220\u9664" : "\u5DF2\u64A4\u9500" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "telosContinuityMuted", children: formatDate(report.completedAt) })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "telosContinuityReceiptQuery", children: report.claimId }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "telosContinuityReceiptClaims", children: [
-            "\u6765\u6E90 ",
-            report.sourceStates.length,
-            " \xB7 \u5F85\u5904\u7406\u4F1A\u8BDD\u526F\u672C ",
-            report.derivatives.length
-          ] })
-        ] }, report.receiptId))
+        state.deletions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "telosContinuityAuditEmpty", children: "\u6682\u65E0\u5220\u9664\u8BB0\u5F55\u3002" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosContinuityAuditTableWrap", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { className: "telosContinuityAuditTable telosContinuityDeletionTable", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "\u65F6\u95F4" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "\u72B6\u6001" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "\u8BB0\u5FC6" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "\u6765\u6E90" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "\u5F85\u5904\u7406\u526F\u672C" })
+          ] }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: state.deletions.map((report) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: formatDate(report.completedAt) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: report.physicallyPurged ? "\u5DF2\u5F7B\u5E95\u5220\u9664" : "\u5DF2\u64A4\u9500" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { className: "telosContinuityAuditCode", children: report.claimId }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: report.sourceStates.length }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: report.derivatives.length })
+          ] }, report.receiptId)) })
+        ] }) })
       ] })
     ] })
   ] });
@@ -779,6 +788,28 @@ var CONTINUITY_CLIENT_CSS = `
 .telosContinuityScrollPane {
   min-height: 0;
   overflow: auto;
+  scrollbar-gutter: stable;
+}
+.telosContinuityScrollPane { box-sizing: border-box; height: 100%; }
+.telosContinuityListPane::-webkit-scrollbar,
+.telosContinuityDetailPane::-webkit-scrollbar,
+.telosContinuityScrollPane::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.telosContinuityListPane::-webkit-scrollbar-track,
+.telosContinuityDetailPane::-webkit-scrollbar-track,
+.telosContinuityScrollPane::-webkit-scrollbar-track { background: transparent; }
+.telosContinuityListPane::-webkit-scrollbar-thumb,
+.telosContinuityDetailPane::-webkit-scrollbar-thumb,
+.telosContinuityScrollPane::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 45%, transparent);
+  border-radius: 999px;
+}
+.telosContinuityListPane::-webkit-scrollbar-thumb:hover,
+.telosContinuityDetailPane::-webkit-scrollbar-thumb:hover,
+.telosContinuityScrollPane::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--dsw-alias-label-secondary) 58%, transparent);
 }
 .telosContinuityListPane { border-right: 1px solid var(--dsw-alias-border-l1); }
 .telosContinuityFilters {
@@ -963,8 +994,60 @@ var CONTINUITY_CLIENT_CSS = `
 .telosContinuityReceiptHeader { display: flex; align-items: center; gap: 8px; }
 .telosContinuityReceiptQuery { margin: 8px 0 0; font-size: 13px; line-height: 20px; }
 .telosContinuityReceiptClaims { margin: 8px 0 0; color: var(--dsw-alias-label-secondary); font-size: 11px; }
-.telosContinuityAuditGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.telosContinuityAuditGrid { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 24px; }
 .telosContinuityAuditColumn { min-width: 0; }
+.telosContinuityAuditTableWrap {
+  min-width: 0;
+  overflow-x: auto;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  scrollbar-gutter: stable;
+}
+.telosContinuityAuditTable {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 17px;
+}
+.telosContinuityAuditTable th,
+.telosContinuityAuditTable td {
+  padding: 9px 8px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  overflow-wrap: anywhere;
+}
+.telosContinuityAuditTable th {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+}
+.telosContinuityAuditTable th:first-child { width: 100px; }
+.telosContinuityAuditTable th:nth-child(2) { width: 30%; }
+.telosContinuityDeletionTable th:nth-child(2) { width: 82px; }
+.telosContinuityDeletionTable th:nth-child(3) { width: 34%; }
+.telosContinuityAuditCode {
+  display: block;
+  color: var(--dsw-alias-label-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.telosContinuityAuditMeta {
+  display: block;
+  margin-top: 2px;
+  color: var(--dsw-alias-label-tertiary);
+}
+.telosContinuityAuditEmpty {
+  margin: 0;
+  padding: 22px 8px;
+  color: var(--dsw-alias-label-tertiary);
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  font-size: 12px;
+}
 .telosContinuitySpinner { animation: telosContinuitySpin .8s linear infinite; }
 @keyframes telosContinuitySpin { to { transform: rotate(360deg); } }
 @media (max-width: 820px) {

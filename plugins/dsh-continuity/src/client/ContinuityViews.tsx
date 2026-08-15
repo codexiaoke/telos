@@ -321,32 +321,68 @@ function AuditView({ state }: { state: ContinuityClientSnapshot }) {
       <div className="telosContinuityAuditGrid">
         <section className="telosContinuityAuditColumn">
           <h3 className="telosContinuitySectionTitle">行动回执</h3>
-          {state.receipts.length === 0 ? <div className="telosContinuityEmpty">暂无行动回执。</div> : state.receipts.map(receipt => (
-            <article className="telosContinuityReceipt" key={receipt.id}>
-              <div className="telosContinuityReceiptHeader">
-                <span className="telosContinuityChip">{receipt.result}</span>
-                <span className="telosContinuityChip">{receipt.authorization}</span>
-                <span className="telosContinuityMuted">{formatDate(receipt.occurredAt)}</span>
-              </div>
-              <p className="telosContinuityReceiptQuery">{receipt.action}</p>
-              <p className="telosContinuityReceiptClaims">{receipt.runtimeId} · {scopeLabel(receipt.scope)}</p>
-            </article>
-          ))}
+          {state.receipts.length === 0
+            ? <p className="telosContinuityAuditEmpty">暂无行动回执。</p>
+            : (
+                <div className="telosContinuityAuditTableWrap">
+                  <table className="telosContinuityAuditTable">
+                    <thead>
+                      <tr>
+                        <th>时间</th>
+                        <th>动作</th>
+                        <th>结果</th>
+                        <th>授权</th>
+                        <th>范围</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {state.receipts.map(receipt => (
+                        <tr key={receipt.id}>
+                          <td>{formatDate(receipt.occurredAt)}</td>
+                          <td>
+                            <code className="telosContinuityAuditCode">{receipt.action}</code>
+                            <span className="telosContinuityAuditMeta">{receipt.runtimeId}</span>
+                          </td>
+                          <td>{receipt.result}</td>
+                          <td>{receipt.authorization}</td>
+                          <td>{scopeLabel(receipt.scope)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
         </section>
         <section className="telosContinuityAuditColumn">
           <h3 className="telosContinuitySectionTitle">删除回执</h3>
-          {state.deletions.length === 0 ? <div className="telosContinuityEmpty">暂无删除记录。</div> : state.deletions.map(report => (
-            <article className="telosContinuityReceipt" key={report.receiptId}>
-              <div className="telosContinuityReceiptHeader">
-                <span className="telosContinuityChip">{report.physicallyPurged ? '已彻底删除' : '已撤销'}</span>
-                <span className="telosContinuityMuted">{formatDate(report.completedAt)}</span>
-              </div>
-              <p className="telosContinuityReceiptQuery">{report.claimId}</p>
-              <p className="telosContinuityReceiptClaims">
-                来源 {report.sourceStates.length} · 待处理会话副本 {report.derivatives.length}
-              </p>
-            </article>
-          ))}
+          {state.deletions.length === 0
+            ? <p className="telosContinuityAuditEmpty">暂无删除记录。</p>
+            : (
+                <div className="telosContinuityAuditTableWrap">
+                  <table className="telosContinuityAuditTable telosContinuityDeletionTable">
+                    <thead>
+                      <tr>
+                        <th>时间</th>
+                        <th>状态</th>
+                        <th>记忆</th>
+                        <th>来源</th>
+                        <th>待处理副本</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {state.deletions.map(report => (
+                        <tr key={report.receiptId}>
+                          <td>{formatDate(report.completedAt)}</td>
+                          <td>{report.physicallyPurged ? '已彻底删除' : '已撤销'}</td>
+                          <td><code className="telosContinuityAuditCode">{report.claimId}</code></td>
+                          <td>{report.sourceStates.length}</td>
+                          <td>{report.derivatives.length}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
         </section>
       </div>
     </div>

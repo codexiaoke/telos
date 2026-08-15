@@ -432,6 +432,18 @@ var TELOS_LAYOUT_CSS = `
   max-width: 88vw;
 }
 
+/* DSH's individual Settings features were designed for the original 800px
+   dialog and cap their roots at 720\u2013760px. Once Telos widens the shell those
+   caps leave a large dead column, so every section and nested Plugins tab
+   should consume the full content column. The stable slot anchors keep this
+   independent of upstream CSS-module class names. */
+.telos-workbench-sidebar [data-slot='settings.section'] > *,
+.telos-workbench-sidebar [data-slot='settings.plugins.tab'] > * {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+}
+
 .telos-workbench-sidebar {
   overflow: hidden;
   background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 96%, transparent);

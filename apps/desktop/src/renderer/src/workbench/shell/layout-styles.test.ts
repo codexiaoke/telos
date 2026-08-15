@@ -8,6 +8,12 @@ describe('TELOS_LAYOUT_CSS', () => {
     )
   })
 
+  it('lets every Settings section fill the widened content column', () => {
+    expect(TELOS_LAYOUT_CSS).toContain("[data-slot='settings.section'] > *")
+    expect(TELOS_LAYOUT_CSS).toContain("[data-slot='settings.plugins.tab'] > *")
+    expect(TELOS_LAYOUT_CSS).toMatch(/width:\s*100%;\s*max-width:\s*none;/)
+  })
+
   it('does not trap sidebar-owned fixed dialogs below sibling columns', () => {
     const columnRule = TELOS_LAYOUT_CSS.match(
       /\.telos-workbench-sidebar,\s*\.telos-workbench-center,\s*\.telos-workbench-details\s*\{(?<body>[^}]*)\}/,

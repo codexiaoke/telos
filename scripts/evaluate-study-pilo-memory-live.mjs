@@ -267,6 +267,7 @@ function entityMatches(expected, actualName) {
 function evaluateCase(row, state) {
   const expected = row.expected_events[0]
   const input = row.input.content
+  const normalizedInput = input.normalize('NFKC')
   const shouldRemember = expected.memory_action !== 'ignore' && expected.is_qualified_event === true
   const remembered = state.claims.length > 0
   const expectedEntities = expectedEntityNames(expected, input)
@@ -283,7 +284,8 @@ function evaluateCase(row, state) {
     && typeof source.content_hash === 'string')
   const evidenceGrounded = state.sources
     .filter(source => typeof source.content === 'string')
-    .every(source => source.content.split('\n').filter(Boolean).every(excerpt => input.includes(excerpt)))
+    .every(source => source.content.split('\n').filter(Boolean)
+      .every(excerpt => normalizedInput.includes(excerpt.normalize('NFKC'))))
   return {
     caseId: row.case_id,
     expectedDecision: shouldRemember ? 'remember' : 'ignore',

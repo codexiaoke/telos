@@ -1,4 +1,10 @@
-import { MULTIMODAL_RPC_CHANNEL, type MultimodalSettings, type MultimodalSettingsView } from '../contracts.js'
+import {
+  MULTIMODAL_RPC_CHANNEL,
+  type ImageRouteResolution,
+  type ModelSelectionRoute,
+  type MultimodalSettings,
+  type MultimodalSettingsView,
+} from '../contracts.js'
 import type { ClientRpc, MultimodalClientSnapshot } from './contracts.js'
 
 const EMPTY: MultimodalClientSnapshot = { loading: false }
@@ -22,6 +28,12 @@ export class MultimodalClientController {
   async refresh(): Promise<void> { await this.run('get', {}, undefined) }
   async save(settings: MultimodalSettings): Promise<void> { await this.run('save', settings, '多模态模型配置已保存') }
   async reset(): Promise<void> { await this.run('reset', {}, '已恢复默认多模态配置') }
+
+  async resolveImageRoute(current: ModelSelectionRoute): Promise<ImageRouteResolution> {
+    const result = await this.rpc.call(MULTIMODAL_RPC_CHANNEL, 'resolve-image-route', current)
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value as ImageRouteResolution
+  }
 
   private async run(endpoint: string, payload: unknown, notice: string | undefined): Promise<void> {
     this.update({ loading: true, error: undefined, notice: undefined })

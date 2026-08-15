@@ -1,42 +1,16 @@
 export const MULTIMODAL_RPC_CHANNEL = '/telos-multimodal'
-
-export const MULTIMODAL_CAPABILITIES = [
-  'image-understanding',
-  'ocr',
-  'speech-to-text',
-  'text-to-speech',
-  'video-understanding',
-  'document-understanding',
-] as const
-
-export type MultimodalCapability = typeof MULTIMODAL_CAPABILITIES[number]
-export type CapabilityRouteMode = 'auto' | 'fixed' | 'disabled'
-export type CloudMediaPolicy = 'ask' | 'allow-configured' | 'local-only'
+export const TELOS_MULTIMODAL_PROVIDER = 'telos-multimodal'
 
 export interface ModelRoute {
   provider: string
   model: string
 }
 
-export interface MainModelConfig {
-  mode: 'follow-session' | 'fixed'
-  route?: ModelRoute
-}
-
-export interface CapabilityRouteConfig {
-  mode: CapabilityRouteMode
-  route?: ModelRoute
-}
-
+/** Device-local policy for the image bridge. Provider credentials remain DSH-owned. */
 export interface MultimodalSettings {
-  schemaVersion: 1
+  schemaVersion: 2
   enabled: boolean
-  mainModel: MainModelConfig
-  routes: Record<MultimodalCapability, CapabilityRouteConfig>
-  privacy: {
-    preferLocal: boolean
-    cloudMediaPolicy: CloudMediaPolicy
-  }
+  defaultModel?: ModelRoute
 }
 
 export interface ModelCatalogEntry extends ModelRoute {
@@ -52,12 +26,7 @@ export interface ModelProviderGroup {
   failure?: string
 }
 
-export type RouteStatusState =
-  | 'automatic'
-  | 'disabled'
-  | 'available'
-  | 'incompatible'
-  | 'unverified'
+export type RouteStatusState = 'unconfigured' | 'available' | 'incompatible' | 'unverified'
 
 export interface RouteStatus {
   state: RouteStatusState
@@ -67,12 +36,26 @@ export interface RouteStatus {
 export interface MultimodalSettingsView {
   settings: MultimodalSettings
   catalog: ModelProviderGroup[]
-  mainModelStatus: RouteStatus
-  routeStatuses: Record<MultimodalCapability, RouteStatus>
-  runtimePhase: 'configuration-only'
+  defaultModelStatus: RouteStatus
+  runtimePhase: 'image-routing'
 }
+
+export interface ModelSelectionRoute extends ModelRoute {
+  reasoningEffort?: string
+}
+
+export type ImageRouteResolution =
+  | { kind: 'native'; route: ModelSelectionRoute }
+  | {
+      kind: 'bridge'
+      route: ModelSelectionRoute
+      routeName: string
+      perceptionRoute: ModelRoute
+      perceptionName: string
+    }
 
 export type MultimodalRpcResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: 'bad-request'; message: string; details: { issues: never[] } } }
+  | { ok: false; error: { code: 'model-unavailable'; message: string; details: { provider: string; model: string } } }
   | { ok: false; error: { code: 'internal'; message: string; details: Record<string, never> } }

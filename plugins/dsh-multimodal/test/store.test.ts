@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -11,40 +11,50 @@ afterEach(() => {
 })
 
 describe('MultimodalSettingsStore', () => {
-  it('returns local-first defaults when no file exists', () => {
+  it('starts enabled but requires an explicit default model', () => {
     const root = mkdtempSync(join(tmpdir(), 'telos-mm-store-'))
     roots.push(root)
-    expect(new MultimodalSettingsStore(join(root, 'missing.json')).load()).toEqual(defaultMultimodalSettings())
+    expect(new MultimodalSettingsStore(join(root, 'missing.json')).load()).toEqual({ schemaVersion: 2, enabled: true })
+    expect(defaultMultimodalSettings()).not.toHaveProperty('defaultModel')
   })
 
-  it('persists fixed model routes with owner-only permissions and no credentials', () => {
+  it('persists one model route with owner-only permissions and no credentials', () => {
     const root = mkdtempSync(join(tmpdir(), 'telos-mm-store-'))
     roots.push(root)
     const path = join(root, 'nested/multimodal.json')
     const store = new MultimodalSettingsStore(path)
-    const settings = defaultMultimodalSettings()
-    settings.routes['image-understanding'] = {
-      mode: 'fixed', route: { provider: 'openai', model: 'gpt-5.6-vision' },
-    }
+    const settings = { schemaVersion: 2 as const, enabled: true, defaultModel: { provider: 'dashscope', model: 'qwen-vl' } }
     store.save(settings)
 
-    expect(store.load().routes['image-understanding']).toEqual(settings.routes['image-understanding'])
+    expect(store.load()).toEqual(settings)
     expect(statSync(path).mode & 0o777).toBe(0o600)
     expect(readFileSync(path, 'utf8')).not.toMatch(/apiKey|baseURL|secret/u)
   })
 
-  it('rejects incomplete and recursive fixed routes', () => {
-    const settings = defaultMultimodalSettings()
+  it('migrates the legacy fixed image-understanding route', () => {
+    const root = mkdtempSync(join(tmpdir(), 'telos-mm-store-'))
+    roots.push(root)
+    const path = join(root, 'multimodal.json')
+    writeFileSync(path, JSON.stringify({
+      schemaVersion: 1,
+      enabled: true,
+      mainModel: { mode: 'follow-session' },
+      routes: {
+        'image-understanding': { mode: 'fixed', route: { provider: 'vision', model: 'eyes' } },
+      },
+      privacy: { preferLocal: true, cloudMediaPolicy: 'ask' },
+    }))
+    expect(new MultimodalSettingsStore(path).load()).toEqual({
+      schemaVersion: 2, enabled: true, defaultModel: { provider: 'vision', model: 'eyes' },
+    })
+  })
+
+  it('rejects incomplete and recursive routes', () => {
     expect(() => parseMultimodalSettings({
-      ...settings,
-      mainModel: { mode: 'fixed', route: { provider: '', model: 'x' } },
+      schemaVersion: 2, enabled: true, defaultModel: { provider: '', model: 'x' },
     })).toThrow(/provider/u)
     expect(() => parseMultimodalSettings({
-      ...settings,
-      routes: {
-        ...settings.routes,
-        ocr: { mode: 'fixed', route: { provider: 'telos-multimodal', model: 'recursive' } },
-      },
+      schemaVersion: 2, enabled: true, defaultModel: { provider: 'telos-multimodal', model: 'recursive' },
     })).toThrow(/recursively/u)
   })
 })

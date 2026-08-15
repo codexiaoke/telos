@@ -292,6 +292,8 @@ try {
     isDeepStrictEqual(multimodalManifest.dsh?.client?.inject, [
       '@deepseek-ai/dsh-client-connection',
       '@deepseek-ai/dsh-client-runtime',
+      '@deepseek-ai/dsh-client-ui-conversation',
+      '@deepseek-ai/dsh-client-ui-model-selection',
       '@deepseek-ai/dsh-client-ui-settings',
     ]),
     'multimodal Client dependency edges changed',

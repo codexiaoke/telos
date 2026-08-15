@@ -32,14 +32,6 @@ module.exports = __toCommonJS(index_exports);
 
 // src/contracts.ts
 var MULTIMODAL_RPC_CHANNEL = "/telos-multimodal";
-var MULTIMODAL_CAPABILITIES = [
-  "image-understanding",
-  "ocr",
-  "speech-to-text",
-  "text-to-speech",
-  "video-understanding",
-  "document-understanding"
-];
 
 // src/client/controller.ts
 var EMPTY = { loading: false };
@@ -66,6 +58,11 @@ var MultimodalClientController = class {
   async reset() {
     await this.run("reset", {}, "\u5DF2\u6062\u590D\u9ED8\u8BA4\u591A\u6A21\u6001\u914D\u7F6E");
   }
+  async resolveImageRoute(current) {
+    const result = await this.rpc.call(MULTIMODAL_RPC_CHANNEL, "resolve-image-route", current);
+    if (!result.ok) throw new Error(result.error.message);
+    return result.value;
+  }
   async run(endpoint, payload, notice) {
     this.update({ loading: true, error: void 0, notice: void 0 });
     try {
@@ -82,70 +79,69 @@ var MultimodalClientController = class {
   }
 };
 
+// src/client/image-routing.ts
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+function notify(conversation, sessions, session, level, message2) {
+  const actx = sessions.scope(session.sessionId);
+  if (actx !== void 0) conversation.input.for(actx).notify(level, message2);
+}
+function installImageRouting(ctx, controller) {
+  const conversation = ctx.get("conversation");
+  const modelDirectories = ctx.get("modelDirectories");
+  const sessions = ctx.get("sessions");
+  if (conversation === void 0 || modelDirectories === void 0 || sessions === void 0) {
+    throw new Error("telos-multimodal: conversation, modelDirectories, and sessions are required");
+  }
+  const original = conversation.sendSession;
+  const routed = async (session, text, imageIds, mode) => {
+    if (imageIds.length === 0) return original.call(conversation, session, text, imageIds, mode);
+    try {
+      const directory = modelDirectories.directoryFor(session.sessionId);
+      const current = (await directory.load()).current;
+      const resolution = await controller.resolveImageRoute(current);
+      if (resolution.kind === "bridge") {
+        await directory.select(resolution.route);
+        notify(
+          conversation,
+          sessions,
+          session,
+          "info",
+          `\u5DF2\u4F7F\u7528 ${resolution.perceptionName} \u7406\u89E3\u56FE\u7247\uFF0C\u4ECD\u7531 ${resolution.routeName} \u56DE\u7B54\u3002`
+        );
+      }
+      await original.call(conversation, session, text, imageIds, mode);
+    } catch (error) {
+      notify(conversation, sessions, session, "error", errorMessage(error));
+      throw error;
+    }
+  };
+  conversation.sendSession = routed;
+  return () => {
+    if (conversation.sendSession === routed) conversation.sendSession = original;
+  };
+}
+
 // src/client/MultimodalSettingsSection.tsx
 var import_react = require("react");
 var import_jsx_runtime = require("react/jsx-runtime");
-var CAPABILITY_COPY = {
-  "image-understanding": { title: "\u56FE\u7247\u7406\u89E3", description: "\u770B\u61C2\u7167\u7247\u3001\u622A\u56FE\u3001\u56FE\u8868\u548C\u754C\u9762\u3002" },
-  ocr: { title: "OCR", description: "\u4ECE\u56FE\u7247\u548C\u626B\u63CF\u4EF6\u4E2D\u63D0\u53D6\u6587\u5B57\u4E0E\u7248\u9762\u3002" },
-  "speech-to-text": { title: "\u8BED\u97F3\u8F6C\u6587\u5B57", description: "\u8F6C\u5199\u8BED\u97F3\u6D88\u606F\u3001\u5F55\u97F3\u548C\u97F3\u89C6\u9891\u97F3\u8F68\u3002" },
-  "text-to-speech": { title: "\u6587\u5B57\u8F6C\u8BED\u97F3", description: "\u628A\u56DE\u590D\u751F\u6210\u53EF\u64AD\u653E\u7684\u8BED\u97F3\u3002" },
-  "video-understanding": { title: "\u89C6\u9891\u7406\u89E3", description: "\u5904\u7406\u89C6\u9891\u7684\u753B\u9762\u3001\u65F6\u95F4\u8F74\u548C\u97F3\u8F68\u3002" },
-  "document-understanding": { title: "\u6587\u6863\u7406\u89E3", description: "\u5904\u7406 PDF\u3001Office \u6587\u6863\u3001\u626B\u63CF\u9875\u548C\u7248\u9762\u3002" }
-};
-var EMPTY_ROUTE = { provider: "", model: "" };
-function routeOf(config) {
-  return config.route ?? EMPTY_ROUTE;
+function routeValue(route) {
+  return route === void 0 ? "" : JSON.stringify(route);
+}
+function parseRouteValue(value) {
+  if (value === "") return void 0;
+  const route = JSON.parse(value);
+  return { provider: route.provider, model: route.model };
 }
 function statusLabel(status) {
   if (status.state === "available") return "\u53EF\u7528";
   if (status.state === "incompatible") return "\u4E0D\u517C\u5BB9";
   if (status.state === "unverified") return "\u5F85\u9A8C\u8BC1";
-  if (status.state === "disabled") return "\u5DF2\u505C\u7528";
-  return "\u81EA\u52A8";
+  return "\u672A\u914D\u7F6E";
 }
-function RouteInputs({ route, catalog, id, onChange }) {
-  const models = (0, import_react.useMemo)(
-    () => catalog.find((group) => group.id === route.provider)?.models ?? catalog.flatMap((group) => group.models),
-    [catalog, route.provider]
-  );
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosMmRouteInputs", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
-      "Provider",
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { list: `${id}-providers`, onChange: (event) => onChange({ ...route, provider: event.target.value }), placeholder: "\u4F8B\u5982 openai", value: route.provider }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("datalist", { id: `${id}-providers`, children: catalog.map((group) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: group.id, children: group.name }, group.id)) })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
-      "Model",
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { list: `${id}-models`, onChange: (event) => onChange({ ...route, model: event.target.value }), placeholder: "\u6A21\u578B ID", value: route.model }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("datalist", { id: `${id}-models`, children: models.map((model) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: model.model, children: model.name }, `${model.provider}:${model.model}`)) })
-    ] })
-  ] });
-}
-function CapabilityEditor({ capability, config, status, catalog, onChange }) {
-  const copy = CAPABILITY_COPY[capability];
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { className: "telosMmCapability", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosMmCapabilityHeader", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: copy.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: copy.description })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { "data-status": status.state, children: statusLabel(status) })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "telosMmMode", children: [
-      "\u6A21\u578B\u8DEF\u7EBF",
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { onChange: (event) => {
-        const mode = event.target.value;
-        onChange(mode === "fixed" ? { mode, route: routeOf(config) } : { mode });
-      }, value: config.mode, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "auto", children: "\u81EA\u52A8\u9009\u62E9" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "fixed", children: "\u6307\u5B9A\u6A21\u578B" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "disabled", children: "\u505C\u7528" })
-      ] })
-    ] }),
-    config.mode === "fixed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RouteInputs, { catalog, id: `telos-mm-${capability}`, onChange: (route) => onChange({ mode: "fixed", route }), route: routeOf(config) }) : null,
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "telosMmStatusText", children: status.message })
-  ] });
+function routeKey(route) {
+  return `${route.provider}\0${route.model}`;
 }
 function MultimodalSettingsSection({ controller }) {
   const state = (0, import_react.useSyncExternalStore)(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
@@ -157,109 +153,82 @@ function MultimodalSettingsSection({ controller }) {
   (0, import_react.useEffect)(() => {
     if (state.view !== void 0) setDraft(state.view.settings);
   }, [state.view]);
+  const imageModels = (0, import_react.useMemo)(() => {
+    if (state.view === void 0) return [];
+    return state.view.catalog.flatMap((group) => group.models.map((model) => ({ ...model, providerName: group.name })));
+  }, [state.view]);
   if (draft === void 0 || state.view === void 0) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", { "aria-label": "\u591A\u6A21\u6001\u6A21\u578B\u914D\u7F6E", className: "telosMmSettings", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosMmLoading", children: state.error ?? "\u6B63\u5728\u8BFB\u53D6\u6A21\u578B\u76EE\u5F55\u2026" }) });
   }
   const view = state.view;
-  const updateRoute = (capability, config) => {
-    setDraft((current) => current === void 0 ? current : { ...current, routes: { ...current.routes, [capability]: config } });
-  };
-  const mainRoute = draft.mainModel.route ?? EMPTY_ROUTE;
-  const fixedRoutesValid = MULTIMODAL_CAPABILITIES.every((capability) => {
-    const route = draft.routes[capability];
-    return route.mode !== "fixed" || route.route?.provider.trim() !== "" && route.route?.model.trim() !== "";
-  });
-  const mainRouteValid = draft.mainModel.mode !== "fixed" || mainRoute.provider.trim() !== "" && mainRoute.model.trim() !== "";
+  const selectedMissing = draft.defaultModel !== void 0 && !imageModels.some((model) => routeKey(model) === routeKey(draft.defaultModel));
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { "aria-label": "\u591A\u6A21\u6001\u6A21\u578B\u914D\u7F6E", className: "telosMmSettings", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "telosMmHeader", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "\u591A\u6A21\u6001\u6A21\u578B" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "\u4E3A\u4E0D\u540C\u5A92\u4F53\u80FD\u529B\u6307\u5B9A\u6A21\u578B\u8DEF\u7EBF\u3002Provider \u7684\u5730\u5740\u548C API Key \u4ECD\u5728\u201C\u6A21\u578B\u201D\u8BBE\u7F6E\u4E2D\u7BA1\u7406\u3002" })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "\u9ED8\u8BA4\u591A\u6A21\u6001\u6A21\u578B" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "\u5F53\u524D\u4F1A\u8BDD\u6A21\u578B\u770B\u4E0D\u61C2\u56FE\u7247\u65F6\uFF0C\u7531\u8FD9\u91CC\u7684\u6A21\u578B\u5148\u5B8C\u6210\u89C6\u89C9\u7406\u89E3\uFF1B\u6700\u7EC8\u56DE\u7B54\u3001\u63A8\u7406\u548C\u5DE5\u5177\u8C03\u7528\u4ECD\u7531\u5F53\u524D\u4F1A\u8BDD\u6A21\u578B\u8D1F\u8D23\u3002" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosMmActions", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { disabled: state.loading, onClick: () => {
           void controller.refresh();
         }, type: "button", children: "\u5237\u65B0\u76EE\u5F55" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "data-primary": true, disabled: state.loading || !fixedRoutesValid || !mainRouteValid, onClick: () => {
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "data-primary": true, disabled: state.loading, onClick: () => {
           void controller.save(draft);
         }, type: "button", children: "\u4FDD\u5B58" })
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosMmPhase", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "\u914D\u7F6E\u57FA\u7840" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "\u672C\u9875\u4F1A\u6301\u4E45\u5316\u6A21\u578B\u4E0E\u9690\u79C1\u8DEF\u7EBF\uFF1B\u591A\u6A21\u6001\u5904\u7406\u8FD0\u884C\u65F6\u5C1A\u672A\u5728\u8FD9\u4E00\u9636\u6BB5\u542F\u7528\u3002" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "\u56FE\u7247\u8DEF\u7531\u5DF2\u542F\u7528" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "\u539F\u751F\u56FE\u7247\u6A21\u578B\u76F4\u63A5\u5904\u7406\uFF1B\u6587\u672C\u6A21\u578B\u901A\u8FC7 Telos \u903B\u8F91\u8DEF\u7531\u4F7F\u7528\u9ED8\u8BA4\u591A\u6A21\u6001\u6A21\u578B\uFF0C\u4E0D\u7ECF\u8FC7 MCP\u3002" })
     ] }),
     state.error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosMmBanner", "data-error": true, children: state.error }),
     state.notice === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosMmBanner", children: state.notice }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "telosMmMaster", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "\u542F\u7528 Telos \u591A\u6A21\u6001\u8DEF\u7EBF" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { children: "\u5173\u95ED\u540E\u4FDD\u7559\u914D\u7F6E\uFF0C\u4F46\u672A\u6765\u8FD0\u884C\u65F6\u53EA\u4F7F\u7528 DSH \u539F\u751F\u80FD\u529B\u3002" })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "\u81EA\u52A8\u8865\u8DB3\u56FE\u7247\u80FD\u529B" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { children: "\u5173\u95ED\u540E\uFF0C\u5F53\u524D\u6A21\u578B\u4E0D\u652F\u6301\u56FE\u7247\u65F6\u76F4\u63A5\u4F7F\u7528 DSH \u539F\u751F\u9519\u8BEF\u3002" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { checked: draft.enabled, onChange: (event) => setDraft({ ...draft, enabled: event.target.checked }), type: "checkbox" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosMmSectionTitle", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "\u4E3B\u6A21\u578B" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "\u7EE7\u7EED\u8D1F\u8D23\u63A8\u7406\u3001\u56DE\u7B54\u548C\u5DE5\u5177\u51B3\u7B56\uFF0C\u4E0D\u8981\u6C42\u5B83\u539F\u751F\u652F\u6301\u6240\u6709\u5A92\u4F53\u3002" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "\u6A21\u578B" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "API \u5730\u5740\u4E0E\u5BC6\u94A5\u7EE7\u7EED\u5728\u201C\u6A21\u578B\u201D\u8BBE\u7F6E\u4E2D\u914D\u7F6E\uFF0C\u672C\u9875\u53EA\u4FDD\u5B58 Provider \u4E0E\u6A21\u578B ID\u3002" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { className: "telosMmMainModel", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "telosMmMode", children: [
-        "\u9009\u62E9\u65B9\u5F0F",
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { onChange: (event) => {
-          const mode = event.target.value;
-          setDraft({ ...draft, mainModel: mode === "fixed" ? { mode, route: mainRoute } : { mode } });
-        }, value: draft.mainModel.mode, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "follow-session", children: "\u8DDF\u968F\u5F53\u524D\u4F1A\u8BDD" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "fixed", children: "\u56FA\u5B9A\u6A21\u578B" })
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { className: "telosMmModelCard", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
+        "\u9ED8\u8BA4\u591A\u6A21\u6001\u6A21\u578B",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { onChange: (event) => setDraft({ ...draft, defaultModel: parseRouteValue(event.target.value) }), value: routeValue(draft.defaultModel), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "\u672A\u914D\u7F6E" }),
+          selectedMissing && draft.defaultModel !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: routeValue(draft.defaultModel), children: [
+            draft.defaultModel.provider,
+            " \xB7 ",
+            draft.defaultModel.model,
+            "\uFF08\u5F85\u9A8C\u8BC1\uFF09"
+          ] }) : null,
+          view.catalog.map((group) => {
+            const models = imageModels.filter((model) => model.provider === group.id);
+            return models.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("optgroup", { label: group.name, children: models.map((model) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: routeValue(model), children: [
+              model.name,
+              model.inputModalities?.includes("image") ? "" : "\uFF08\u4FDD\u5B58\u65F6\u58F0\u660E\u56FE\u7247\u80FD\u529B\uFF09"
+            ] }, routeKey(model))) }, group.id);
+          })
         ] })
       ] }),
-      draft.mainModel.mode === "fixed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RouteInputs, { catalog: view.catalog, id: "telos-mm-main", onChange: (route) => setDraft({ ...draft, mainModel: { mode: "fixed", route } }), route: mainRoute }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "telosMmStatusText", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { "data-status": view.mainModelStatus.state, children: statusLabel(view.mainModelStatus) }),
-        view.mainModelStatus.message
-      ] })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosMmSectionTitle", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "\u80FD\u529B\u8DEF\u7EBF" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "\u201C\u81EA\u52A8\u201D\u4F1A\u5728\u8FD0\u884C\u65F6\u63A5\u5165\u540E\uFF0C\u7ED3\u5408\u80FD\u529B\u58F0\u660E\u3001\u53EF\u7528\u6027\u548C\u9690\u79C1\u7B56\u7565\u9009\u62E9\u3002" })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosMmCapabilities", children: MULTIMODAL_CAPABILITIES.map((capability) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-      CapabilityEditor,
-      {
-        capability,
-        catalog: view.catalog,
-        config: draft.routes[capability],
-        onChange: (config) => updateRoute(capability, config),
-        status: view.routeStatuses[capability]
-      },
-      capability
-    )) }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosMmSectionTitle", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "\u9690\u79C1\u4E0E\u672C\u5730\u4F18\u5148" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "\u8FD9\u4E9B\u662F\u672A\u6765\u8DEF\u7EBF\u89C4\u5212\u5668\u7684\u5F3A\u7EA6\u675F\uFF0C\u4E0D\u662F\u63D0\u793A\u8BCD\u5EFA\u8BAE\u3002" })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosMmPrivacy", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "\u4F18\u5148\u4F7F\u7528\u672C\u5730\u80FD\u529B" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { children: "\u540C\u7B49\u53EF\u7528\u65F6\u5148\u9009\u672C\u673A OCR\u3001\u8F6C\u5199\u6216\u89C6\u89C9\u6A21\u578B\u3002" })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { checked: draft.privacy.preferLocal, onChange: (event) => setDraft({ ...draft, privacy: { ...draft.privacy, preferLocal: event.target.checked } }), type: "checkbox" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosMmStatus", "data-status": view.defaultModelStatus.state, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: statusLabel(view.defaultModelStatus) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: view.defaultModelStatus.message })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "\u5A92\u4F53\u53D1\u9001\u5230\u4E91\u7AEF" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { children: "\u63A7\u5236\u539F\u59CB\u56FE\u7247\u3001\u97F3\u9891\u3001\u89C6\u9891\u548C\u6587\u6863\u80FD\u5426\u79BB\u5F00\u672C\u673A\u3002" })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { onChange: (event) => setDraft({ ...draft, privacy: { ...draft.privacy, cloudMediaPolicy: event.target.value } }), value: draft.privacy.cloudMediaPolicy, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "ask", children: "\u6BCF\u6B21\u9996\u6B21\u8BE2\u95EE" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "allow-configured", children: "\u5141\u8BB8\u5DF2\u914D\u7F6E\u8DEF\u7EBF" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "local-only", children: "\u4EC5\u9650\u672C\u5730" })
-        ] })
-      ] })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "\u9009\u62E9\u5C1A\u672A\u58F0\u660E\u56FE\u7247\u80FD\u529B\u7684\u81EA\u5B9A\u4E49 OpenAI \u517C\u5BB9\u6A21\u578B\u65F6\uFF0C\u4FDD\u5B58\u4F1A\u901A\u8FC7 DSH Settings API \u5C06\u8BE5\u6A21\u578B\u58F0\u660E\u4E3A text + image\uFF1B\u4E0D\u76F4\u63A5\u6539\u5199\u914D\u7F6E\u6587\u4EF6\u3002\u82E5\u58F0\u660E\u6216\u8DEF\u7531\u5931\u8D25\uFF0C\u56FE\u7247\u4E0D\u4F1A\u63D0\u4EA4\u5230 Session\uFF0C\u8F93\u5165\u6587\u5B57\u548C\u56FE\u7247\u8349\u7A3F\u90FD\u4F1A\u4FDD\u7559\u3002" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosMmFlow", "aria-label": "\u56FE\u7247\u5904\u7406\u6D41\u7A0B", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "\u539F\u59CB\u56FE\u7247\u4FDD\u5B58\u5230 DSH Session" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("i", { children: "\u2192" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "\u9ED8\u8BA4\u6A21\u578B\u751F\u6210\u89C6\u89C9\u89C2\u5BDF" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("i", { children: "\u2192" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "\u5F53\u524D\u6A21\u578B\u56DE\u7B54\u4E0E\u8C03\u7528\u5DE5\u5177" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("footer", { className: "telosMmFooter", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "\u914D\u7F6E\u6309\u5F53\u524D\u8BBE\u5907\u7684\u672C\u5730\u7528\u6237\u4FDD\u5B58\uFF0C\u4E0D\u968F\u5DE5\u4F5C\u533A\u5207\u6362\uFF1B\u6A21\u578B\u5BC6\u94A5\u4E0D\u4F1A\u5199\u5165\u6B64\u914D\u7F6E\u6587\u4EF6\u3002" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "\u914D\u7F6E\u6309\u5F53\u524D\u8BBE\u5907\u7684\u672C\u5730\u7528\u6237\u4FDD\u5B58\uFF0C\u4E0D\u968F\u5DE5\u4F5C\u533A\u5207\u6362\uFF1BAPI Key \u4E0D\u4F1A\u5199\u5165\u591A\u6A21\u6001\u914D\u7F6E\u3002" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "data-danger": true, disabled: state.loading, onClick: () => {
         if (!resetArmed) setResetArmed(true);
         else {
@@ -274,16 +243,16 @@ function MultimodalSettingsSection({ controller }) {
 // src/client/styles.ts
 var MULTIMODAL_CLIENT_CSS = String.raw`
 .telosMmSettings{box-sizing:border-box;width:100%;height:100%;overflow:auto;padding:6px 0 32px;color:var(--dsw-alias-label-primary)}
-.telosMmHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px}.telosMmHeader h1{margin:0 0 5px;font-size:18px}.telosMmHeader p,.telosMmSectionTitle p{margin:0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.6}
+.telosMmHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px}.telosMmHeader h1{margin:0 0 5px;font-size:18px}.telosMmHeader p,.telosMmSectionTitle p{max-width:720px;margin:0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.6}
 .telosMmActions{display:flex;gap:8px}.telosMmSettings button{min-height:32px;padding:5px 11px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:inherit;cursor:pointer}.telosMmSettings button[data-primary]{border-color:transparent;background:var(--dsw-alias-brand-primary);color:white}.telosMmSettings button[data-danger]{color:var(--dsw-alias-state-error-primary)}.telosMmSettings button:disabled{cursor:not-allowed;opacity:.5}
 .telosMmPhase,.telosMmBanner{display:flex;gap:9px;margin-bottom:14px;padding:10px 12px;border-radius:9px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.55}.telosMmPhase strong{color:var(--dsw-alias-brand-primary);white-space:nowrap}.telosMmBanner[data-error]{color:var(--dsw-alias-state-error-primary)}
-.telosMmMaster{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:16px 0;border-top:1px solid var(--dsw-alias-border-l1);border-bottom:1px solid var(--dsw-alias-border-l1)}.telosMmMaster span,.telosMmPrivacy label span{display:grid;gap:4px}.telosMmMaster small,.telosMmPrivacy small{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1.5}.telosMmMaster input,.telosMmPrivacy input{width:18px;height:18px;accent-color:var(--dsw-alias-brand-primary)}
+.telosMmMaster{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:16px 0;border-top:1px solid var(--dsw-alias-border-l1);border-bottom:1px solid var(--dsw-alias-border-l1)}.telosMmMaster span{display:grid;gap:4px}.telosMmMaster small{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1.5}.telosMmMaster input{width:18px;height:18px;accent-color:var(--dsw-alias-brand-primary)}
 .telosMmSectionTitle{display:flex;align-items:baseline;gap:12px;margin:28px 0 12px}.telosMmSectionTitle h2{margin:0;font-size:14px;white-space:nowrap}
-.telosMmMainModel,.telosMmCapability{padding:14px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}.telosMmCapabilities{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.telosMmCapabilityHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.telosMmCapabilityHeader h3{margin:0 0 4px;font-size:13px}.telosMmCapabilityHeader p{margin:0;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1.45}.telosMmCapabilityHeader>span,.telosMmStatusText>span{padding:3px 7px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-tertiary);font-size:10px;white-space:nowrap}.telosMmCapabilityHeader>[data-status=available],.telosMmStatusText>[data-status=available]{color:var(--dsw-alias-state-success-primary)}.telosMmCapabilityHeader>[data-status=incompatible],.telosMmStatusText>[data-status=incompatible]{color:var(--dsw-alias-state-error-primary)}
-.telosMmMode{display:grid;grid-template-columns:92px 1fr;align-items:center;gap:10px;margin-top:13px;color:var(--dsw-alias-label-secondary);font-size:11px}.telosMmRouteInputs{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:9px}.telosMmRouteInputs label{display:grid;gap:5px;color:var(--dsw-alias-label-secondary);font-size:10px}.telosMmSettings input[type=text],.telosMmSettings input:not([type]),.telosMmSettings select{box-sizing:border-box;width:100%;min-height:34px;padding:6px 9px;border:1px solid var(--dsw-alias-border-l1);border-radius:7px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font:inherit}.telosMmStatusText{display:flex;align-items:center;gap:7px;margin:10px 0 0;color:var(--dsw-alias-label-tertiary);font-size:10px;line-height:1.45}
-.telosMmPrivacy{border-top:1px solid var(--dsw-alias-border-l1)}.telosMmPrivacy>label{display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:64px;border-bottom:1px solid var(--dsw-alias-border-l1)}.telosMmPrivacy select{width:190px}
+.telosMmModelCard{display:grid;gap:13px;padding:16px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}.telosMmModelCard>label{display:grid;grid-template-columns:180px minmax(260px,520px);align-items:center;gap:12px;color:var(--dsw-alias-label-secondary);font-size:12px}.telosMmSettings select{box-sizing:border-box;width:100%;min-height:36px;padding:6px 9px;border:1px solid var(--dsw-alias-border-l1);border-radius:7px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font:inherit}.telosMmModelCard>p{margin:0;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1.55}
+.telosMmStatus{display:flex;align-items:center;gap:8px;color:var(--dsw-alias-label-tertiary);font-size:11px}.telosMmStatus strong{padding:3px 7px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);font-size:10px}.telosMmStatus[data-status=available] strong{color:var(--dsw-alias-state-success-primary)}.telosMmStatus[data-status=incompatible] strong{color:var(--dsw-alias-state-error-primary)}
+.telosMmFlow{display:flex;align-items:center;gap:9px;margin-top:18px;padding:13px;border-radius:9px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:11px}.telosMmFlow i{color:var(--dsw-alias-label-tertiary);font-style:normal}
 .telosMmFooter{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:24px}.telosMmFooter p,.telosMmLoading{color:var(--dsw-alias-label-tertiary);font-size:11px}.telosMmLoading{padding:50px 20px;text-align:center}
-@media(max-width:900px){.telosMmHeader,.telosMmFooter{align-items:stretch;flex-direction:column}.telosMmActions{justify-content:flex-end}.telosMmCapabilities{grid-template-columns:1fr}.telosMmRouteInputs{grid-template-columns:1fr}.telosMmSectionTitle{align-items:flex-start;flex-direction:column;gap:3px}}
+@media(max-width:900px){.telosMmHeader,.telosMmFooter{align-items:stretch;flex-direction:column}.telosMmActions{justify-content:flex-end}.telosMmModelCard>label{grid-template-columns:1fr}.telosMmSectionTitle{align-items:flex-start;flex-direction:column;gap:3px}.telosMmFlow{align-items:flex-start;flex-direction:column}.telosMmFlow i{transform:rotate(90deg)}}
 `;
 function installMultimodalStyles() {
   const style = document.createElement("style");
@@ -294,11 +263,12 @@ function installMultimodalStyles() {
 }
 
 // src/client/index.ts
-var inject = ["slots", "connection"];
+var inject = ["slots", "connection", "conversation", "modelDirectories", "sessions"];
 function apply(ctx) {
   const controller = new MultimodalClientController(ctx.connection.rpc);
   const injected = () => ({ controller });
   ctx.effect(() => installMultimodalStyles(), "telos-multimodal: client styles");
+  ctx.effect(() => installImageRouting(ctx, controller), "telos-multimodal: image routing");
   ctx.slots.inject("settings.section", () => ctx.slots.register({
     name: "settings.section",
     id: "multimodal",

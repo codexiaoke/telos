@@ -1,26 +1,40 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-llm'
+import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import {
-  MULTIMODAL_CAPABILITIES,
-  type CapabilityRouteConfig,
+  TELOS_MULTIMODAL_PROVIDER,
+  type ImageRouteResolution,
   type ModelCatalogEntry,
   type ModelProviderGroup,
   type ModelRoute,
-  type MultimodalCapability,
+  type ModelSelectionRoute,
   type MultimodalSettings,
   type MultimodalSettingsView,
   type RouteStatus,
 } from './contracts.js'
+import { logicalSelection } from './routes.js'
 import { MultimodalSettingsStore, parseMultimodalSettings } from './store.js'
 
-const IMAGE_CAPABILITIES = new Set<MultimodalCapability>(['image-understanding', 'ocr'])
+const PI_AI_SETTINGS = settingsNamespace('llm-pi-ai')
+
+interface PiAiSettings {
+  providers?: Record<string, { models?: Array<{ id?: string; input?: string[] }> }>
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+export class MultimodalRouteUnavailableError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'MultimodalRouteUnavailableError'
+  }
+}
+
 export async function buildModelCatalog(ctx: Pick<Context, 'llm'>): Promise<ModelProviderGroup[]> {
-  return Promise.all(ctx.llm.listProviders().map(async (provider) => {
+  const providers = ctx.llm.listProviders().filter(provider => provider.id !== TELOS_MULTIMODAL_PROVIDER)
+  return Promise.all(providers.map(async (provider) => {
     try {
       const models = await ctx.llm.listModels(provider.id)
       return {
@@ -44,57 +58,39 @@ function findModel(catalog: readonly ModelProviderGroup[], route: ModelRoute): M
   return catalog.find(group => group.id === route.provider)?.models.find(model => model.model === route.model)
 }
 
-function fixedStatus(
-  catalog: readonly ModelProviderGroup[],
-  route: ModelRoute,
-  requireImage: boolean,
-): RouteStatus {
+function defaultModelStatus(settings: MultimodalSettings, catalog: readonly ModelProviderGroup[]): RouteStatus {
+  const route = settings.defaultModel
+  if (route === undefined) return { state: 'unconfigured', message: '尚未配置。文本模型发送图片时会保留草稿并提示配置。' }
   const model = findModel(catalog, route)
-  if (model === undefined) {
-    return { state: 'unverified', message: '未在当前 DSH 模型目录中找到；路线已保存，运行时接入后仍需验证。' }
-  }
-  if (requireImage && model.inputModalities !== undefined && !model.inputModalities.includes('image')) {
-    return { state: 'incompatible', message: '该模型明确声明不支持图片输入。' }
-  }
-  if (requireImage && model.inputModalities === undefined) {
-    return { state: 'unverified', message: '模型存在，但没有声明图片能力；运行时不会把它当作已验证视觉模型。' }
-  }
-  return { state: 'available', message: '模型已在当前 DSH 目录中找到。' }
-}
-
-function capabilityStatus(
-  catalog: readonly ModelProviderGroup[],
-  capability: MultimodalCapability,
-  route: CapabilityRouteConfig,
-): RouteStatus {
-  if (route.mode === 'disabled') return { state: 'disabled', message: '此能力已停用。' }
-  if (route.mode === 'auto') return { state: 'automatic', message: '运行时接入后按能力、隐私和可用性自动选择。' }
-  return fixedStatus(catalog, route.route as ModelRoute, IMAGE_CAPABILITIES.has(capability))
+  if (model === undefined) return { state: 'unverified', message: '当前 DSH 模型目录中找不到该模型。' }
+  if (model.inputModalities === undefined) return { state: 'unverified', message: '模型没有声明图片输入能力，不能作为默认多模态模型。' }
+  if (!model.inputModalities.includes('image')) return { state: 'incompatible', message: '该模型明确声明不支持图片输入。' }
+  return { state: 'available', message: '图片能力已由 DSH 模型目录确认。' }
 }
 
 export function buildSettingsView(
   settings: MultimodalSettings,
   catalog: ModelProviderGroup[],
 ): MultimodalSettingsView {
-  const routeStatuses = Object.fromEntries(MULTIMODAL_CAPABILITIES.map(capability => [
-    capability,
-    capabilityStatus(catalog, capability, settings.routes[capability]),
-  ])) as Record<MultimodalCapability, RouteStatus>
-  const mainModelStatus = settings.mainModel.mode === 'follow-session'
-    ? { state: 'automatic', message: '跟随每个会话当前选择的主模型。' } as const
-    : fixedStatus(catalog, settings.mainModel.route as ModelRoute, false)
-  return { settings, catalog, mainModelStatus, routeStatuses, runtimePhase: 'configuration-only' }
+  return {
+    settings,
+    catalog,
+    defaultModelStatus: defaultModelStatus(settings, catalog),
+    runtimePhase: 'image-routing',
+  }
 }
 
 export class MultimodalSettingsService {
-  constructor(private readonly ctx: Pick<Context, 'llm'>, private readonly store: MultimodalSettingsStore) {}
+  constructor(private readonly ctx: Pick<Context, 'llm' | 'settings'>, private readonly store: MultimodalSettingsStore) {}
 
   async getView(): Promise<MultimodalSettingsView> {
     return buildSettingsView(this.store.load(), await buildModelCatalog(this.ctx))
   }
 
   async save(value: unknown): Promise<MultimodalSettingsView> {
-    const settings = this.store.save(parseMultimodalSettings(value))
+    const parsed = parseMultimodalSettings(value)
+    if (parsed.enabled && parsed.defaultModel !== undefined) await this.ensureImageCapability(parsed.defaultModel)
+    const settings = this.store.save(parsed)
     return buildSettingsView(settings, await buildModelCatalog(this.ctx))
   }
 
@@ -103,10 +99,78 @@ export class MultimodalSettingsService {
     return buildSettingsView(settings, await buildModelCatalog(this.ctx))
   }
 
-  async handle(endpoint: string, payload: unknown): Promise<MultimodalSettingsView> {
+  async resolveImageRoute(value: unknown): Promise<ImageRouteResolution> {
+    const current = parseSelection(value)
+    const settings = this.store.load()
+    const currentInfo = await this.ctx.llm.resolveModelInfo(current.provider, current.model)
+    if (currentInfo.inputModalities?.includes('image')) return { kind: 'native', route: current }
+    if (!settings.enabled) {
+      throw new MultimodalRouteUnavailableError('Telos 多模态路由已关闭；当前模型不支持图片。')
+    }
+    const fallback = settings.defaultModel
+    if (fallback === undefined) {
+      throw new MultimodalRouteUnavailableError('当前模型不支持图片，请先在“设置 → 多模态”配置默认多模态模型。')
+    }
+    let fallbackInfo
+    try {
+      fallbackInfo = await this.ctx.llm.resolveModelInfo(fallback.provider, fallback.model)
+    } catch (error) {
+      throw new MultimodalRouteUnavailableError(`默认多模态模型不可用：${errorMessage(error)}`)
+    }
+    if (!fallbackInfo.inputModalities?.includes('image')) {
+      throw new MultimodalRouteUnavailableError('默认多模态模型没有声明图片输入能力，请重新配置。')
+    }
+    return {
+      kind: 'bridge',
+      route: logicalSelection(current),
+      routeName: currentInfo.name,
+      perceptionRoute: fallback,
+      perceptionName: fallbackInfo.name,
+    }
+  }
+
+  async handle(endpoint: string, payload: unknown): Promise<MultimodalSettingsView | ImageRouteResolution> {
     if (endpoint === 'get') return this.getView()
     if (endpoint === 'save') return this.save(payload)
     if (endpoint === 'reset') return this.reset()
+    if (endpoint === 'resolve-image-route') return this.resolveImageRoute(payload)
     throw new TypeError(`unknown multimodal endpoint: ${endpoint}`)
+  }
+
+  private async ensureImageCapability(route: ModelRoute): Promise<void> {
+    const current = await this.ctx.llm.resolveModelInfo(route.provider, route.model)
+    if (current.inputModalities?.includes('image')) return
+
+    const config = this.ctx.settings.get(PI_AI_SETTINGS) as PiAiSettings | undefined
+    const models = config?.providers?.[route.provider]?.models
+    const modelIndex = models?.findIndex(model => model.id === route.model) ?? -1
+    if (modelIndex < 0) {
+      throw new MultimodalRouteUnavailableError(
+        '该模型没有声明图片能力，也不是可由 Telos 配置的自定义模型。请改选支持图片的模型。',
+      )
+    }
+    const nextModels = models!.map((model, index) => index === modelIndex
+      ? { ...model, input: ['text', 'image'] }
+      : model)
+    await this.ctx.settings.mutate(PI_AI_SETTINGS, [{
+      op: 'set',
+      path: ['providers', route.provider, 'models'],
+      value: nextModels,
+    }])
+  }
+}
+
+function parseSelection(value: unknown): ModelSelectionRoute {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('current model selection must be an object')
+  const input = value as Record<string, unknown>
+  if (typeof input.provider !== 'string' || input.provider.trim() === '') throw new TypeError('current.provider must be a non-empty string')
+  if (typeof input.model !== 'string' || input.model.trim() === '') throw new TypeError('current.model must be a non-empty string')
+  if (input.reasoningEffort !== undefined && typeof input.reasoningEffort !== 'string') {
+    throw new TypeError('current.reasoningEffort must be a string')
+  }
+  return {
+    provider: input.provider,
+    model: input.model,
+    ...(typeof input.reasoningEffort === 'string' ? { reasoningEffort: input.reasoningEffort } : {}),
   }
 }

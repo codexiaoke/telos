@@ -1,17 +1,12 @@
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import {
-  MULTIMODAL_CAPABILITIES,
-  type CapabilityRouteConfig,
-  type CloudMediaPolicy,
-  type MainModelConfig,
+  TELOS_MULTIMODAL_PROVIDER,
   type ModelRoute,
-  type MultimodalCapability,
   type MultimodalSettings,
 } from './contracts.js'
 
 const ROUTE_TEXT_MAX_LENGTH = 240
-const CLOUD_POLICIES = new Set<CloudMediaPolicy>(['ask', 'allow-configured', 'local-only'])
 
 function object(value: unknown, field: string): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new TypeError(`${field} must be an object`)
@@ -39,54 +34,44 @@ function routeText(value: unknown, field: string): string {
 function modelRoute(value: unknown, field: string): ModelRoute {
   const input = object(value, field)
   const provider = routeText(input.provider, `${field}.provider`)
-  if (provider === 'telos-multimodal') throw new TypeError(`${field}.provider cannot recursively target telos-multimodal`)
+  if (provider === TELOS_MULTIMODAL_PROVIDER) {
+    throw new TypeError(`${field}.provider cannot recursively target ${TELOS_MULTIMODAL_PROVIDER}`)
+  }
   return { provider, model: routeText(input.model, `${field}.model`) }
 }
 
-function mainModel(value: unknown): MainModelConfig {
-  const input = object(value, 'mainModel')
-  if (input.mode === 'follow-session') return { mode: 'follow-session' }
-  if (input.mode !== 'fixed') throw new TypeError('mainModel.mode must be follow-session or fixed')
-  return { mode: 'fixed', route: modelRoute(input.route, 'mainModel.route') }
+interface LegacySettings {
+  enabled?: unknown
+  routes?: unknown
 }
 
-function capabilityRoute(value: unknown, field: string): CapabilityRouteConfig {
-  const input = object(value, field)
-  if (input.mode === 'auto' || input.mode === 'disabled') return { mode: input.mode }
-  if (input.mode !== 'fixed') throw new TypeError(`${field}.mode must be auto, fixed, or disabled`)
-  return { mode: 'fixed', route: modelRoute(input.route, `${field}.route`) }
+function migrateLegacySettings(input: LegacySettings): MultimodalSettings {
+  const enabled = boolean(input.enabled, 'enabled')
+  const routes = object(input.routes, 'routes')
+  const imageRoute = object(routes['image-understanding'], 'routes.image-understanding')
+  return {
+    schemaVersion: 2,
+    enabled,
+    ...(imageRoute.mode === 'fixed'
+      ? { defaultModel: modelRoute(imageRoute.route, 'routes.image-understanding.route') }
+      : {}),
+  }
 }
 
 export function defaultMultimodalSettings(): MultimodalSettings {
-  return {
-    schemaVersion: 1,
-    enabled: true,
-    mainModel: { mode: 'follow-session' },
-    routes: Object.fromEntries(MULTIMODAL_CAPABILITIES.map(capability => [capability, { mode: 'auto' }])) as Record<MultimodalCapability, CapabilityRouteConfig>,
-    privacy: { preferLocal: true, cloudMediaPolicy: 'ask' },
-  }
+  return { schemaVersion: 2, enabled: true }
 }
 
 export function parseMultimodalSettings(value: unknown): MultimodalSettings {
   const input = object(value, 'settings')
-  if (input.schemaVersion !== 1) throw new TypeError('unsupported multimodal settings schema')
-  const routes = object(input.routes, 'routes')
-  const privacy = object(input.privacy, 'privacy')
-  if (!CLOUD_POLICIES.has(privacy.cloudMediaPolicy as CloudMediaPolicy)) {
-    throw new TypeError('privacy.cloudMediaPolicy is invalid')
-  }
+  if (input.schemaVersion === 1) return migrateLegacySettings(input)
+  if (input.schemaVersion !== 2) throw new TypeError('unsupported multimodal settings schema')
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     enabled: boolean(input.enabled, 'enabled'),
-    mainModel: mainModel(input.mainModel),
-    routes: Object.fromEntries(MULTIMODAL_CAPABILITIES.map(capability => [
-      capability,
-      capabilityRoute(routes[capability], `routes.${capability}`),
-    ])) as Record<MultimodalCapability, CapabilityRouteConfig>,
-    privacy: {
-      preferLocal: boolean(privacy.preferLocal, 'privacy.preferLocal'),
-      cloudMediaPolicy: privacy.cloudMediaPolicy as CloudMediaPolicy,
-    },
+    ...(input.defaultModel === undefined || input.defaultModel === null
+      ? {}
+      : { defaultModel: modelRoute(input.defaultModel, 'defaultModel') }),
   }
 }
 

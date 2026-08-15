@@ -17,7 +17,7 @@ describe('multimodal Client plugin', () => {
       },
     }
     apply(ctx as never)
-    expect(inject).toEqual(['slots', 'connection'])
+    expect(inject).toEqual(['slots', 'connection', 'conversation', 'modelDirectories', 'sessions'])
     expect(registrations).toEqual([expect.objectContaining({
       name: 'settings.section', id: 'multimodal', order: 20, label: '多模态', component: MultimodalSettingsSection,
     })])

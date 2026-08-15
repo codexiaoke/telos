@@ -218,9 +218,18 @@ importers:
       '@deepseek-ai/cordis':
         specifier: link:../../third_party/deepseek-harness/vendor/cordis
         version: link:../../third_party/deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: link:../../third_party/deepseek-harness/packages/client/ui-conversation
+        version: link:../../third_party/deepseek-harness/packages/client/ui-conversation
+      '@deepseek-ai/dsh-client-ui-model-selection':
+        specifier: link:../../third_party/deepseek-harness/packages/client/ui-model-selection
+        version: link:../../third_party/deepseek-harness/packages/client/ui-model-selection
       '@deepseek-ai/dsh-llm':
         specifier: link:../../third_party/deepseek-harness/packages/llm/llm
         version: link:../../third_party/deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-settings':
+        specifier: link:../../third_party/deepseek-harness/packages/settings/settings
+        version: link:../../third_party/deepseek-harness/packages/settings/settings
       '@types/node':
         specifier: 26.2.0
         version: 26.2.0

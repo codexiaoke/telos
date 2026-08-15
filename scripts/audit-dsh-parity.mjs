@@ -11,6 +11,7 @@ const dshCli = resolve(dshRoot, 'apps/cli/lib/bin.js')
 const sidebarRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar')
 const layoutRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-layout')
 const continuityRoot = resolve(repositoryRoot, 'plugins/dsh-continuity')
+const mcpManagerRoot = resolve(repositoryRoot, 'plugins/dsh-mcp-manager')
 const patchPath = resolve(sidebarRoot, 'telos.web.patch.yml')
 const temporaryRoot = mkdtempSync(join(tmpdir(), 'telos-dsh-parity-'))
 
@@ -68,6 +69,10 @@ try {
     resolve(continuityRoot, 'lib/index.js'),
     resolve(continuityRoot, 'lib/client.js'),
     resolve(continuityRoot, 'lib/BUILD.json'),
+    resolve(mcpManagerRoot, 'package.json'),
+    resolve(mcpManagerRoot, 'lib/index.js'),
+    resolve(mcpManagerRoot, 'lib/client.js'),
+    resolve(mcpManagerRoot, 'lib/BUILD.json'),
     patchPath,
   ]) {
     assert(existsSync(artifact), `required full-Web artifact is missing: ${artifact}`)
@@ -97,10 +102,12 @@ try {
   const profileRoot = resolve(temporaryRoot, 'profile-resolution')
   const installedLayout = resolve(profileRoot, 'node_modules/@deepseek-ai/dsh-client-ui-layout')
   const installedContinuity = resolve(profileRoot, 'node_modules/@telos/dsh-continuity')
+  const installedMcpManager = resolve(profileRoot, 'node_modules/@telos/dsh-mcp-manager')
   mkdirSync(resolve(profileRoot, 'node_modules/@deepseek-ai'), { recursive: true })
   mkdirSync(resolve(profileRoot, 'node_modules/@telos'), { recursive: true })
   cpSync(layoutRoot, installedLayout, { recursive: true })
   cpSync(continuityRoot, installedContinuity, { recursive: true })
+  cpSync(mcpManagerRoot, installedMcpManager, { recursive: true })
   const profileAnchor = resolve(profileRoot, 'cordis.yml')
   writeFileSync(profileAnchor, '')
   const profileRequire = createRequire(profileAnchor)
@@ -113,6 +120,11 @@ try {
   assert(
     realpathSync(resolvedContinuityManifest) === realpathSync(resolve(installedContinuity, 'package.json')),
     `Profile-local continuity plugin does not win package resolution: ${resolvedContinuityManifest}`,
+  )
+  const resolvedMcpManagerManifest = profileRequire.resolve('@telos/dsh-mcp-manager/package.json')
+  assert(
+    realpathSync(resolvedMcpManagerManifest) === realpathSync(resolve(installedMcpManager, 'package.json')),
+    `Profile-local MCP manager plugin does not win package resolution: ${resolvedMcpManagerManifest}`,
   )
 
   const requiredSurfaceIds = [
@@ -162,7 +174,7 @@ try {
     .map((row) => row.id)
     .filter((id) => !defaultById.has(id))
   assert(
-    isDeepStrictEqual(addedIds, ['telos-ui-sidebar', 'telos-continuity']),
+    isDeepStrictEqual(addedIds, ['telos-ui-sidebar', 'telos-continuity', 'telos-mcp-manager']),
     `unexpected Telos-only rows: ${addedIds.join(', ')}`,
   )
   const telosSidebar = effectiveById.get('telos-ui-sidebar')
@@ -185,6 +197,15 @@ try {
     }),
     'Telos continuity bounded runtime configuration changed',
   )
+  const telosMcpManager = effectiveById.get('telos-mcp-manager')
+  assert(telosMcpManager?.name === '@telos/dsh-mcp-manager', 'Telos MCP manager package name changed')
+  assert(telosMcpManager.disabled !== true, 'Telos MCP manager plugin is disabled')
+  assert(
+    isDeepStrictEqual(telosMcpManager.config, {
+      storePath: { javascriptSource: "dshHomePath('telos', 'mcp-servers.json')" },
+    }),
+    'Telos MCP manager storage configuration changed',
+  )
   const continuityManifest = JSON.parse(readFileSync(resolve(continuityRoot, 'package.json'), 'utf8'))
   assert(continuityManifest.name === '@telos/dsh-continuity', 'continuity manifest identity changed')
   assert(continuityManifest.private === true, 'continuity package must stay private')
@@ -196,21 +217,33 @@ try {
     ]),
     'continuity Client dependency edges changed',
   )
+  const mcpManagerManifest = JSON.parse(readFileSync(resolve(mcpManagerRoot, 'package.json'), 'utf8'))
+  assert(mcpManagerManifest.name === '@telos/dsh-mcp-manager', 'MCP manager manifest identity changed')
+  assert(mcpManagerManifest.private === true, 'MCP manager package must stay private')
   assert(
-    effectiveRows.length === defaultRows.length + 2,
-    `expected ${String(defaultRows.length + 2)} effective rows, found ${String(effectiveRows.length)}`,
+    isDeepStrictEqual(mcpManagerManifest.dsh?.client?.inject, [
+      '@deepseek-ai/dsh-client-connection',
+      '@deepseek-ai/dsh-client-runtime',
+      '@deepseek-ai/dsh-client-ui-settings',
+    ]),
+    'MCP manager Client dependency edges changed',
+  )
+  assert(
+    effectiveRows.length === defaultRows.length + 3,
+    `expected ${String(defaultRows.length + 3)} effective rows, found ${String(effectiveRows.length)}`,
   )
 
   // Reading the tracked file here makes the same patch consumed by Electron
   // part of the audit input, instead of re-creating its contents in this script.
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-ui-sidebar'), 'tracked patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-continuity'), 'tracked continuity patch is incomplete')
+  assert(readFileSync(patchPath, 'utf8').includes('id: telos-mcp-manager'), 'tracked MCP manager patch is incomplete')
 
   process.stdout.write(`[PASS] DSH default Web rows: ${String(defaultRows.length)}\n`)
   process.stdout.write(`[PASS] Unchanged upstream rows: ${String(defaultRows.length - 1)}\n`)
   process.stdout.write('[PASS] Explained upstream delta: ui-sidebar disabled\n')
-  process.stdout.write('[PASS] Explained Telos additions: telos-ui-sidebar and telos-continuity enabled\n')
-  process.stdout.write('[PASS] Profile resolves the Telos Renderer derivative and continuity Host plugin\n')
+  process.stdout.write('[PASS] Explained Telos additions: telos-ui-sidebar, telos-continuity, and telos-mcp-manager enabled\n')
+  process.stdout.write('[PASS] Profile resolves the Telos Renderer derivative, continuity, and MCP manager Host plugins\n')
   process.stdout.write(`[PASS] Required functional surfaces: ${String(requiredSurfaceIds.length)}\n`)
   process.stdout.write('Telos effective DSH Web composition is structurally equivalent to the pinned default.\n')
 } finally {

@@ -9,6 +9,7 @@ import {
   resolveDshNodeExecutable,
   resolveDshSourceRoot,
   resolveTelosDshContinuityPackageRoot,
+  resolveTelosDshMcpManagerPackageRoot,
   resolveTelosDshLayoutPackageRoot,
   resolveTelosDshSidebarPackageRoot,
 } from './application/dsh-runtime-paths.js'
@@ -129,6 +130,7 @@ async function startApplication(): Promise<void> {
     sidebarPackageRoot: resolveTelosDshSidebarPackageRoot(),
     layoutPackageRoot: resolveTelosDshLayoutPackageRoot(),
     continuityPackageRoot: resolveTelosDshContinuityPackageRoot(),
+    mcpManagerPackageRoot: resolveTelosDshMcpManagerPackageRoot(),
   })
   dshWeb = new DshWebSupervisor({
     sourceRoot: resolveDshSourceRoot(),

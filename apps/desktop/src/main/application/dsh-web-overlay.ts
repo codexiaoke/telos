@@ -7,11 +7,13 @@ const WEB_PROFILE_NAME = 'web'
 const DSH_LAYOUT_PACKAGE = '@deepseek-ai/dsh-client-ui-layout'
 const TELOS_SIDEBAR_PACKAGE = '@telos/dsh-client-ui-sidebar'
 const TELOS_CONTINUITY_PACKAGE = '@telos/dsh-continuity'
+const TELOS_MCP_MANAGER_PACKAGE = '@telos/dsh-mcp-manager'
 
 export interface TelosDshWebOverlaySources {
   sidebarPackageRoot: string
   layoutPackageRoot: string
   continuityPackageRoot: string
+  mcpManagerPackageRoot: string
 }
 
 /** Read the tracked DSH patch that defines Telos's complete allowed roster delta. */
@@ -81,9 +83,11 @@ export function prepareTelosDshWebPatch(
   removeLegacyFlatPackage(dshHome, TELOS_SIDEBAR_PACKAGE)
   removeLegacyFlatPackage(dshHome, DSH_LAYOUT_PACKAGE)
   removeLegacyFlatPackage(dshHome, TELOS_CONTINUITY_PACKAGE)
+  removeLegacyFlatPackage(dshHome, TELOS_MCP_MANAGER_PACKAGE)
   installProfilePackage(dshHome, sources.sidebarPackageRoot, TELOS_SIDEBAR_PACKAGE, ['lib/client.js'])
   installProfilePackage(dshHome, sources.layoutPackageRoot, DSH_LAYOUT_PACKAGE, ['lib/client.js'])
   installProfilePackage(dshHome, sources.continuityPackageRoot, TELOS_CONTINUITY_PACKAGE, ['lib/index.js', 'lib/client.js'])
+  installProfilePackage(dshHome, sources.mcpManagerPackageRoot, TELOS_MCP_MANAGER_PACKAGE, ['lib/index.js', 'lib/client.js'])
 
   mkdirSync(dshHome, { recursive: true })
   const path = join(dshHome, PATCH_FILENAME)

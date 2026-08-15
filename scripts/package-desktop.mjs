@@ -47,6 +47,9 @@ function assertRuntimeBuilt() {
     join(repositoryRoot, 'plugins/dsh-continuity/lib/index.js'),
     join(repositoryRoot, 'plugins/dsh-continuity/lib/client.js'),
     join(repositoryRoot, 'plugins/dsh-continuity/lib/BUILD.json'),
+    join(repositoryRoot, 'plugins/dsh-mcp-manager/lib/index.js'),
+    join(repositoryRoot, 'plugins/dsh-mcp-manager/lib/client.js'),
+    join(repositoryRoot, 'plugins/dsh-mcp-manager/lib/BUILD.json'),
   ]
   for (const path of required) accessSync(path)
 }
@@ -133,6 +136,7 @@ async function smokePackagedDshWeb(resourcesDirectory, packagedDshRoot, packaged
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-ui-sidebar'), profileModules, '@telos/dsh-client-ui-sidebar')
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-ui-layout'), profileModules, '@deepseek-ai/dsh-client-ui-layout')
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-continuity'), profileModules, '@telos/dsh-continuity')
+    installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager'), profileModules, '@telos/dsh-mcp-manager')
     const output = { value: '' }
     child = spawn(packagedNode, [packagedCli, 'web', '--patch', patchPath, '--port', '0'], {
       cwd: packagedDshRoot,
@@ -142,8 +146,8 @@ async function smokePackagedDshWeb(resourcesDirectory, packagedDshRoot, packaged
     const baseUrl = await waitForWebReady(child, output)
     const indexResponse = await fetch(baseUrl, { signal: AbortSignal.timeout(5_000) })
     const indexHtml = await indexResponse.text()
-    if (!indexResponse.ok || !indexHtml.includes('"@telos/dsh-continuity"')) {
-      throw new Error(`Packaged DSH Web omitted the continuity Client module (${String(indexResponse.status)})`)
+    if (!indexResponse.ok || !indexHtml.includes('"@telos/dsh-continuity"') || !indexHtml.includes('"@telos/dsh-mcp-manager"')) {
+      throw new Error(`Packaged DSH Web omitted a Telos Client module (${String(indexResponse.status)})`)
     }
     const response = await fetch(`${baseUrl}/telos-continuity/health`, {
       method: 'POST',
@@ -197,6 +201,8 @@ async function verifyPackagedRuntime(expectedManifest) {
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-ui-layout/lib/client.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-continuity/lib/index.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-continuity/lib/client.js'))
+  accessSync(join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager/lib/index.js'))
+  accessSync(join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager/lib/client.js'))
   accessSync(packagedNode)
   accessSync(packagedCli)
   run(packagedNode, [packagedCli, '--version'], packagedDshRoot)

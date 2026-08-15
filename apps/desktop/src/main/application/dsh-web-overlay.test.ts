@@ -29,6 +29,7 @@ describe('prepareTelosDshWebPatch', () => {
       sidebarPackageRoot: sidebar,
       layoutPackageRoot: '',
       continuityPackageRoot: '',
+      mcpManagerPackageRoot: '',
     })
     expect(patch).toContain('- id: ui-sidebar\n  disabled: true')
     expect(patch).toContain('id: telos-ui-sidebar')
@@ -42,9 +43,11 @@ describe('prepareTelosDshWebPatch', () => {
     const sidebar = join(root, 'sidebar')
     const layout = join(root, 'layout')
     const continuity = join(root, 'continuity')
+    const mcpManager = join(root, 'mcp-manager')
     mkdirSync(join(sidebar, 'lib'), { recursive: true })
     mkdirSync(join(layout, 'lib'), { recursive: true })
     mkdirSync(join(continuity, 'lib'), { recursive: true })
+    mkdirSync(join(mcpManager, 'lib'), { recursive: true })
     writeFileSync(join(sidebar, 'package.json'), JSON.stringify({
       name: '@telos/dsh-client-ui-sidebar',
       private: true,
@@ -69,11 +72,18 @@ describe('prepareTelosDshWebPatch', () => {
     }))
     writeFileSync(join(continuity, 'lib/index.js'), 'export const name = "telos-continuity"')
     writeFileSync(join(continuity, 'lib/client.js'), 'window.__TELOS_CONTINUITY_TEST__ = true')
+    writeFileSync(join(mcpManager, 'package.json'), JSON.stringify({
+      name: '@telos/dsh-mcp-manager',
+      private: true,
+    }))
+    writeFileSync(join(mcpManager, 'lib/index.js'), 'export const name = "telos-mcp-manager"')
+    writeFileSync(join(mcpManager, 'lib/client.js'), 'window.__TELOS_MCP_MANAGER_TEST__ = true')
 
     const path = prepareTelosDshWebPatch(join(root, 'home'), {
       sidebarPackageRoot: sidebar,
       layoutPackageRoot: layout,
       continuityPackageRoot: continuity,
+      mcpManagerPackageRoot: mcpManager,
     })
 
     expect(readFileSync(path, 'utf8')).toContain('"@telos/dsh-client-ui-sidebar"')
@@ -84,6 +94,10 @@ describe('prepareTelosDshWebPatch', () => {
     expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-continuity/lib/index.js')))
       .toBe(true)
     expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-continuity/lib/client.js')))
+      .toBe(true)
+    expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-mcp-manager/lib/index.js')))
+      .toBe(true)
+    expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-mcp-manager/lib/client.js')))
       .toBe(true)
   })
 })

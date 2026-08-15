@@ -166,6 +166,34 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  plugins/dsh-mcp-manager:
+    dependencies:
+      react:
+        specifier: 19.2.8
+        version: 19.2.8
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../third_party/deepseek-harness/vendor/cordis
+        version: link:../../third_party/deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-credentials':
+        specifier: link:../../third_party/deepseek-harness/packages/credentials/credentials
+        version: link:../../third_party/deepseek-harness/packages/credentials/credentials
+      '@deepseek-ai/dsh-mcp-client':
+        specifier: link:../../third_party/deepseek-harness/packages/mcp/mcp-client
+        version: link:../../third_party/deepseek-harness/packages/mcp/mcp-client
+      '@deepseek-ai/dsh-tools':
+        specifier: link:../../third_party/deepseek-harness/packages/core/tools
+        version: link:../../third_party/deepseek-harness/packages/core/tools
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
 packages:
 
   '@babel/code-frame@7.29.7':

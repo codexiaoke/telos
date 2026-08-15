@@ -9,8 +9,13 @@ import * as McpClient from "@deepseek-ai/dsh-mcp-client";
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 var SERVER_NAME = /^[A-Za-z0-9_-]{1,32}$/;
-var BINDING_NAME = /^[^\s=:\u0000-\u001f]+$/;
 var CREDENTIAL_REF = /^[A-Za-z_][A-Za-z0-9_]*$/;
+function validBindingName(value) {
+  return value.length > 0 && [...value].every((character) => {
+    const code = character.charCodeAt(0);
+    return character !== "=" && character !== ":" && !/\s/u.test(character) && code >= 32 && code !== 127;
+  });
+}
 function object(value, field) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`${field} must be an object`);
   return value;
@@ -29,7 +34,7 @@ function binding(value, field) {
   const item = object(value, field);
   const name2 = text(item.name, `${field}.name`);
   const credentialRef2 = text(item.credentialRef, `${field}.credentialRef`);
-  if (!BINDING_NAME.test(name2)) throw new TypeError(`${field}.name is invalid`);
+  if (!validBindingName(name2)) throw new TypeError(`${field}.name is invalid`);
   if (!CREDENTIAL_REF.test(credentialRef2)) throw new TypeError(`${field}.credentialRef is invalid`);
   return { name: name2, credentialRef: credentialRef2 };
 }
@@ -175,7 +180,7 @@ var McpManager = class {
   async close() {
     this.closing = true;
     await this.serial(async () => {
-      for (const name2 of [...this.runtime.keys()]) await this.stopServer(name2);
+      for (const name2 of this.runtime.keys()) await this.stopServer(name2);
     });
   }
   async handle(endpoint, payload) {

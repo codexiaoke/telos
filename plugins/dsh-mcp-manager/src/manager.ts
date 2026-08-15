@@ -78,7 +78,7 @@ export class McpManager {
   async close(): Promise<void> {
     this.closing = true
     await this.serial(async () => {
-      for (const name of [...this.runtime.keys()]) await this.stopServer(name)
+      for (const name of this.runtime.keys()) await this.stopServer(name)
     })
   }
 

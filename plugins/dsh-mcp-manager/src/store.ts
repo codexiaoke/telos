@@ -3,8 +3,14 @@ import { dirname } from 'node:path'
 import type { CredentialBinding, McpServerConfig, ReconnectPolicy } from './contracts.js'
 
 const SERVER_NAME = /^[A-Za-z0-9_-]{1,32}$/
-const BINDING_NAME = /^[^\s=:\u0000-\u001f]+$/
 const CREDENTIAL_REF = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+function validBindingName(value: string): boolean {
+  return value.length > 0 && [...value].every((character) => {
+    const code = character.charCodeAt(0)
+    return character !== '=' && character !== ':' && !/\s/u.test(character) && code >= 32 && code !== 127
+  })
+}
 
 function object(value: unknown, field: string): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new TypeError(`${field} must be an object`)
@@ -27,7 +33,7 @@ function binding(value: unknown, field: string): CredentialBinding {
   const item = object(value, field)
   const name = text(item.name, `${field}.name`)
   const credentialRef = text(item.credentialRef, `${field}.credentialRef`)
-  if (!BINDING_NAME.test(name)) throw new TypeError(`${field}.name is invalid`)
+  if (!validBindingName(name)) throw new TypeError(`${field}.name is invalid`)
   if (!CREDENTIAL_REF.test(credentialRef)) throw new TypeError(`${field}.credentialRef is invalid`)
   return { name, credentialRef }
 }

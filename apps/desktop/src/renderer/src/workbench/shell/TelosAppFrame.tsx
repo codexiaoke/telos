@@ -55,9 +55,8 @@ function SidebarOpenIcon() {
 function WorkbenchModeIcon() {
   return (
     <svg aria-hidden="true" fill="none" viewBox="0 0 20 20">
-      <rect height="14" rx="3" stroke="currentColor" strokeWidth="1.45" width="16" x="2" y="3" />
-      <path d="M7 3.7v12.6M13.1 3.7v12.6" stroke="currentColor" strokeWidth="1.35" />
-      <path d="m9.1 8.1-1.35 1.35L9.1 10.8m1.8-2.7 1.35 1.35-1.35 1.35" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.05" />
+      <rect height="14" rx="2.5" stroke="currentColor" strokeWidth="1.45" width="16" x="2" y="3" />
+      <path d="M6.6 3.7v12.6M7.2 7.2h10.1" stroke="currentColor" strokeLinecap="round" strokeWidth="1.35" />
     </svg>
   )
 }

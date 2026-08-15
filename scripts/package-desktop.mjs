@@ -1,6 +1,8 @@
-import { accessSync, chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { accessSync, chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
-import { spawnSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
+import { spawn, spawnSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
 const desktopRoot = join(repositoryRoot, 'apps/desktop')
@@ -97,7 +99,80 @@ function packagedResourceCandidates() {
   return candidates
 }
 
-function verifyPackagedRuntime(expectedManifest) {
+function installSmokePackage(sourceRoot, modulesRoot, packageName) {
+  const target = join(modulesRoot, ...packageName.split('/'))
+  mkdirSync(dirname(target), { recursive: true })
+  cpSync(sourceRoot, target, { recursive: true, force: true })
+}
+
+function waitForWebReady(child, output) {
+  return new Promise((resolveReady, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Packaged DSH Web timed out.\n${output.value}`)), 30_000)
+    const consume = (chunk) => {
+      output.value += chunk.toString()
+      const match = /dsh web: (http:\/\/127\.0\.0\.1:\d+)/.exec(output.value)
+      if (match?.[1] === undefined) return
+      clearTimeout(timer)
+      resolveReady(match[1])
+    }
+    child.stdout.on('data', consume)
+    child.stderr.on('data', consume)
+    child.once('exit', (code) => {
+      clearTimeout(timer)
+      reject(new Error(`Packaged DSH Web exited early with ${String(code)}.\n${output.value}`))
+    })
+  })
+}
+
+async function smokePackagedDshWeb(resourcesDirectory, packagedDshRoot, packagedNode, packagedCli) {
+  const temporaryHomeRoot = mkdtempSync(join(tmpdir(), 'telos-packaged-dsh-smoke-'))
+  const profileModules = join(temporaryHomeRoot, 'profiles/web/node_modules')
+  const patchPath = join(resourcesDirectory, 'dsh-overlays/telos-ui-sidebar/telos.web.patch.yml')
+  let child
+  try {
+    installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-ui-sidebar'), profileModules, '@telos/dsh-client-ui-sidebar')
+    installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-ui-layout'), profileModules, '@deepseek-ai/dsh-client-ui-layout')
+    installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-continuity'), profileModules, '@telos/dsh-continuity')
+    const output = { value: '' }
+    child = spawn(packagedNode, [packagedCli, 'web', '--patch', patchPath, '--port', '0'], {
+      cwd: packagedDshRoot,
+      env: { ...process.env, DSH_HOME: temporaryHomeRoot, DSH_TELEMETRY_DISABLED: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    const baseUrl = await waitForWebReady(child, output)
+    const indexResponse = await fetch(baseUrl, { signal: AbortSignal.timeout(5_000) })
+    const indexHtml = await indexResponse.text()
+    if (!indexResponse.ok || !indexHtml.includes('"@telos/dsh-continuity"')) {
+      throw new Error(`Packaged DSH Web omitted the continuity Client module (${String(indexResponse.status)})`)
+    }
+    const response = await fetch(`${baseUrl}/telos-continuity/health`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: AbortSignal.timeout(5_000),
+      body: JSON.stringify({
+        type: 'client-request',
+        rpcId: `packaged-continuity-${randomUUID()}`,
+        method: 'health',
+        payload: {},
+      }),
+    })
+    const body = await response.json()
+    if (!response.ok || body.result?.ok !== true || body.result.value?.integrity !== 'ok') {
+      throw new Error(`Packaged continuity health failed (${String(response.status)}): ${JSON.stringify(body)}`)
+    }
+    process.stdout.write(`Started packaged DSH Web with continuity schema ${String(body.result.value.schemaVersion)}\n`)
+  } finally {
+    if (child !== undefined && child.exitCode === null) {
+      const exited = new Promise(resolveExit => child.once('exit', resolveExit))
+      child.kill('SIGTERM')
+      await Promise.race([exited, new Promise(resolveTimeout => setTimeout(resolveTimeout, 5_000))])
+      if (child.exitCode === null) child.kill('SIGKILL')
+    }
+    rmSync(temporaryHomeRoot, { recursive: true, force: true })
+  }
+}
+
+async function verifyPackagedRuntime(expectedManifest) {
   const resourcesDirectory = packagedResourceCandidates().find((candidate) => {
     const manifestPath = join(candidate, 'dsh-node/TELOS_NODE_RUNTIME.json')
     if (!existsSync(manifestPath)) return false
@@ -118,11 +193,14 @@ function verifyPackagedRuntime(expectedManifest) {
   accessSync(join(packagedDshRoot, 'apps/web/dist/index.html'))
   accessSync(join(packagedDshRoot, 'node_modules/.pnpm'))
   accessSync(join(resourcesDirectory, 'dsh-node/LICENSE'))
+  accessSync(join(resourcesDirectory, 'dsh-overlays/telos-ui-sidebar/telos.web.patch.yml'))
+  accessSync(join(resourcesDirectory, 'dsh-overlays/telos-ui-layout/lib/client.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-continuity/lib/index.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-continuity/lib/client.js'))
   accessSync(packagedNode)
   accessSync(packagedCli)
   run(packagedNode, [packagedCli, '--version'], packagedDshRoot)
+  await smokePackagedDshWeb(resourcesDirectory, packagedDshRoot, packagedNode, packagedCli)
   process.stdout.write(`Verified packaged DSH runtime in ${resourcesDirectory}\n`)
 }
 
@@ -156,4 +234,4 @@ run('corepack', builderArgs, desktopRoot, {
   ...process.env,
   TELOS_RUNTIME_TARGET: runtimeTarget,
 })
-verifyPackagedRuntime(stagedRuntimeManifest)
+await verifyPackagedRuntime(stagedRuntimeManifest)

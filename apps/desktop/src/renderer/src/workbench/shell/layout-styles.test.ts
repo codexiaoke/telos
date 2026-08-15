@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { TELOS_LAYOUT_CSS } from './layout-styles'
 
 describe('TELOS_LAYOUT_CSS', () => {
+  it('lets the Settings panel use up to 88 percent of the viewport', () => {
+    expect(TELOS_LAYOUT_CSS).toMatch(
+      /\[data-slot='sidebar\.settings'\][^{]*{\s*width:\s*88vw;\s*max-width:\s*88vw;/,
+    )
+  })
+
   it('does not trap sidebar-owned fixed dialogs below sibling columns', () => {
     const columnRule = TELOS_LAYOUT_CSS.match(
       /\.telos-workbench-sidebar,\s*\.telos-workbench-center,\s*\.telos-workbench-details\s*\{(?<body>[^}]*)\}/,

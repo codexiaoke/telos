@@ -32,6 +32,15 @@ export const TELOS_LAYOUT_CSS = `
    a z-index here would trap that dialog below the later center/details
    siblings even though the dialog itself owns z-index: 1000. */
 
+/* Give the Settings workspace enough horizontal room for dense Telos pages
+   such as Memory while preserving a consistent six-percent viewport gutter.
+   The direct nav child distinguishes the Settings panel from onboarding and
+   other dialogs that share the same sidebar-owned surface. */
+.telos-workbench-sidebar [data-slot='sidebar.settings'] [role='dialog']:has(> nav) {
+  width: 88vw;
+  max-width: 88vw;
+}
+
 .telos-workbench-sidebar {
   overflow: hidden;
   background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 96%, transparent);

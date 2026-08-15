@@ -3,6 +3,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawn, spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { corepackInvocation } from './corepack-invocation.mjs'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
 const desktopRoot = join(repositoryRoot, 'apps/desktop')
@@ -16,8 +17,10 @@ const nodeTarget = process.platform === 'win32'
   : join(nodeRoot, 'bin/node')
 
 function run(command, args, cwd, environment = process.env) {
-  const executable = process.platform === 'win32' && command === 'corepack' ? 'corepack.cmd' : command
-  const result = spawnSync(executable, args, {
+  const invocation = command === 'corepack'
+    ? corepackInvocation(args)
+    : { executable: command, args }
+  const result = spawnSync(invocation.executable, invocation.args, {
     cwd,
     env: environment,
     stdio: 'inherit',

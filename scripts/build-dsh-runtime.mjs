@@ -1,15 +1,16 @@
 import { accessSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { corepackInvocation } from './corepack-invocation.mjs'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
 const dshRoot = resolve(repositoryRoot, 'third_party/deepseek-harness')
-const corepackExecutable = process.platform === 'win32' ? 'corepack.cmd' : 'corepack'
 
 accessSync(resolve(dshRoot, 'pnpm-lock.yaml'))
 
 function run(args) {
-  const result = spawnSync(corepackExecutable, ['pnpm', ...args], {
+  const command = corepackInvocation(['pnpm', ...args])
+  const result = spawnSync(command.executable, command.args, {
     cwd: dshRoot,
     env: process.env,
     stdio: 'inherit',
@@ -39,7 +40,8 @@ const overlayBuild = spawnSync(process.execPath, [resolve(repositoryRoot, 'scrip
 if (overlayBuild.error) throw overlayBuild.error
 if (overlayBuild.status !== 0) process.exit(overlayBuild.status ?? 1)
 
-const continuityBuild = spawnSync(corepackExecutable, ['pnpm', '--filter', '@telos/dsh-continuity', 'build'], {
+const continuityCommand = corepackInvocation(['pnpm', '--filter', '@telos/dsh-continuity', 'build'])
+const continuityBuild = spawnSync(continuityCommand.executable, continuityCommand.args, {
   cwd: repositoryRoot,
   env: process.env,
   stdio: 'inherit',
@@ -47,7 +49,8 @@ const continuityBuild = spawnSync(corepackExecutable, ['pnpm', '--filter', '@tel
 if (continuityBuild.error) throw continuityBuild.error
 if (continuityBuild.status !== 0) process.exit(continuityBuild.status ?? 1)
 
-const multimodalBuild = spawnSync(corepackExecutable, ['pnpm', '--filter', '@telos/dsh-multimodal', 'build'], {
+const multimodalCommand = corepackInvocation(['pnpm', '--filter', '@telos/dsh-multimodal', 'build'])
+const multimodalBuild = spawnSync(multimodalCommand.executable, multimodalCommand.args, {
   cwd: repositoryRoot,
   env: process.env,
   stdio: 'inherit',
@@ -55,7 +58,8 @@ const multimodalBuild = spawnSync(corepackExecutable, ['pnpm', '--filter', '@tel
 if (multimodalBuild.error) throw multimodalBuild.error
 if (multimodalBuild.status !== 0) process.exit(multimodalBuild.status ?? 1)
 
-const workbenchBuild = spawnSync(corepackExecutable, ['pnpm', '--filter', '@telos/dsh-workbench-files', 'build'], {
+const workbenchCommand = corepackInvocation(['pnpm', '--filter', '@telos/dsh-workbench-files', 'build'])
+const workbenchBuild = spawnSync(workbenchCommand.executable, workbenchCommand.args, {
   cwd: repositoryRoot,
   env: process.env,
   stdio: 'inherit',
@@ -63,7 +67,8 @@ const workbenchBuild = spawnSync(corepackExecutable, ['pnpm', '--filter', '@telo
 if (workbenchBuild.error) throw workbenchBuild.error
 if (workbenchBuild.status !== 0) process.exit(workbenchBuild.status ?? 1)
 
-const workReportBuild = spawnSync(corepackExecutable, ['pnpm', '--filter', '@telos/dsh-work-report', 'build'], {
+const workReportCommand = corepackInvocation(['pnpm', '--filter', '@telos/dsh-work-report', 'build'])
+const workReportBuild = spawnSync(workReportCommand.executable, workReportCommand.args, {
   cwd: repositoryRoot,
   env: process.env,
   stdio: 'inherit',

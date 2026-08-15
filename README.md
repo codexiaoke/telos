@@ -2,7 +2,7 @@
 
 Telos 是一个本地优先、持续存在的个人智能系统。它希望把个人目标、长期记忆、知识、权限和执行历史组织成可审查的长期状态，再把具体工作交给可替换的 Agent Runtime、模型和工具执行。
 
-> 当前仓库仍处于早期开发阶段。现阶段已经完成的是桌面产品基础、完整 DSH Web 功能基线、Telos 自有界面层和桌面发布基础设施；个人长期记忆、知识库、电脑自动化和多模型调度仍在后续范围内。
+> 当前仓库仍处于早期开发阶段。现阶段已经完成桌面产品基础、完整 DSH Web 功能基线、Telos 自有界面层、桌面发布基础设施，以及第一版可审计的个人连续记忆；完整个人知识库、目标系统、电脑自动化和多模型调度仍在后续范围内。
 
 [架构决策](./docs/architecture/0003-full-dsh-web-baseline.md) · [DSH 同步规范](./docs/maintenance/dsh-upstream-sync.md) · [第三方声明](./THIRD_PARTY_NOTICES.md)
 
@@ -44,8 +44,9 @@ Telos 不打算成为：
 | 桌面生命周期 | 已实现 | 单实例、关闭后驻留、系统托盘、显式退出和 DSH 优雅停止 |
 | 打包与更新 | macOS arm64 已验证 | DMG、ZIP、更新元数据、包内 Node.js 和包内 DSH 真实启动已验证 |
 | macOS x64、Windows、Linux | CI 已配置，尚未验收 | 必须以各平台原生 CI 结果为准 |
-| 个人长期记忆 | 规划中 | 不是聊天归档，后续将维护来源、时间、置信度和删除能力 |
-| 个人知识库与知识图谱 | 规划中 | 将与记忆、目标和项目状态建立可追溯关系 |
+| 个人连续记忆 v1 | 已实现 | 本地 SQLite 事实源、实体事件、候选确认、来源、作用域、纠正、召回回执和删除报告 |
+| 关系图投影 | 已实现基础能力 | 从 MemoryClaim 重建实体关系；图不是唯一事实源，也不等同于完整个人知识库 |
+| 完整个人知识库与目标系统 | 规划中 | 后续与记忆、项目、承诺和行动建立可追溯领域关系 |
 | 多模型与多模态调度 | 规划中 | DSH 是首个 Runtime，但不成为模型或能力的唯一入口 |
 | 电脑操作与连接器 | 规划中 | OpenCLI、OpenConnector 和桌面自动化需要经过统一权限与执行记录 |
 
@@ -163,6 +164,15 @@ pnpm dsh:verify
 - 默认 DSH Web 插件组合没有未解释的缺失；
 - Telos Renderer 兼容包仍能以正确的 DSH 包身份解析。
 
+连续记忆还提供两条独立验收命令：
+
+```bash
+pnpm dsh:continuity:smoke
+pnpm continuity:bench
+```
+
+前者启动真实的源码版 DSH Web 和 Chromium，验证记忆写入、召回、纠正、候选确认、删除与管理界面；后者执行 12 个确定性连续性场景并输出范围泄漏、来源覆盖、纠正收敛、删除完整性、延迟和上下文预算指标。
+
 如需只读检查上游是否出现新提交：
 
 ```bash
@@ -237,8 +247,13 @@ apps/
   desktop/                       Electron + React 桌面应用
 
 packages/
+  personal-core/                 Telos 个人连续状态事实源与召回策略
+  continuity-bench/              12 场景连续性量化验收
   runtime-contracts/             Telos 稳定 Runtime 契约
   runtime-dsh/                   DSH Headless Adapter 与事件翻译
+
+plugins/
+  dsh-continuity/                DSH Host/Client 连续记忆插件
 
 integrations/
   dsh/plugins/                   Telos 自有 DSH 兼容 UI 包和来源记录
@@ -250,11 +265,12 @@ third_party/
 docs/
   architecture/                  架构决策记录
   maintenance/                   上游同步和维护规范
+  testing/                       连续性基准与验收证据
 
 scripts/                         构建、审计、打包与发布脚本
 ```
 
-未来的 `memory`、`knowledge`、`goals` 和 `automation` 模块尚未因为路线图而提前创建空目录；它们需要先完成领域模型和权限边界设计。
+`personal-core` 只代表第一版连续记忆底座。未来的完整 `knowledge`、`goals` 和 `automation` 模块尚未因为路线图而提前创建空目录；它们需要先完成领域模型和权限边界设计。
 
 ## 开发命令
 
@@ -267,6 +283,8 @@ scripts/                         构建、审计、打包与发布脚本
 | `pnpm lint` | 运行 Oxlint |
 | `pnpm dsh:build` | 构建固定源码版本 DSH 和 Telos UI 派生包 |
 | `pnpm dsh:verify` | 审计 DSH 来源、派生包和默认 Web 功能组合 |
+| `pnpm dsh:continuity:smoke` | 启动真实 DSH Web 与 Chromium，验证连续记忆闭环 |
+| `pnpm continuity:bench` | 运行 12 场景 ContinuityBench 与 DSH parity 外部证据 |
 | `pnpm dsh:upstream` | 只读检查 DSH 上游状态 |
 | `pnpm package:desktop:dir` | 生成当前平台的目录包并验证包内 DSH |
 | `pnpm package:desktop` | 生成当前平台的安装包和更新文件 |
@@ -274,6 +292,9 @@ scripts/                         构建、审计、打包与发布脚本
 ## 安全与隐私边界
 
 - 用户数据、运行历史和未来个人状态优先保存在本地；
+- 自动形成只保留命中的短证据片段，并且只能生成待确认候选；
+- 凭据和密钥在连续记忆 Host 写入边界被拒绝；
+- 纠正、撤销和物理删除保留可审计结果，已注入旧会话的副本会如实提示仍需删除会话；
 - DSH Web 只允许由桌面端在 `127.0.0.1` 的临时端口启动；
 - Renderer 使用 Context Isolation、Sandbox，并禁用直接 Node.js 访问；
 - API Key 当前只允许放在被 Git 忽略的本地配置中；

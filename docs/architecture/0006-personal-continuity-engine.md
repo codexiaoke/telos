@@ -261,15 +261,16 @@ The Host face:
 - maps Session ids to stable Workspace ids without changing Workspace records;
 - observes committed `session/event` ranges and queues turn extraction;
 - participates cooperatively in `agent/pre-step` and preserves the waterfall;
-- registers bounded `continuity_remember`, `continuity_search`,
-  `continuity_forget`, and `continuity_explain` tools;
+- registers bounded `continuity_remember`, `continuity_correct`,
+  `continuity_search`, `continuity_forget`, and `continuity_explain` tools;
 - publishes per-session receipt projections without making them authoritative;
 - contains all background failures and exposes their health.
 
 The Client face:
 
 - renders memory-use and memory-change receipts in existing Slots;
-- exposes source, scope, status, correction, undo, and deletion results;
+- exposes source, scope, status, candidate confirmation, correction, undo, and
+  deletion results;
 - keeps all original DSH navigation, settings, workspace, session, tool,
   approval, and activity surfaces operational.
 

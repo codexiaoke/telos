@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MaterialFileIcon } from './material-file-icons'
-import { MonacoCodeEditor } from './MonacoCodeEditor'
+import { MonacoCodeEditor, MonacoDiffViewer } from './MonacoCodeEditor'
 import { editorContextStore, type EditorSelectionContext } from './editor-context'
+import { detectExternalFileChange, type ExternalFileChange } from './external-change'
 
 const WORKBENCH_FILES_RPC_CHANNEL = '/telos-workbench-files'
 
@@ -74,6 +75,8 @@ export function workbenchFilesClient(): WorkbenchFilesClient {
 interface OpenFile extends WorkbenchTextFile {
   savedContent: string
   saving: boolean
+  pendingChange?: ExternalFileChange
+  undoChange?: { content: string; label: string }
   error?: string
 }
 
@@ -193,6 +196,9 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
   const [tabContextMenu, setTabContextMenu] = useState<TabContextMenu>()
   const [error, setError] = useState<string>()
   const activeFile = files.find(file => file.path === activePath)
+  const filesRef = useRef(files)
+  const checkingFilesRef = useRef(false)
+  filesRef.current = files
 
   useEffect(() => {
     if (!active || sessionId === undefined || activeFile === undefined) {
@@ -277,7 +283,12 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
   }, [client, files, sessionId])
 
   const updateActiveFile = useCallback((content: string) => {
-    setFiles(current => current.map(file => file.path === activePath ? { ...file, content, error: undefined } : file))
+    setFiles(current => current.map(file => file.path === activePath ? {
+      ...file,
+      content,
+      undoChange: undefined,
+      error: undefined,
+    } : file))
   }, [activePath])
 
   const saveActiveFile = useCallback(async () => {
@@ -286,11 +297,110 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
     try {
       const saved = await client.write(sessionId, activeFile)
       setFiles(current => current.map(file => file.path === activeFile.path ? {
-        ...saved, savedContent: saved.content, saving: false,
+        ...saved, savedContent: saved.content, saving: false, pendingChange: undefined, undoChange: undefined,
       } : file))
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason)
       setFiles(current => current.map(file => file.path === activeFile.path ? { ...file, saving: false, error: message } : file))
+    }
+  }, [activeFile, client, sessionId])
+
+  const checkExternalChanges = useCallback(async () => {
+    if (sessionId === undefined || checkingFilesRef.current) return
+    const snapshot = filesRef.current
+    if (snapshot.length === 0) return
+    checkingFilesRef.current = true
+    try {
+      const reads = await Promise.all(snapshot.map(async (file) => {
+        try {
+          return { path: file.path, value: await client.read(sessionId, file.path) }
+        } catch {
+          return undefined
+        }
+      }))
+      const byPath = new Map(reads.flatMap(result => result === undefined ? [] : [[result.path, result.value] as const]))
+      setFiles(current => current.map((file) => {
+        const disk = byPath.get(file.path)
+        if (disk === undefined || file.saving) return file
+        const change = detectExternalFileChange(file, disk, file.pendingChange)
+        if (change === undefined) return file
+        return { ...file, pendingChange: change, undoChange: undefined, error: undefined }
+      }))
+    } finally {
+      checkingFilesRef.current = false
+    }
+  }, [client, sessionId])
+
+  useEffect(() => {
+    if (!active || sessionId === undefined || files.length === 0) return
+    void checkExternalChanges()
+    const interval = window.setInterval(() => { void checkExternalChanges() }, 1_200)
+    const onFocus = () => { void checkExternalChanges() }
+    window.addEventListener('focus', onFocus)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [active, checkExternalChanges, files.length, sessionId])
+
+  const acceptExternalChange = useCallback(() => {
+    if (activeFile?.pendingChange === undefined) return
+    const { pendingChange } = activeFile
+    setFiles(current => current.map(file => file.path === activeFile.path ? {
+      ...pendingChange.incoming,
+      savedContent: pendingChange.incoming.content,
+      saving: false,
+      undoChange: {
+        content: pendingChange.conflict ? pendingChange.localContent : pendingChange.baseContent,
+        label: pendingChange.conflict ? '撤销并恢复我的修改' : '撤销外部修改',
+      },
+    } : file))
+    setSelection(undefined)
+  }, [activeFile])
+
+  const restoreContentOverExternalChange = useCallback(async (content: string, undoContent: string, undoLabel: string) => {
+    if (activeFile?.pendingChange === undefined || sessionId === undefined) return
+    const path = activeFile.path
+    const incoming = activeFile.pendingChange.incoming
+    setFiles(current => current.map(file => file.path === path ? { ...file, saving: true, error: undefined } : file))
+    try {
+      const restored = await client.write(sessionId, { ...incoming, content })
+      setFiles(current => current.map(file => file.path === path ? {
+        ...restored,
+        savedContent: restored.content,
+        saving: false,
+        undoChange: { content: undoContent, label: undoLabel },
+      } : file))
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason)
+      setFiles(current => current.map(file => file.path === path ? { ...file, saving: false, error: message } : file))
+    }
+  }, [activeFile, client, sessionId])
+
+  const rejectExternalChange = useCallback(() => {
+    if (activeFile?.pendingChange === undefined) return
+    const pending = activeFile.pendingChange
+    void restoreContentOverExternalChange(
+      pending.conflict ? pending.localContent : pending.baseContent,
+      pending.incoming.content,
+      '撤销恢复并重新应用外部修改',
+    )
+  }, [activeFile, restoreContentOverExternalChange])
+
+  const undoExternalChange = useCallback(async () => {
+    if (activeFile?.undoChange === undefined || sessionId === undefined || activeFile.content !== activeFile.savedContent) return
+    const path = activeFile.path
+    const undo = activeFile.undoChange
+    setFiles(current => current.map(file => file.path === path ? { ...file, saving: true, error: undefined } : file))
+    try {
+      const restored = await client.write(sessionId, { ...activeFile, content: undo.content })
+      setFiles(current => current.map(file => file.path === path ? {
+        ...restored, savedContent: restored.content, saving: false,
+      } : file))
+      setSelection(undefined)
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason)
+      setFiles(current => current.map(file => file.path === path ? { ...file, saving: false, error: message } : file))
     }
   }, [activeFile, client, sessionId])
 
@@ -443,18 +553,51 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
           <div className="telos-editor-document">
             <div className="telos-editor-breadcrumb">
               <span>{activeFile.path}</span>
-              <button disabled={activeFile.saving || activeFile.content === activeFile.savedContent} onClick={() => void saveActiveFile()} type="button">
-                {activeFile.saving ? '保存中…' : '保存'}
-              </button>
+              <div className="telos-editor-breadcrumb-actions">
+                {activeFile.undoChange !== undefined && activeFile.pendingChange === undefined && (
+                  <button disabled={activeFile.saving || activeFile.content !== activeFile.savedContent} onClick={() => void undoExternalChange()} type="button">
+                    {activeFile.undoChange.label}
+                  </button>
+                )}
+                <button disabled={activeFile.saving || activeFile.pendingChange !== undefined || activeFile.content === activeFile.savedContent} onClick={() => void saveActiveFile()} type="button">
+                  {activeFile.saving ? '保存中…' : '保存'}
+                </button>
+              </div>
             </div>
-            <MonacoCodeEditor
-              content={activeFile.content}
-              onChange={updateActiveFile}
-              onSave={() => void saveActiveFile()}
-              onSelectionChange={setSelection}
-              openPaths={files.map(file => file.path)}
-              path={activeFile.path}
-            />
+            {activeFile.pendingChange === undefined ? (
+              <MonacoCodeEditor
+                content={activeFile.content}
+                onChange={updateActiveFile}
+                onSave={() => void saveActiveFile()}
+                onSelectionChange={setSelection}
+                openPaths={files.map(file => file.path)}
+                path={activeFile.path}
+              />
+            ) : (
+              <div className="telos-editor-change-review">
+                <div className="telos-editor-change-banner" data-conflict={activeFile.pendingChange.conflict || undefined}>
+                  <div>
+                    <strong>{activeFile.pendingChange.conflict ? '文件修改冲突' : '检测到外部文件修改'}</strong>
+                    <span>{activeFile.pendingChange.conflict
+                      ? 'Agent 或外部工具修改了磁盘，同时你还有未保存内容。请选择保留哪一版。'
+                      : 'Agent 或外部工具已经修改磁盘。确认新版本，或恢复编辑器打开时的版本。'}</span>
+                  </div>
+                  <div className="telos-editor-change-actions">
+                    <button disabled={activeFile.saving} onClick={acceptExternalChange} type="button">
+                      {activeFile.pendingChange.conflict ? '使用磁盘版本' : '接受修改'}
+                    </button>
+                    <button className="telos-editor-change-primary" disabled={activeFile.saving} onClick={rejectExternalChange} type="button">
+                      {activeFile.saving ? '处理中…' : activeFile.pendingChange.conflict ? '保留我的修改' : '拒绝并恢复'}
+                    </button>
+                  </div>
+                </div>
+                <MonacoDiffViewer
+                  modified={activeFile.pendingChange.incoming.content}
+                  original={activeFile.pendingChange.conflict ? activeFile.pendingChange.localContent : activeFile.pendingChange.baseContent}
+                  path={activeFile.path}
+                />
+              </div>
+            )}
             {activeFile.error !== undefined && <div className="telos-editor-save-error">{activeFile.error}</div>}
           </div>
         )}

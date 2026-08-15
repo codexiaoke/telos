@@ -748,6 +748,12 @@ export const TELOS_LAYOUT_CSS = `
   white-space: nowrap;
 }
 
+.telos-editor-breadcrumb-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .telos-editor-breadcrumb button {
   width: auto;
   padding: 0 9px;
@@ -756,6 +762,82 @@ export const TELOS_LAYOUT_CSS = `
 
 .telos-editor-breadcrumb button:disabled {
   opacity: .42;
+  cursor: default;
+}
+
+.telos-editor-change-review {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.telos-editor-change-banner {
+  display: flex;
+  min-height: 58px;
+  padding: 10px 14px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.telos-editor-change-banner > div:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.telos-editor-change-banner strong {
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.telos-editor-change-banner[data-conflict] strong {
+  color: var(--dsw-alias-state-error);
+}
+
+.telos-editor-change-banner span {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.telos-editor-change-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+}
+
+.telos-editor-change-actions button {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 7px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-base);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.telos-editor-change-actions button:hover:not(:disabled) {
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.telos-editor-change-actions button.telos-editor-change-primary {
+  border-color: transparent;
+  color: var(--dsw-alias-label-primary-foreground);
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.telos-editor-change-actions button:disabled {
+  opacity: .48;
   cursor: default;
 }
 

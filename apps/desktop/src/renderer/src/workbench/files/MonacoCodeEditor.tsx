@@ -51,7 +51,7 @@ function applyEditorTheme(): void {
   monaco.editor.setTheme(isDarkTheme() ? 'dark-plus' : 'light-plus')
 }
 
-function prepareMonaco(): Promise<void> {
+export function prepareMonaco(): Promise<void> {
   if (highlighterPromise !== undefined) return highlighterPromise
   highlighterPromise = createHighlighterCore({
     engine: createJavaScriptRegexEngine(),
@@ -194,6 +194,66 @@ export function MonacoCodeEditor({ content, onChange, onSave, onSelectionChange,
       <div aria-label={`编辑 ${path}`} className="telos-monaco-editor" ref={hostRef} role="region" />
       {!ready && error === undefined && <div className="telos-monaco-status">正在加载编辑器…</div>}
       {error !== undefined && <div className="telos-monaco-status telos-editor-error">编辑器加载失败：{error}</div>}
+    </div>
+  )
+}
+
+interface MonacoDiffViewerProps {
+  original: string
+  modified: string
+  path: string
+}
+
+export function MonacoDiffViewer({ original, modified, path }: MonacoDiffViewerProps) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  const [ready, setReady] = useState(false)
+  const [error, setError] = useState<string>()
+
+  useEffect(() => {
+    let disposed = false
+    void prepareMonaco().then(() => {
+      if (!disposed) setReady(true)
+    }).catch((reason: unknown) => {
+      if (!disposed) setError(reason instanceof Error ? reason.message : String(reason))
+    })
+    return () => { disposed = true }
+  }, [])
+
+  useEffect(() => {
+    if (!ready || hostRef.current === null) return
+    const language = languageForPath(path)
+    const originalModel = monaco.editor.createModel(original, language)
+    const modifiedModel = monaco.editor.createModel(modified, language)
+    const editor = monaco.editor.createDiffEditor(hostRef.current, {
+      automaticLayout: true,
+      enableSplitViewResizing: true,
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+      fontSize: 13,
+      lineHeight: 21,
+      minimap: { enabled: false },
+      originalEditable: false,
+      readOnly: true,
+      renderSideBySide: true,
+      scrollBeyondLastLine: false,
+      theme: isDarkTheme() ? 'dark-plus' : 'light-plus',
+      useInlineViewWhenSpaceIsLimited: true,
+    })
+    editor.setModel({ original: originalModel, modified: modifiedModel })
+    const observer = new MutationObserver(applyEditorTheme)
+    observer.observe(document.body, { attributeFilter: ['data-ds-dark-theme'], attributes: true })
+    return () => {
+      observer.disconnect()
+      editor.dispose()
+      originalModel.dispose()
+      modifiedModel.dispose()
+    }
+  }, [modified, original, path, ready])
+
+  return (
+    <div className="telos-monaco-shell">
+      <div aria-label={`比较 ${path}`} className="telos-monaco-editor" ref={hostRef} role="region" />
+      {!ready && error === undefined && <div className="telos-monaco-status">正在加载差异…</div>}
+      {error !== undefined && <div className="telos-monaco-status telos-editor-error">差异加载失败：{error}</div>}
     </div>
   )
 }

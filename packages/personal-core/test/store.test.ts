@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { Worker } from 'node:worker_threads'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   PERSONAL_CORE_SCHEMA_VERSION,
@@ -138,6 +139,47 @@ describe('PersonalContinuityStore schema and durability', () => {
     database.close()
 
     expect(() => fixture(databasePath)).toThrowError(PersonalCoreSchemaTooNewError)
+  })
+
+  it('serializes concurrent WAL writers without losing durable outbox work', async () => {
+    const { databasePath } = temporaryDatabase()
+    const f = fixture(databasePath)
+    const workerSource = `
+      const { parentPort, workerData } = require('node:worker_threads')
+      const { DatabaseSync } = require('node:sqlite')
+      const database = new DatabaseSync(workerData.databasePath)
+      database.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL;')
+      const insert = database.prepare(\`
+        INSERT INTO continuity_outbox (
+          id, job_type, payload_json, status, attempts, available_at, lease_until,
+          last_error, idempotency_key, created_at, updated_at
+        ) VALUES (?, 'concurrency-test', '{}', 'pending', 0, ?, NULL, NULL, ?, ?, ?)
+      \`)
+      for (let index = 0; index < 10; index += 1) {
+        const id = 'worker-' + workerData.workerId + '-' + index
+        const at = '2026-08-15T00:00:00.000Z'
+        database.exec('BEGIN IMMEDIATE')
+        try {
+          insert.run(id, at, id, at, at)
+          database.exec('COMMIT')
+        } catch (error) {
+          database.exec('ROLLBACK')
+          throw error
+        }
+      }
+      database.close()
+      parentPort.postMessage('done')
+    `
+    const runWorker = (workerId: number) => new Promise<void>((resolve, reject) => {
+      const worker = new Worker(workerSource, { eval: true, workerData: { databasePath, workerId } })
+      worker.once('message', () => resolve())
+      worker.once('error', reject)
+      worker.once('exit', code => { if (code !== 0) reject(new Error(`concurrency worker exited ${String(code)}`)) })
+    })
+
+    await Promise.all(Array.from({ length: 4 }, (_, index) => runWorker(index)))
+    expect(f.store.claimOutbox(100, 60_000, 'concurrency-test')).toHaveLength(40)
+    expect(f.store.integrityCheck()).toBe('ok')
   })
 })
 

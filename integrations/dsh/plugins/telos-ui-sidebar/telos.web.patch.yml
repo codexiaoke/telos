@@ -23,3 +23,7 @@
         storePath: !!js dshHomePath('telos', 'mcp-servers.json')
     - id: telos-workbench-files
       name: '@telos/dsh-workbench-files'
+    - id: telos-work-report
+      name: '@telos/dsh-work-report'
+      config:
+        rootPath: !!js dshHomePath('telos', 'work-report')

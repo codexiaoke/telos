@@ -31,6 +31,7 @@ describe('prepareTelosDshWebPatch', () => {
       continuityPackageRoot: '',
       mcpManagerPackageRoot: '',
       workbenchFilesPackageRoot: '',
+      workReportPackageRoot: '',
     })
     expect(patch).toContain('- id: ui-sidebar\n  disabled: true')
     expect(patch).toContain('id: telos-ui-sidebar')
@@ -46,11 +47,13 @@ describe('prepareTelosDshWebPatch', () => {
     const continuity = join(root, 'continuity')
     const mcpManager = join(root, 'mcp-manager')
     const workbenchFiles = join(root, 'workbench-files')
+    const workReport = join(root, 'work-report')
     mkdirSync(join(sidebar, 'lib'), { recursive: true })
     mkdirSync(join(layout, 'lib'), { recursive: true })
     mkdirSync(join(continuity, 'lib'), { recursive: true })
     mkdirSync(join(mcpManager, 'lib'), { recursive: true })
     mkdirSync(join(workbenchFiles, 'lib'), { recursive: true })
+    mkdirSync(join(workReport, 'lib'), { recursive: true })
     writeFileSync(join(sidebar, 'package.json'), JSON.stringify({
       name: '@telos/dsh-client-ui-sidebar',
       private: true,
@@ -86,6 +89,12 @@ describe('prepareTelosDshWebPatch', () => {
       private: true,
     }))
     writeFileSync(join(workbenchFiles, 'lib/index.js'), 'export const name = "telos-workbench-files"')
+    writeFileSync(join(workReport, 'package.json'), JSON.stringify({
+      name: '@telos/dsh-work-report',
+      private: true,
+    }))
+    writeFileSync(join(workReport, 'lib/index.js'), 'export const name = "telos-work-report"')
+    writeFileSync(join(workReport, 'lib/client.js'), 'window.__TELOS_WORK_REPORT_TEST__ = true')
 
     const path = prepareTelosDshWebPatch(join(root, 'home'), {
       sidebarPackageRoot: sidebar,
@@ -93,6 +102,7 @@ describe('prepareTelosDshWebPatch', () => {
       continuityPackageRoot: continuity,
       mcpManagerPackageRoot: mcpManager,
       workbenchFilesPackageRoot: workbenchFiles,
+      workReportPackageRoot: workReport,
     })
 
     expect(readFileSync(path, 'utf8')).toContain('"@telos/dsh-client-ui-sidebar"')
@@ -109,6 +119,10 @@ describe('prepareTelosDshWebPatch', () => {
     expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-mcp-manager/lib/client.js')))
       .toBe(true)
     expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-workbench-files/lib/index.js')))
+      .toBe(true)
+    expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-work-report/lib/index.js')))
+      .toBe(true)
+    expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-work-report/lib/client.js')))
       .toBe(true)
   })
 })

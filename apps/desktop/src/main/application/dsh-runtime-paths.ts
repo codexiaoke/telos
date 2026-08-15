@@ -51,6 +51,12 @@ export function resolveTelosDshWorkbenchFilesPackageRoot(): string {
     : join(developmentRepositoryRoot(), 'plugins/dsh-workbench-files')
 }
 
+export function resolveTelosDshWorkReportPackageRoot(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'dsh-overlays/telos-work-report')
+    : join(developmentRepositoryRoot(), 'plugins/dsh-work-report')
+}
+
 export function loadDevelopmentEnvironment(): void {
   if (app.isPackaged) return
   const localEnvironment = join(developmentRepositoryRoot(), '.env.local')

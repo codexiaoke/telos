@@ -3,8 +3,8 @@
   "upstream": "https://github.com/deepseek-ai/deepseek-harness",
   "commit": "47f943859bef60e4160492346772ded9b24f765a",
   "source": "packages/client/ui-sidebar/lib/client.js",
-  "sourceSha256": "fcfeefb886b58578dd19614438f57e6a5b16c5d806e3925748a6440c0ab0dad5",
-  "generatedSha256": "acb8b957a9c09be786a2dd6e78ba1985bd394d1d05d84e75d4ed00c42e3a5446",
+  "sourceSha256": "4d8c24d539fc4aca703dfdb0f569eb8614a46326bf620bbbf8a458c60aade43a",
+  "generatedSha256": "deefd23bbd30e6baadef03c69a01c34b65106cc8aa98684bf9eeb1f64679e6c8",
   "transformations": [
     "replace module id",
     "canonicalize path-dependent CSS module prefix",

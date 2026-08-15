@@ -6,6 +6,8 @@
 
 它不是工作事实数据库、项目管理器或另一套 Agent Runtime。DSH 继续拥有模型、会话、工具调度、审批与恢复；Telos 插件只拥有报告文件、报告规范、联系人分组、非敏感 SMTP 配置和本地发送记录。
 
+实现位于 `plugins/dsh-work-report`。Host/Client 包通过现有 Telos Web profile patch 和桌面 overlay 管线安装；没有修改 `third_party/deepseek-harness`，也没有把 Telos Renderer 变成 DSH WebUI fork。
+
 ## 明确不做
 
 - 不建立结构化工作事实、证据、任务或报告区块表。

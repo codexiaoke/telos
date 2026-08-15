@@ -1,3 +1,6 @@
+/* oxlint-disable -- generated bundle includes reviewed third-party Nodemailer code */
+import { createRequire as __telosCreateRequire } from 'node:module';
+const require = __telosCreateRequire(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -12817,7 +12820,7 @@ function installPrompt(ctx) {
     promptCtx.systemPrompt.section({
       name: "tool:telos-work-report",
       order: 116,
-      text: "Telos work reports are ordinary local Markdown documents, not structured work-fact records. For every daily, weekly, or monthly request, call work_report_context first. If its standardConfigured field is false, ask the human to confirm audience, tone, approximate length, and expected sections, then save the confirmed wording with work_report_save_standard before generating. A daily report may use only facts in the human's current message. A weekly report may use only returned daily sources. A monthly report may use only returned weekly sources, or returned daily sources when context explicitly falls back. If sources are absent, ask the human for content; never fabricate. Save the complete generated Markdown with work_report_save and also show the readable report in the reply. To send mail, resolve recipients, prepare an immutable draft, then call work_report_send_email so DSH asks for native approval. The email renderer sends HTML and plain text, never raw Markdown. Do not retry a rejected send."
+      text: "Telos work reports are ordinary local Markdown documents, not structured work-fact records. For every daily, weekly, or monthly request, call work_report_context first. If its standardConfigured field is false, ask the human to confirm audience, tone, approximate length, and expected sections, then save the confirmed wording with work_report_save_standard before generating. A daily report may use only facts the human supplied in the current report request and its follow-up clarification, never unrelated historical reports. A weekly report may use only returned daily sources. A monthly report may use only returned weekly sources, or returned daily sources when context explicitly falls back. If sources are absent, ask the human for content; never fabricate. Save the complete generated Markdown with work_report_save and also show the readable report in the reply. To send mail, resolve recipients, prepare an immutable draft, then call work_report_send_email so DSH asks for native approval. The email renderer sends HTML and plain text, never raw Markdown. Do not retry a rejected send."
     });
   });
 }

@@ -13,6 +13,7 @@ const layoutRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-la
 const continuityRoot = resolve(repositoryRoot, 'plugins/dsh-continuity')
 const mcpManagerRoot = resolve(repositoryRoot, 'plugins/dsh-mcp-manager')
 const workbenchFilesRoot = resolve(repositoryRoot, 'plugins/dsh-workbench-files')
+const workReportRoot = resolve(repositoryRoot, 'plugins/dsh-work-report')
 const patchPath = resolve(sidebarRoot, 'telos.web.patch.yml')
 const temporaryRoot = mkdtempSync(join(tmpdir(), 'telos-dsh-parity-'))
 
@@ -77,6 +78,10 @@ try {
     resolve(workbenchFilesRoot, 'package.json'),
     resolve(workbenchFilesRoot, 'lib/index.js'),
     resolve(workbenchFilesRoot, 'lib/BUILD.json'),
+    resolve(workReportRoot, 'package.json'),
+    resolve(workReportRoot, 'lib/index.js'),
+    resolve(workReportRoot, 'lib/client.js'),
+    resolve(workReportRoot, 'lib/BUILD.json'),
     patchPath,
   ]) {
     assert(existsSync(artifact), `required full-Web artifact is missing: ${artifact}`)
@@ -109,12 +114,14 @@ try {
   const installedContinuity = resolve(profileRoot, 'node_modules/@telos/dsh-continuity')
   const installedMcpManager = resolve(profileRoot, 'node_modules/@telos/dsh-mcp-manager')
   const installedWorkbenchFiles = resolve(profileRoot, 'node_modules/@telos/dsh-workbench-files')
+  const installedWorkReport = resolve(profileRoot, 'node_modules/@telos/dsh-work-report')
   mkdirSync(resolve(profileRoot, 'node_modules/@deepseek-ai'), { recursive: true })
   mkdirSync(resolve(profileRoot, 'node_modules/@telos'), { recursive: true })
   cpSync(layoutRoot, installedLayout, { recursive: true })
   cpSync(continuityRoot, installedContinuity, { recursive: true })
   cpSync(mcpManagerRoot, installedMcpManager, { recursive: true })
   cpSync(workbenchFilesRoot, installedWorkbenchFiles, { recursive: true })
+  cpSync(workReportRoot, installedWorkReport, { recursive: true })
   const profileAnchor = resolve(profileRoot, 'cordis.yml')
   writeFileSync(profileAnchor, '')
   const profileRequire = createRequire(profileAnchor)
@@ -137,6 +144,11 @@ try {
   assert(
     realpathSync(resolvedWorkbenchFilesManifest) === realpathSync(resolve(installedWorkbenchFiles, 'package.json')),
     `Profile-local workbench files plugin does not win package resolution: ${resolvedWorkbenchFilesManifest}`,
+  )
+  const resolvedWorkReportManifest = profileRequire.resolve('@telos/dsh-work-report/package.json')
+  assert(
+    realpathSync(resolvedWorkReportManifest) === realpathSync(resolve(installedWorkReport, 'package.json')),
+    `Profile-local work report plugin does not win package resolution: ${resolvedWorkReportManifest}`,
   )
 
   const requiredSurfaceIds = [
@@ -186,7 +198,7 @@ try {
     .map((row) => row.id)
     .filter((id) => !defaultById.has(id))
   assert(
-    isDeepStrictEqual(addedIds, ['telos-ui-sidebar', 'telos-continuity', 'telos-mcp-manager', 'telos-workbench-files']),
+    isDeepStrictEqual(addedIds, ['telos-ui-sidebar', 'telos-continuity', 'telos-mcp-manager', 'telos-workbench-files', 'telos-work-report']),
     `unexpected Telos-only rows: ${addedIds.join(', ')}`,
   )
   const telosSidebar = effectiveById.get('telos-ui-sidebar')
@@ -221,6 +233,15 @@ try {
   const telosWorkbenchFiles = effectiveById.get('telos-workbench-files')
   assert(telosWorkbenchFiles?.name === '@telos/dsh-workbench-files', 'Telos workbench files package name changed')
   assert(telosWorkbenchFiles.disabled !== true, 'Telos workbench files plugin is disabled')
+  const telosWorkReport = effectiveById.get('telos-work-report')
+  assert(telosWorkReport?.name === '@telos/dsh-work-report', 'Telos work report package name changed')
+  assert(telosWorkReport.disabled !== true, 'Telos work report plugin is disabled')
+  assert(
+    isDeepStrictEqual(telosWorkReport.config, {
+      rootPath: { javascriptSource: "dshHomePath('telos', 'work-report')" },
+    }),
+    'Telos work report storage configuration changed',
+  )
   const continuityManifest = JSON.parse(readFileSync(resolve(continuityRoot, 'package.json'), 'utf8'))
   assert(continuityManifest.name === '@telos/dsh-continuity', 'continuity manifest identity changed')
   assert(continuityManifest.private === true, 'continuity package must stay private')
@@ -243,9 +264,20 @@ try {
     ]),
     'MCP manager Client dependency edges changed',
   )
+  const workReportManifest = JSON.parse(readFileSync(resolve(workReportRoot, 'package.json'), 'utf8'))
+  assert(workReportManifest.name === '@telos/dsh-work-report', 'work report manifest identity changed')
+  assert(workReportManifest.private === true, 'work report package must stay private')
   assert(
-    effectiveRows.length === defaultRows.length + 4,
-    `expected ${String(defaultRows.length + 4)} effective rows, found ${String(effectiveRows.length)}`,
+    isDeepStrictEqual(workReportManifest.dsh?.client?.inject, [
+      '@deepseek-ai/dsh-client-connection',
+      '@deepseek-ai/dsh-client-runtime',
+      '@deepseek-ai/dsh-client-ui-settings',
+    ]),
+    'work report Client dependency edges changed',
+  )
+  assert(
+    effectiveRows.length === defaultRows.length + 5,
+    `expected ${String(defaultRows.length + 5)} effective rows, found ${String(effectiveRows.length)}`,
   )
 
   // Reading the tracked file here makes the same patch consumed by Electron
@@ -254,11 +286,12 @@ try {
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-continuity'), 'tracked continuity patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-mcp-manager'), 'tracked MCP manager patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-workbench-files'), 'tracked workbench files patch is incomplete')
+  assert(readFileSync(patchPath, 'utf8').includes('id: telos-work-report'), 'tracked work report patch is incomplete')
 
   process.stdout.write(`[PASS] DSH default Web rows: ${String(defaultRows.length)}\n`)
   process.stdout.write(`[PASS] Unchanged upstream rows: ${String(defaultRows.length - 1)}\n`)
   process.stdout.write('[PASS] Explained upstream delta: ui-sidebar disabled\n')
-  process.stdout.write('[PASS] Explained Telos additions: sidebar, continuity, MCP manager, and workbench files enabled\n')
+  process.stdout.write('[PASS] Explained Telos additions: sidebar, continuity, MCP manager, workbench files, and work report enabled\n')
   process.stdout.write('[PASS] Profile resolves the Telos Renderer derivative and all Telos Host plugins\n')
   process.stdout.write(`[PASS] Required functional surfaces: ${String(requiredSurfaceIds.length)}\n`)
   process.stdout.write('Telos effective DSH Web composition is structurally equivalent to the pinned default.\n')

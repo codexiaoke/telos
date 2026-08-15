@@ -22,7 +22,7 @@ window.__ModuleLoader__.load({
 			return n;
 		}
 		//#endregion
-		//#region \0dsh-css:/Users/xiaoke/.codex/worktrees/02cc/telos/third_party/deepseek-harness/packages/client/ui-sidebar/src/client/SidebarRoot.module.css.mjs
+		//#region \0dsh-css:/Users/xiaoke/.codex/worktrees/work-report-plugin/third_party/deepseek-harness/packages/client/ui-sidebar/src/client/SidebarRoot.module.css.mjs
 		const css = ".telosSidebar_root{--dsh-sidebar-inline-padding:16px;height:100%;padding:var(--telos-sidebar-top-inset,6px) var(--dsh-sidebar-inline-padding);box-sizing:border-box;background:var(--dsw-specific-sidebar-fill);color:var(--dsw-alias-label-primary);--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2);--dsh-scrollbar-thumb-hover:var(--dsw-alias-scrollbar-hover-l2);flex-direction:column;font-size:14px;display:flex;position:relative}.telosSidebar_root.telosSidebar_collapsed{padding:var(--telos-sidebar-rail-top-inset,18px) 10px 6px}.telosSidebar_root.telosSidebar_quietBars{--dsh-scrollbar-thumb:transparent;--dsh-scrollbar-thumb-hover:transparent}.telosSidebar_fading>*{opacity:0;transition:opacity .15s var(--ds-ease-in-out)}.telosSidebar_wide{animation:telosSidebar_wide-in .2s var(--ds-ease-in-out)}@keyframes telosSidebar_wide-in{0%{opacity:0}}.telosSidebar_railIn .telosSidebar_iconButton,.telosSidebar_railIn .telosSidebar_newSession,.telosSidebar_railIn .telosSidebar_regionArea{animation:telosSidebar_rail-in .15s var(--ds-ease-in-out) backwards}.telosSidebar_railIn .telosSidebar_footArea{animation:telosSidebar_rail-fade-in .15s var(--ds-ease-in-out) backwards}@keyframes telosSidebar_rail-in{0%{opacity:0;transform:translate(49px)}}@keyframes telosSidebar_rail-fade-in{0%{opacity:0}}.telosSidebar_logoRow{box-sizing:border-box;flex:none;align-items:center;height:82px;margin-bottom:4px;padding:0;display:flex;position:relative;overflow:visible;-webkit-app-region:drag}.telosSidebar_collapsed .telosSidebar_logoRow{justify-content:flex-start;height:36px;margin-bottom:12px;padding:0}.telosSidebar_brand{min-width:0;height:28px;color:var(--dsw-alias-label-secondary);background:0 0;border:none;align-items:baseline;padding:0;display:inline-flex;position:absolute;left:8px;bottom:0;overflow:visible;cursor:default;user-select:none}.telosSidebar_iconButton{cursor:pointer;width:28px;height:28px;color:var(--dsw-alias-label-secondary);background:0 0;border:none;border-radius:50%;flex:none;justify-content:center;align-items:center;padding:0;display:inline-flex;-webkit-app-region:no-drag}.telosSidebar_logoRow .telosSidebar_toggle{position:absolute;z-index:7;top:12px;right:80px}.telosSidebar_iconButton:hover{background:var(--dsw-alias-interactive-bg-hover)}.telosSidebar_collapsed .telosSidebar_iconButton{width:36px;height:36px}.telosSidebar_collapsed .telosSidebar_toggle .telosSidebar_panelIcon{display:none}.telosSidebar_collapsed .telosSidebar_toggle:hover .telosSidebar_panelIcon{display:inline}.telosSidebar_collapsed .telosSidebar_toggle:hover .telosSidebar_railFish{display:none}.telosSidebar_collapsed .telosSidebar_iconButton{color:var(--dsw-alias-label-primary)}.telosSidebar_newSession{box-sizing:border-box;border:0;background:transparent;height:44px;color:var(--dsw-alias-label-primary);cursor:pointer;border-radius:12px;flex:none;justify-content:flex-start;align-items:center;gap:10px;margin:0 0 10px;padding:0 12px;font-size:16px;font-weight:500;line-height:22px;display:flex;overflow:hidden;-webkit-app-region:no-drag}.telosSidebar_newSession:hover{background:var(--dsw-alias-interactive-bg-hover)}.telosSidebar_collapsed .telosSidebar_newSession{background:0 0;border-color:#0000;align-self:flex-start;gap:0;width:36px;height:36px;margin:0 0 12px;padding:0}.telosSidebar_collapsed .telosSidebar_newSession:hover{background:var(--dsw-alias-interactive-bg-hover)}.telosSidebar_newSessionLabel{white-space:nowrap;max-width:200px;overflow:hidden}.telosSidebar_collapsed .telosSidebar_newSessionLabel{max-width:0}.telosSidebar_regionArea{min-height:0;margin-left:-4px;margin-right:calc(-1 * var(--dsh-sidebar-inline-padding));flex-direction:column;flex:1;padding-left:4px;display:flex;overflow:visible}.telosSidebar_collapsed .telosSidebar_regionArea{margin-left:0;margin-right:0;padding-left:0}.telosSidebar_footArea{flex-direction:column;flex:none;display:flex}.telosSidebar_settingsArea,.telosSidebar_footerActions{flex:none;width:100%;min-width:0}.telosSidebar_footerActions{display:flex}.telosSidebar_collapsed .telosSidebar_footArea{align-items:center}.telosSidebar_collapsed .telosSidebar_settingsArea,.telosSidebar_collapsed .telosSidebar_footerActions{justify-content:center;width:auto;display:flex}@media (prefers-reduced-motion:reduce){.telosSidebar_wide,.telosSidebar_fading>*,.telosSidebar_railIn .telosSidebar_iconButton,.telosSidebar_railIn .telosSidebar_newSession,.telosSidebar_railIn .telosSidebar_footArea,.telosSidebar_railIn .telosSidebar_regionArea{transition:none;animation:none}}";
 		const tagId = "@telos/dsh-client-ui-sidebar/SidebarRoot.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
@@ -33,27 +33,27 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var SidebarRoot_module_css_default = {
-			"quietBars": "telosSidebar_quietBars",
-			"root": "telosSidebar_root",
-			"fading": "telosSidebar_fading",
-			"iconButton": "telosSidebar_iconButton",
-			"newSession": "telosSidebar_newSession",
-			"footArea": "telosSidebar_footArea",
-			"railIn": "telosSidebar_railIn",
-			"rail-in": "telosSidebar_rail-in",
-			"logoRow": "telosSidebar_logoRow",
-			"toggle": "telosSidebar_toggle",
-			"wide": "telosSidebar_wide",
-			"wide-in": "telosSidebar_wide-in",
-			"panelIcon": "telosSidebar_panelIcon",
-			"footerActions": "telosSidebar_footerActions",
-			"regionArea": "telosSidebar_regionArea",
-			"rail-fade-in": "telosSidebar_rail-fade-in",
-			"newSessionLabel": "telosSidebar_newSessionLabel",
-			"brand": "telosSidebar_brand",
-			"settingsArea": "telosSidebar_settingsArea",
 			"collapsed": "telosSidebar_collapsed",
-			"railFish": "telosSidebar_railFish"
+			"newSession": "telosSidebar_newSession",
+			"toggle": "telosSidebar_toggle",
+			"rail-in": "telosSidebar_rail-in",
+			"iconButton": "telosSidebar_iconButton",
+			"rail-fade-in": "telosSidebar_rail-fade-in",
+			"brand": "telosSidebar_brand",
+			"quietBars": "telosSidebar_quietBars",
+			"wide": "telosSidebar_wide",
+			"fading": "telosSidebar_fading",
+			"logoRow": "telosSidebar_logoRow",
+			"footerActions": "telosSidebar_footerActions",
+			"railIn": "telosSidebar_railIn",
+			"root": "telosSidebar_root",
+			"wide-in": "telosSidebar_wide-in",
+			"footArea": "telosSidebar_footArea",
+			"railFish": "telosSidebar_railFish",
+			"panelIcon": "telosSidebar_panelIcon",
+			"regionArea": "telosSidebar_regionArea",
+			"settingsArea": "telosSidebar_settingsArea",
+			"newSessionLabel": "telosSidebar_newSessionLabel"
 		};
 		//#endregion
 		//#region lib/types/client/SidebarRoot.js

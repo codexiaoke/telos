@@ -9,6 +9,7 @@ const TELOS_SIDEBAR_PACKAGE = '@telos/dsh-client-ui-sidebar'
 const TELOS_CONTINUITY_PACKAGE = '@telos/dsh-continuity'
 const TELOS_MCP_MANAGER_PACKAGE = '@telos/dsh-mcp-manager'
 const TELOS_WORKBENCH_FILES_PACKAGE = '@telos/dsh-workbench-files'
+const TELOS_WORK_REPORT_PACKAGE = '@telos/dsh-work-report'
 
 export interface TelosDshWebOverlaySources {
   sidebarPackageRoot: string
@@ -16,6 +17,7 @@ export interface TelosDshWebOverlaySources {
   continuityPackageRoot: string
   mcpManagerPackageRoot: string
   workbenchFilesPackageRoot: string
+  workReportPackageRoot: string
 }
 
 /** Read the tracked DSH patch that defines Telos's complete allowed roster delta. */
@@ -87,11 +89,13 @@ export function prepareTelosDshWebPatch(
   removeLegacyFlatPackage(dshHome, TELOS_CONTINUITY_PACKAGE)
   removeLegacyFlatPackage(dshHome, TELOS_MCP_MANAGER_PACKAGE)
   removeLegacyFlatPackage(dshHome, TELOS_WORKBENCH_FILES_PACKAGE)
+  removeLegacyFlatPackage(dshHome, TELOS_WORK_REPORT_PACKAGE)
   installProfilePackage(dshHome, sources.sidebarPackageRoot, TELOS_SIDEBAR_PACKAGE, ['lib/client.js'])
   installProfilePackage(dshHome, sources.layoutPackageRoot, DSH_LAYOUT_PACKAGE, ['lib/client.js'])
   installProfilePackage(dshHome, sources.continuityPackageRoot, TELOS_CONTINUITY_PACKAGE, ['lib/index.js', 'lib/client.js'])
   installProfilePackage(dshHome, sources.mcpManagerPackageRoot, TELOS_MCP_MANAGER_PACKAGE, ['lib/index.js', 'lib/client.js'])
   installProfilePackage(dshHome, sources.workbenchFilesPackageRoot, TELOS_WORKBENCH_FILES_PACKAGE, ['lib/index.js'])
+  installProfilePackage(dshHome, sources.workReportPackageRoot, TELOS_WORK_REPORT_PACKAGE, ['lib/index.js', 'lib/client.js'])
 
   mkdirSync(dshHome, { recursive: true })
   const path = join(dshHome, PATCH_FILENAME)

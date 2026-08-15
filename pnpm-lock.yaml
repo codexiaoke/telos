@@ -214,6 +214,9 @@ importers:
       nodemailer:
         specifier: 9.0.3
         version: 9.0.3
+      react:
+        specifier: 19.2.8
+        version: 19.2.8
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../third_party/deepseek-harness/vendor/cordis
@@ -224,6 +227,12 @@ importers:
       '@deepseek-ai/dsh-client-connection':
         specifier: link:../../third_party/deepseek-harness/packages/client/connection
         version: link:../../third_party/deepseek-harness/packages/client/connection
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: link:../../third_party/deepseek-harness/packages/client/runtime
+        version: link:../../third_party/deepseek-harness/packages/client/runtime
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: link:../../third_party/deepseek-harness/packages/client/ui-settings
+        version: link:../../third_party/deepseek-harness/packages/client/ui-settings
       '@deepseek-ai/dsh-credentials':
         specifier: link:../../third_party/deepseek-harness/packages/credentials/credentials
         version: link:../../third_party/deepseek-harness/packages/credentials/credentials
@@ -239,6 +248,9 @@ importers:
       '@types/nodemailer':
         specifier: 7.0.12
         version: 7.0.12
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
       typescript:
         specifier: 7.0.2
         version: 7.0.2

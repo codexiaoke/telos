@@ -52,6 +52,9 @@ function assertRuntimeBuilt() {
     join(repositoryRoot, 'plugins/dsh-mcp-manager/lib/BUILD.json'),
     join(repositoryRoot, 'plugins/dsh-workbench-files/lib/index.js'),
     join(repositoryRoot, 'plugins/dsh-workbench-files/lib/BUILD.json'),
+    join(repositoryRoot, 'plugins/dsh-work-report/lib/index.js'),
+    join(repositoryRoot, 'plugins/dsh-work-report/lib/client.js'),
+    join(repositoryRoot, 'plugins/dsh-work-report/lib/BUILD.json'),
   ]
   for (const path of required) accessSync(path)
 }
@@ -140,6 +143,7 @@ async function smokePackagedDshWeb(resourcesDirectory, packagedDshRoot, packaged
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-continuity'), profileModules, '@telos/dsh-continuity')
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager'), profileModules, '@telos/dsh-mcp-manager')
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-workbench-files'), profileModules, '@telos/dsh-workbench-files')
+    installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-work-report'), profileModules, '@telos/dsh-work-report')
     const output = { value: '' }
     child = spawn(packagedNode, [packagedCli, 'web', '--patch', patchPath, '--port', '0'], {
       cwd: packagedDshRoot,
@@ -149,7 +153,7 @@ async function smokePackagedDshWeb(resourcesDirectory, packagedDshRoot, packaged
     const baseUrl = await waitForWebReady(child, output)
     const indexResponse = await fetch(baseUrl, { signal: AbortSignal.timeout(5_000) })
     const indexHtml = await indexResponse.text()
-    if (!indexResponse.ok || !indexHtml.includes('"@telos/dsh-continuity"') || !indexHtml.includes('"@telos/dsh-mcp-manager"')) {
+    if (!indexResponse.ok || !indexHtml.includes('"@telos/dsh-continuity"') || !indexHtml.includes('"@telos/dsh-mcp-manager"') || !indexHtml.includes('"@telos/dsh-work-report"')) {
       throw new Error(`Packaged DSH Web omitted a Telos Client module (${String(indexResponse.status)})`)
     }
     const response = await fetch(`${baseUrl}/telos-continuity/health`, {
@@ -167,7 +171,24 @@ async function smokePackagedDshWeb(resourcesDirectory, packagedDshRoot, packaged
     if (!response.ok || body.result?.ok !== true || body.result.value?.integrity !== 'ok') {
       throw new Error(`Packaged continuity health failed (${String(response.status)}): ${JSON.stringify(body)}`)
     }
+    const workReportResponse = await fetch(`${baseUrl}/telos-work-report/snapshot`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: AbortSignal.timeout(5_000),
+      body: JSON.stringify({
+        type: 'client-request',
+        rpcId: `packaged-work-report-${randomUUID()}`,
+        method: 'snapshot',
+        payload: {},
+      }),
+    })
+    const workReportBody = await workReportResponse.json()
+    if (!workReportResponse.ok || workReportBody.result?.ok !== true
+      || workReportBody.result.value?.rootPath !== join(temporaryHomeRoot, 'telos/work-report')) {
+      throw new Error(`Packaged work report snapshot failed (${String(workReportResponse.status)}): ${JSON.stringify(workReportBody)}`)
+    }
     process.stdout.write(`Started packaged DSH Web with continuity schema ${String(body.result.value.schemaVersion)}\n`)
+    process.stdout.write('Loaded packaged Telos work report Host and Client plugin\n')
   } finally {
     if (child !== undefined && child.exitCode === null) {
       const exited = new Promise(resolveExit => child.once('exit', resolveExit))
@@ -207,6 +228,8 @@ async function verifyPackagedRuntime(expectedManifest) {
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager/lib/index.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager/lib/client.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-workbench-files/lib/index.js'))
+  accessSync(join(resourcesDirectory, 'dsh-overlays/telos-work-report/lib/index.js'))
+  accessSync(join(resourcesDirectory, 'dsh-overlays/telos-work-report/lib/client.js'))
   accessSync(packagedNode)
   accessSync(packagedCli)
   run(packagedNode, [packagedCli, '--version'], packagedDshRoot)

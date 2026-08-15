@@ -20,7 +20,7 @@ await build({
   packages: 'bundle',
   external: ['node:*', '@deepseek-ai/*'],
   banner: { js: [
-    '/* oxlint-disable -- generated bundle includes reviewed third-party Nodemailer code */',
+    '/* oxlint-disable -- generated bundle includes reviewed third-party Nodemailer and ImapFlow code */',
     "import { createRequire as __telosCreateRequire } from 'node:module';",
     'const require = __telosCreateRequire(import.meta.url);',
   ].join('\n') },

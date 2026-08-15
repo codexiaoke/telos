@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import type { Contact, ContactGroup, MailConfig, MailSettingsView, RecipientDirectory, ReportType } from '../contracts.js'
+import type { Contact, ContactGroup, DeliveryRecord, MailConfig, MailSettingsView, RecipientDirectory, ReportType, SentMailSyncConfig } from '../contracts.js'
 import type { WorkReportClientController } from './controller.js'
 
 export interface WorkReportInjected { controller: WorkReportClientController }
@@ -17,6 +17,17 @@ function editableMail(config?: MailSettingsView): MailConfig {
     username: config.username,
     fromName: config.fromName,
     fromAddress: config.fromAddress,
+    ...(config.sentSync === undefined ? {} : {
+      sentSync: {
+        enabled: true,
+        host: config.sentSync.host,
+        port: config.sentSync.port,
+        secure: config.sentSync.secure,
+        username: config.sentSync.username,
+        passwordMode: config.sentSync.passwordMode,
+        ...(config.sentSync.mailbox === undefined ? {} : { mailbox: config.sentSync.mailbox }),
+      },
+    }),
   }
 }
 
@@ -89,10 +100,33 @@ function Recipients({ controller, directory }: { controller: WorkReportClientCon
 function Mail({ controller, configured }: { controller: WorkReportClientController; configured?: MailSettingsView }) {
   const [mail, setMail] = useState<MailConfig>(() => editableMail(configured))
   const [password, setPassword] = useState('')
+  const [imapPassword, setImapPassword] = useState('')
   useEffect(() => setMail(editableMail(configured)), [configured])
   const update = (patch: Partial<MailConfig>) => setMail(current => ({ ...current, ...patch }))
+  const updateSync = (patch: Partial<SentMailSyncConfig>) => setMail(current => current.sentSync === undefined
+    ? current
+    : { ...current, sentSync: { ...current.sentSync, ...patch } })
+  const setSyncEnabled = (enabled: boolean): void => update({
+    sentSync: enabled ? mail.sentSync ?? {
+      enabled: true,
+      host: '',
+      port: 993,
+      secure: true,
+      username: mail.username,
+      passwordMode: 'smtp',
+    } : undefined,
+  })
+  const save = (): void => {
+    void controller.saveMail(
+      mail,
+      password.trim() === '' ? undefined : password,
+      mail.sentSync?.passwordMode !== 'imap' || imapPassword.trim() === '' ? undefined : imapPassword,
+    )
+    setPassword('')
+    setImapPassword('')
+  }
   return <div className="telosReportPanel">
-    <div className="telosReportPanelHeader"><div><h2>邮件发送</h2><p>邮件由本机 SMTP 直接发送。密码交给 DSH 凭据存储，报告配置文件中只保存非敏感连接信息。</p></div><span className="telosReportStatus" data-ready={configured?.passwordConfigured || undefined}>{configured?.passwordConfigured ? `密码已配置${configured.passwordSource === undefined ? '' : ` · ${configured.passwordSource}`}` : '密码未配置'}</span></div>
+    <div className="telosReportPanelHeader"><div><h2>邮件发送与已发送同步</h2><p>SMTP 负责投递；可选的 IMAP 同步会在完整投递后，把同一份排版邮件写入邮箱“已发送”。密码交给 DSH 凭据存储。</p></div><span className="telosReportStatus" data-ready={configured?.passwordConfigured || undefined}>{configured?.passwordConfigured ? `SMTP 密码已配置${configured.passwordSource === undefined ? '' : ` · ${configured.passwordSource}`}` : 'SMTP 密码未配置'}</span></div>
     <div className="telosReportGrid telosReportMailGrid">
       <label>SMTP 主机<input onChange={event => update({ host: event.target.value })} placeholder="smtp.example.com" value={mail.host} /></label>
       <label>端口<input min="1" max="65535" onChange={event => update({ port: Number(event.target.value) })} type="number" value={mail.port} /></label>
@@ -102,10 +136,48 @@ function Mail({ controller, configured }: { controller: WorkReportClientControll
       <label>SMTP 密码<input autoComplete="new-password" onChange={event => setPassword(event.target.value)} placeholder={configured?.passwordConfigured ? '留空则保持现有密码' : '输入密码或应用专用密码'} type="password" value={password} /></label>
     </div>
     <label className="telosReportCheckbox"><input checked={mail.secure} onChange={event => update({ secure: event.target.checked })} type="checkbox" />使用 TLS 直连（常用于 465 端口）</label>
-    <div className="telosReportActions">
-      {configured?.passwordConfigured && configured.passwordWritable !== false ? <button data-danger onClick={() => { setPassword(''); void controller.saveMail(mail, null) }} type="button">清除已保存密码</button> : null}
-      <button data-primary onClick={() => { void controller.saveMail(mail, password.trim() === '' ? undefined : password); setPassword('') }} type="button">保存邮件配置</button>
+    <div className="telosReportSubsection">
+      <label className="telosReportCheckbox"><input checked={mail.sentSync !== undefined} onChange={event => setSyncEnabled(event.target.checked)} type="checkbox" />发送全部成功后，同步到邮箱“已发送”文件夹</label>
+      {mail.sentSync === undefined ? null : <>
+        <div className="telosReportGrid telosReportImapGrid">
+          <label>IMAP 主机<input onChange={event => updateSync({ host: event.target.value })} placeholder="imap.example.com" value={mail.sentSync.host} /></label>
+          <label>端口<input min="1" max="65535" onChange={event => updateSync({ port: Number(event.target.value) })} type="number" value={mail.sentSync.port} /></label>
+          <label>IMAP 用户名<input onChange={event => updateSync({ username: event.target.value })} placeholder="sender@example.com" value={mail.sentSync.username} /></label>
+          <label>已发送文件夹<input onChange={event => updateSync({ mailbox: event.target.value.trim() === '' ? undefined : event.target.value })} placeholder="留空则自动识别" value={mail.sentSync.mailbox ?? ''} /><small>无法自动识别时填写服务器中的准确路径，例如 Sent Messages。</small></label>
+        </div>
+        <div className="telosReportInlineOptions">
+          <label className="telosReportCheckbox"><input checked={mail.sentSync.secure} onChange={event => updateSync({ secure: event.target.checked })} type="checkbox" />使用 IMAP TLS 直连（常用于 993 端口）</label>
+          <label className="telosReportCheckbox"><input checked={mail.sentSync.passwordMode === 'smtp'} onChange={event => updateSync({ passwordMode: event.target.checked ? 'smtp' : 'imap' })} type="checkbox" />复用 SMTP 密码</label>
+        </div>
+        {mail.sentSync.passwordMode === 'smtp' ? null : <label className="telosReportImapPassword">IMAP 密码<input autoComplete="new-password" onChange={event => setImapPassword(event.target.value)} placeholder={configured?.sentSync?.passwordConfigured ? '留空则保持现有密码' : '输入 IMAP 密码或应用专用密码'} type="password" value={imapPassword} /></label>}
+        <p className="telosReportHint">IMAP 同步失败不会重新发送邮件；可在对话中要求“重试同步已发送”。</p>
+      </>}
     </div>
+    <div className="telosReportActions">
+      {configured?.sentSync?.passwordMode === 'imap' && configured.sentSync.passwordConfigured && configured.sentSync.passwordWritable !== false ? <button data-danger onClick={() => { setImapPassword(''); void controller.saveMail(mail, undefined, null) }} type="button">清除 IMAP 密码</button> : null}
+      {configured?.passwordConfigured && configured.passwordWritable !== false ? <button data-danger onClick={() => { setPassword(''); void controller.saveMail(mail, null) }} type="button">清除 SMTP 密码</button> : null}
+      <button data-primary onClick={save} type="button">保存邮件配置</button>
+    </div>
+  </div>
+}
+
+function syncLabel(record: DeliveryRecord): string {
+  if (record.sentFolderSync.status === 'synced') return `已同步${record.sentFolderSync.mailbox === undefined ? '' : ` · ${record.sentFolderSync.mailbox}`}`
+  if (record.sentFolderSync.status === 'failed') return '同步失败'
+  if (record.sentFolderSync.status === 'pending') return '等待同步'
+  return '未启用同步'
+}
+
+function DeliveryHistory({ records }: { records: readonly DeliveryRecord[] }) {
+  return <div className="telosReportPanel">
+    <div className="telosReportPanelHeader"><div><h2>已发送工作报告</h2><p>记录实际收件人、SMTP 投递结果和“已发送”文件夹同步状态。记录仅保存在本机。</p></div></div>
+    {records.length === 0 ? <div className="telosReportEmpty">还没有已发送的工作报告。</div> : <div className="telosReportDeliveryList">
+      {records.map(record => <div className="telosReportDelivery" key={record.deliveryId}>
+        <div><strong>{record.report.title}</strong><small>{record.subject} · {new Date(record.sentAt ?? record.createdAt).toLocaleString('zh-CN')}</small></div>
+        <div><span>{record.status === 'sent' ? `已发送给 ${String(record.sentCount)} 人` : `${String(record.sentCount)} 人成功，${String(record.failedCount)} 人失败`}</span><small title={record.recipients.map(recipient => recipient.email).join('、')}>{record.recipients.map(recipient => recipient.name).join('、')}</small></div>
+        <div data-sync={record.sentFolderSync.status}><span>{syncLabel(record)}</span>{record.sentFolderSync.error === undefined ? null : <small title={record.sentFolderSync.error}>在对话中说“重试同步已发送”</small>}</div>
+      </div>)}
+    </div>}
   </div>
 }
 
@@ -132,6 +204,7 @@ export function WorkReportSettingsSection({ controller }: WorkReportInjected) {
       <Standards controller={controller} values={settings.standards} />
       <Recipients controller={controller} directory={settings.directory} />
       <Mail controller={controller} configured={settings.mail} />
+      <DeliveryHistory records={state.deliveries} />
     </>}
   </section>
 }

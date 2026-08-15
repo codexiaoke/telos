@@ -3,7 +3,7 @@ import { rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { parseDirectory, WorkReportStore } from '../src/store.js'
+import { parseDirectory, parseMailConfig, WorkReportStore } from '../src/store.js'
 
 const roots: string[] = []
 
@@ -80,6 +80,27 @@ describe('WorkReportStore', () => {
       contacts: [{ id: 'manager', name: '主管', email: 'manager@example.com' }],
       groups: [{ id: 'bad', name: '错误分组', contactIds: ['missing'] }],
     })).toThrow(/unknown contact/)
+  })
+
+  it('stores only non-secret SMTP and IMAP Sent synchronization settings', async () => {
+    const { root, store } = await fixture()
+    const config = parseMailConfig({
+      host: 'smtp.example.com', port: 465, secure: true,
+      username: 'sender@example.com', fromName: '小可', fromAddress: 'SENDER@example.com',
+      sentSync: {
+        enabled: true, host: 'imap.example.com', port: 993, secure: true,
+        username: 'sender@example.com', passwordMode: 'imap', mailbox: 'Sent Messages',
+      },
+    })
+
+    await store.saveMailConfig(config)
+
+    expect(await store.mailConfig()).toEqual({
+      ...config,
+      fromAddress: 'sender@example.com',
+    })
+    expect(await readFile(join(root, 'mail.json'), 'utf8')).not.toContain('"password":')
+    expect(() => parseMailConfig({ ...config, sentSync: { ...config.sentSync, port: 0 } })).toThrow(/IMAP port/)
   })
 
   it('rejects invalid dates and daily ranges', async () => {

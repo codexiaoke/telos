@@ -2,8 +2,10 @@ import { createHash, randomUUID } from 'node:crypto'
 import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import nodemailer from 'nodemailer'
-import type { DeliveryDraftView, DeliveryResult, ResolvedRecipient } from './contracts.js'
+import { IMAP_PASSWORD_REF } from './contracts.js'
+import type { DeliveryDraftView, DeliveryResult, ResolvedRecipient, SentFolderSyncState } from './contracts.js'
 import { renderMarkdownEmail } from './markdown-email.js'
+import { SentMailSynchronizer } from './sent-sync.js'
 import type { DeliveryDraft, DeliveryDraftImmutable } from './store.js'
 import { WorkReportStore } from './store.js'
 
@@ -29,7 +31,9 @@ export type MailTransportFactory = (options: Record<string, unknown>) => Transpo
 
 export interface WorkReportMailerOptions {
   passwordRef: string
+  imapPasswordRef?: string
   createTransport?: MailTransportFactory
+  sentSynchronizer?: SentMailSynchronizer
 }
 
 function requiredString(value: unknown, field: string, maxLength: number): string {
@@ -71,7 +75,9 @@ function referenceOf<T extends { markdown: string }>(report: T): Omit<T, 'markdo
 
 export class WorkReportMailer {
   private readonly passwordRef
+  private readonly imapPasswordRef
   private readonly createTransport: MailTransportFactory
+  private readonly sentSynchronizer: SentMailSynchronizer
 
   constructor(
     private readonly store: WorkReportStore,
@@ -79,7 +85,9 @@ export class WorkReportMailer {
     options: WorkReportMailerOptions,
   ) {
     this.passwordRef = credentialRef(requiredString(options.passwordRef, 'SMTP password credential reference', 128))
+    this.imapPasswordRef = credentialRef(requiredString(options.imapPasswordRef ?? IMAP_PASSWORD_REF, 'IMAP password credential reference', 128))
     this.createTransport = options.createTransport ?? (input => nodemailer.createTransport(input) as unknown as TransporterLike)
+    this.sentSynchronizer = options.sentSynchronizer ?? new SentMailSynchronizer()
   }
 
   async prepare(input: PrepareEmailInput): Promise<DeliveryDraftView> {
@@ -100,7 +108,6 @@ export class WorkReportMailer {
     ])
     if (mail === undefined) throw new Error('SMTP settings are not configured')
     if (!credentialInfo.configured) throw new Error('SMTP password is not configured')
-
     const contactById = new Map(directory.contacts.map(contact => [contact.id, contact]))
     const groupById = new Map(directory.groups.map(group => [group.id, group]))
     const selectedIds = new Set(contactIds)
@@ -145,6 +152,7 @@ export class WorkReportMailer {
       immutable,
       sentEmails: [],
       attempts: [],
+      sentFolderSync: mail.sentSync === undefined ? { status: 'not-configured' } : { status: 'pending' },
     }
     await this.store.saveDeliveryDraft(draft)
     return {
@@ -162,7 +170,10 @@ export class WorkReportMailer {
     const draft = await this.checkedDraft(input)
     const recipients = draft.immutable.recipients.map(recipient => `${recipient.name} <${recipient.email}>`).join('、')
     const groups = draft.immutable.recipientGroups.length === 0 ? '' : `；分组：${draft.immutable.recipientGroups.join('、')}`
-    return `发送《${draft.immutable.report.title}》；主题：${draft.immutable.subject}；发件箱：${draft.immutable.mail.fromAddress}${groups}；实际收件人（${String(draft.immutable.recipients.length)}）：${recipients}`
+    const sync = draft.immutable.mail.sentSync === undefined
+      ? ''
+      : `；发送成功后同步到 IMAP 已发送邮箱（${draft.immutable.mail.sentSync.host}）`
+    return `发送《${draft.immutable.report.title}》；主题：${draft.immutable.subject}；发件箱：${draft.immutable.mail.fromAddress}${groups}；实际收件人（${String(draft.immutable.recipients.length)}）：${recipients}${sync}`
   }
 
   async send(input: SendEmailInput, signal: AbortSignal): Promise<DeliveryResult> {
@@ -228,7 +239,56 @@ export class WorkReportMailer {
     draft.status = failed.length === 0 ? 'sent' : 'partial'
     if (draft.status === 'sent') draft.sentAt = new Date().toISOString()
     await this.store.saveDeliveryDraft(draft)
-    return { deliveryId: draft.id, status: draft.status, sent, failed }
+    if (draft.status === 'sent' && draft.immutable.mail.sentSync !== undefined && draft.sentFolderSync.status !== 'synced') {
+      await this.syncDraft(draft, signal)
+    }
+    return { deliveryId: draft.id, status: draft.status, sent, failed, sentFolderSync: draft.sentFolderSync }
+  }
+
+  async sentSyncApprovalReason(input: SendEmailInput): Promise<string> {
+    const draft = await this.checkedDraft(input)
+    const config = draft.immutable.mail.sentSync
+    if (draft.status !== 'sent') throw new Error('only a fully sent work report can be synchronized to Sent')
+    if (config === undefined) throw new Error('sent-mail synchronization is not configured for this delivery')
+    const mailbox = config.mailbox ?? '服务器自动识别的已发送邮箱'
+    return `把已发送的《${draft.immutable.report.title}》同步到 IMAP：${config.username}@${config.host} / ${mailbox}；不会再次向收件人发送邮件`
+  }
+
+  async syncSentEmail(input: SendEmailInput, signal: AbortSignal): Promise<SentFolderSyncState> {
+    const draft = await this.checkedDraft(input)
+    if (draft.status !== 'sent') throw new Error('only a fully sent work report can be synchronized to Sent')
+    if (draft.immutable.mail.sentSync === undefined) throw new Error('sent-mail synchronization is not configured for this delivery')
+    if (draft.sentFolderSync.status === 'synced') return draft.sentFolderSync
+    return this.syncDraft(draft, signal)
+  }
+
+  private async syncDraft(draft: DeliveryDraft, signal: AbortSignal): Promise<SentFolderSyncState> {
+    const config = draft.immutable.mail.sentSync
+    if (config === undefined) return { status: 'not-configured' }
+    const attemptedAt = new Date().toISOString()
+    draft.sentFolderSync = { status: 'pending', attemptedAt }
+    await this.store.saveDeliveryDraft(draft)
+    let passwordValue = ''
+    try {
+      const credential = await this.credentials.resolve(config.passwordMode === 'smtp' ? this.passwordRef : this.imapPasswordRef)
+      if (credential === undefined) throw new Error('IMAP password is not configured')
+      passwordValue = credential.value
+      draft.sentFolderSync = await this.sentSynchronizer.sync(draft, config, credential.value, signal)
+      await this.store.appendDeliveryHistory({
+        kind: 'sent-folder-sync', deliveryId: draft.id, reportId: draft.immutable.report.id,
+        at: draft.sentFolderSync.syncedAt, status: 'synced', mailbox: draft.sentFolderSync.mailbox,
+        uid: draft.sentFolderSync.uid ?? null,
+      })
+    } catch (error) {
+      const failure = safeMessage(error, [passwordValue])
+      draft.sentFolderSync = { status: 'failed', attemptedAt, error: failure }
+      await this.store.appendDeliveryHistory({
+        kind: 'sent-folder-sync', deliveryId: draft.id, reportId: draft.immutable.report.id,
+        at: attemptedAt, status: 'failed', error: failure,
+      })
+    }
+    await this.store.saveDeliveryDraft(draft)
+    return draft.sentFolderSync
   }
 
   private async checkedDraft(input: SendEmailInput): Promise<DeliveryDraft> {

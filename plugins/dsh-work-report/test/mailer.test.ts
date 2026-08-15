@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import { afterEach, describe, expect, it } from 'vitest'
 import { WorkReportMailer, type MailTransportFactory } from '../src/mailer.js'
+import { SentMailSynchronizer } from '../src/sent-sync.js'
 import { WorkReportStore } from '../src/store.js'
 
 const roots: string[] = []
@@ -16,11 +17,22 @@ afterEach(() => {
 function credentials(password = 'smtp-super-secret'): CredentialProvider {
   return {
     async describe() { return { configured: true, source: 'test', writable: true } },
-    async resolve() { return { value: password, source: 'test' } },
+    async resolve(ref: string) { return { value: ref.includes('IMAP') ? 'imap-super-secret' : password, source: 'test' } },
   } as unknown as CredentialProvider
 }
 
-async function fixture(createTransport: MailTransportFactory) {
+async function fixture(createTransport: MailTransportFactory, options: {
+  sentSync?: {
+    enabled: true
+    host: string
+    port: number
+    secure: boolean
+    username: string
+    passwordMode: 'smtp' | 'imap'
+    mailbox?: string
+  }
+  sentSynchronizer?: SentMailSynchronizer
+} = {}) {
   const root = await mkdtemp(join(tmpdir(), 'telos-work-report-mail-'))
   roots.push(root)
   const store = new WorkReportStore(root)
@@ -39,10 +51,16 @@ async function fixture(createTransport: MailTransportFactory) {
   await store.saveMailConfig({
     host: 'smtp.example.com', port: 465, secure: true, username: 'sender@example.com',
     fromName: '小可', fromAddress: 'sender@example.com',
+    ...(options.sentSync === undefined ? {} : { sentSync: options.sentSync }),
   })
   return {
     store,
-    mailer: new WorkReportMailer(store, credentials(), { passwordRef: 'TELOS_WORK_REPORT_SMTP_PASSWORD', createTransport }),
+    mailer: new WorkReportMailer(store, credentials(), {
+      passwordRef: 'TELOS_WORK_REPORT_SMTP_PASSWORD',
+      imapPasswordRef: 'TELOS_WORK_REPORT_IMAP_PASSWORD',
+      createTransport,
+      ...(options.sentSynchronizer === undefined ? {} : { sentSynchronizer: options.sentSynchronizer }),
+    }),
   }
 }
 
@@ -126,5 +144,89 @@ describe('WorkReportMailer', () => {
     await expect(mailer.approvalReason({
       deliveryId: prepared.deliveryId, deliveryHash: prepared.deliveryHash,
     })).rejects.toThrow(/approved hash/)
+  })
+
+  it('synchronizes one sent copy after complete SMTP delivery and exposes a local record', async () => {
+    let appended = 0
+    const sentSynchronizer = new SentMailSynchronizer({
+      compileMessage: async () => Buffer.from('From: sender@example.com\r\n\r\nRendered report'),
+      createClient: options => ({
+        async connect() { expect(options.auth).toEqual({ user: 'sender@example.com', pass: 'smtp-super-secret' }) },
+        async list() { return [{ path: 'Sent Messages', specialUse: '\\Sent' }] as never },
+        async append(path, content, flags) {
+          appended += 1
+          expect(path).toBe('Sent Messages')
+          expect(content).toBeInstanceOf(Buffer)
+          expect(flags).toEqual(['\\Seen'])
+          return { destination: path, uid: 42 }
+        },
+        async logout() {},
+        close() {},
+      }),
+    })
+    const { store, mailer } = await fixture(() => ({ async sendMail(message) { return { messageId: String(message.messageId) } }, close() {} }), {
+      sentSync: {
+        enabled: true, host: 'imap.example.com', port: 993, secure: true,
+        username: 'sender@example.com', passwordMode: 'smtp',
+      },
+      sentSynchronizer,
+    })
+    const prepared = await mailer.prepare({
+      reportId: 'daily:2026-08-15:2026-08-15', groupIds: ['review'], subject: '同步日报',
+    })
+
+    await expect(mailer.send(prepared, new AbortController().signal)).resolves.toMatchObject({
+      status: 'sent', sentFolderSync: { status: 'synced', mailbox: 'Sent Messages', uid: 42 },
+    })
+    expect(appended).toBe(1)
+    await expect(store.deliveryRecords()).resolves.toMatchObject([{
+      deliveryId: prepared.deliveryId,
+      subject: '同步日报',
+      sentCount: 2,
+      failedCount: 0,
+      sentFolderSync: { status: 'synced', mailbox: 'Sent Messages' },
+    }])
+  })
+
+  it('records IMAP failure and retries only Sent synchronization without resending SMTP', async () => {
+    let smtpCalls = 0
+    let imapCalls = 0
+    const sentSynchronizer = new SentMailSynchronizer({
+      compileMessage: async () => Buffer.from('Rendered report'),
+      createClient: () => ({
+        async connect() {},
+        async list() { return [{ path: 'Sent', specialUse: '\\Sent' }] as never },
+        async append(path) {
+          imapCalls += 1
+          if (imapCalls === 1) throw new Error('temporary IMAP failure')
+          return { destination: path, uid: 7 }
+        },
+        async logout() {},
+        close() {},
+      }),
+    })
+    const { mailer } = await fixture(() => ({
+      async sendMail(message) { smtpCalls += 1; return { messageId: String(message.messageId) } }, close() {},
+    }), {
+      sentSync: {
+        enabled: true, host: 'imap.example.com', port: 993, secure: true,
+        username: 'sender@example.com', passwordMode: 'imap',
+      },
+      sentSynchronizer,
+    })
+    const prepared = await mailer.prepare({
+      reportId: 'daily:2026-08-15:2026-08-15', groupIds: ['review'], subject: '重试同步日报',
+    })
+
+    await expect(mailer.send(prepared, new AbortController().signal)).resolves.toMatchObject({
+      status: 'sent', sentFolderSync: { status: 'failed', error: 'temporary IMAP failure' },
+    })
+    expect(smtpCalls).toBe(2)
+    await expect(mailer.sentSyncApprovalReason(prepared)).resolves.toContain('不会再次向收件人发送邮件')
+    await expect(mailer.syncSentEmail(prepared, new AbortController().signal)).resolves.toMatchObject({
+      status: 'synced', mailbox: 'Sent', uid: 7,
+    })
+    expect(smtpCalls).toBe(2)
+    expect(imapCalls).toBe(2)
   })
 })

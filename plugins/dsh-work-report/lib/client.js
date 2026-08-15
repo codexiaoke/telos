@@ -34,7 +34,7 @@ module.exports = __toCommonJS(index_exports);
 var WORK_REPORT_RPC_CHANNEL = "/telos-work-report";
 
 // src/client/controller.ts
-var EMPTY = { loading: false, reports: [] };
+var EMPTY = { loading: false, reports: [], deliveries: [] };
 function message(error) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -51,11 +51,12 @@ var WorkReportClientController = class {
   };
   async refresh() {
     await this.run(async () => {
-      const [settings, reports] = await Promise.all([
+      const [settings, reports, deliveries] = await Promise.all([
         this.call("snapshot", {}),
-        this.call("list-reports", { limit: 50 })
+        this.call("list-reports", { limit: 50 }),
+        this.call("delivery-records", { limit: 50 })
       ]);
-      this.update({ settings, reports, loading: false });
+      this.update({ settings, reports, deliveries, loading: false });
     });
   }
   async saveStandard(type, content) {
@@ -70,13 +71,15 @@ var WorkReportClientController = class {
       this.update({ settings, loading: false, notice: "\u8054\u7CFB\u4EBA\u548C\u5206\u7EC4\u5DF2\u4FDD\u5B58" });
     });
   }
-  async saveMail(config, password) {
+  async saveMail(config, password, imapPassword) {
     await this.run(async () => {
       const settings = await this.call("save-mail", {
         config,
-        ...password === void 0 ? {} : { password }
+        ...password === void 0 ? {} : { password },
+        ...imapPassword === void 0 ? {} : { imapPassword }
       });
-      this.update({ settings, loading: false, notice: password === null ? "SMTP \u914D\u7F6E\u5DF2\u4FDD\u5B58\uFF0C\u5BC6\u7801\u5DF2\u6E05\u9664" : "SMTP \u914D\u7F6E\u5DF2\u4FDD\u5B58" });
+      const cleared = [password === null ? "SMTP" : "", imapPassword === null ? "IMAP" : ""].filter(Boolean).join("\u3001");
+      this.update({ settings, loading: false, notice: cleared === "" ? "\u90AE\u4EF6\u914D\u7F6E\u5DF2\u4FDD\u5B58" : `\u90AE\u4EF6\u914D\u7F6E\u5DF2\u4FDD\u5B58\uFF0C${cleared} \u5BC6\u7801\u5DF2\u6E05\u9664` });
     });
   }
   async call(endpoint, payload) {
@@ -107,7 +110,9 @@ var WORK_REPORT_CLIENT_CSS = String.raw`
 .telosReportSummary{display:flex;align-items:center;gap:18px;margin-bottom:16px;padding:12px 14px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px}.telosReportSummary span{font-size:12px}.telosReportSummary strong{font-size:16px}.telosReportSummary small{min-width:0;margin-left:auto;overflow:hidden;color:var(--dsw-alias-label-tertiary);font-size:10px;text-overflow:ellipsis;white-space:nowrap}
 .telosReportPanel{margin-top:16px;padding:18px;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1)}.telosReportPanelHeader{margin-bottom:14px}.telosReportGrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.telosReportMailGrid{grid-template-columns:2fr .7fr 1.4fr 1fr 1.4fr 1.4fr}.telosReportPanel label{display:grid;gap:6px;color:var(--dsw-alias-label-secondary);font-size:12px}.telosReportPanel label small{color:var(--dsw-alias-label-tertiary);font-size:10px}.telosReportPanel input,.telosReportPanel textarea{box-sizing:border-box;width:100%;min-height:36px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font:inherit}.telosReportPanel textarea{resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.6}
 .telosReportTabs{display:flex;gap:7px;margin-bottom:12px}.telosReportTabs button[data-active]{border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-brand-primary)}.telosReportActions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}.telosReportCheckbox{display:flex!important;grid-template-columns:auto 1fr!important;align-items:center;margin-top:12px}.telosReportCheckbox input{width:auto!important;min-height:auto!important}.telosReportStatus{flex:none;padding:5px 8px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-tertiary);font-size:10px}.telosReportStatus[data-ready]{color:var(--dsw-alias-state-success-primary)}
-@media(max-width:1100px){.telosReportMailGrid{grid-template-columns:1fr 1fr}}@media(max-width:760px){.telosReportGrid,.telosReportMailGrid{grid-template-columns:1fr}.telosReportSummary{flex-wrap:wrap}.telosReportSummary small{width:100%;margin-left:0}}
+.telosReportSubsection{margin-top:14px;padding-top:3px;border-top:1px solid var(--dsw-alias-border-l1)}.telosReportImapGrid{grid-template-columns:1.5fr .6fr 1.3fr 1.4fr;margin-top:12px}.telosReportInlineOptions{display:flex;flex-wrap:wrap;gap:22px}.telosReportImapPassword{max-width:420px;margin-top:12px}.telosReportHint{margin:9px 0 0;color:var(--dsw-alias-label-tertiary);font-size:10px}
+.telosReportDeliveryList{border-top:1px solid var(--dsw-alias-border-l1)}.telosReportDelivery{display:grid;grid-template-columns:minmax(220px,1.4fr) minmax(180px,1fr) minmax(150px,.8fr);gap:18px;align-items:center;min-height:62px;border-bottom:1px solid var(--dsw-alias-border-l1)}.telosReportDelivery strong,.telosReportDelivery span{display:block;font-size:12px}.telosReportDelivery small{display:block;margin-top:4px;overflow:hidden;color:var(--dsw-alias-label-tertiary);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.telosReportDelivery [data-sync=synced]{color:var(--dsw-alias-state-success-primary)}.telosReportDelivery [data-sync=failed]{color:var(--dsw-alias-state-error-primary)}
+@media(max-width:1100px){.telosReportMailGrid,.telosReportImapGrid{grid-template-columns:1fr 1fr}}@media(max-width:760px){.telosReportGrid,.telosReportMailGrid,.telosReportImapGrid,.telosReportDelivery{grid-template-columns:1fr}.telosReportDelivery{gap:8px;padding:12px 0}.telosReportSummary{flex-wrap:wrap}.telosReportSummary small{width:100%;margin-left:0}}
 `;
 function installWorkReportStyles() {
   const style = document.createElement("style");
@@ -136,7 +141,18 @@ function editableMail(config) {
     secure: config.secure,
     username: config.username,
     fromName: config.fromName,
-    fromAddress: config.fromAddress
+    fromAddress: config.fromAddress,
+    ...config.sentSync === void 0 ? {} : {
+      sentSync: {
+        enabled: true,
+        host: config.sentSync.host,
+        port: config.sentSync.port,
+        secure: config.sentSync.secure,
+        username: config.sentSync.username,
+        passwordMode: config.sentSync.passwordMode,
+        ...config.sentSync.mailbox === void 0 ? {} : { mailbox: config.sentSync.mailbox }
+      }
+    }
   };
 }
 function contactLines(contacts) {
@@ -229,15 +245,36 @@ function Recipients({ controller, directory }) {
 function Mail({ controller, configured }) {
   const [mail, setMail] = (0, import_react.useState)(() => editableMail(configured));
   const [password, setPassword] = (0, import_react.useState)("");
+  const [imapPassword, setImapPassword] = (0, import_react.useState)("");
   (0, import_react.useEffect)(() => setMail(editableMail(configured)), [configured]);
   const update = (patch) => setMail((current) => ({ ...current, ...patch }));
+  const updateSync = (patch) => setMail((current) => current.sentSync === void 0 ? current : { ...current, sentSync: { ...current.sentSync, ...patch } });
+  const setSyncEnabled = (enabled) => update({
+    sentSync: enabled ? mail.sentSync ?? {
+      enabled: true,
+      host: "",
+      port: 993,
+      secure: true,
+      username: mail.username,
+      passwordMode: "smtp"
+    } : void 0
+  });
+  const save = () => {
+    void controller.saveMail(
+      mail,
+      password.trim() === "" ? void 0 : password,
+      mail.sentSync?.passwordMode !== "imap" || imapPassword.trim() === "" ? void 0 : imapPassword
+    );
+    setPassword("");
+    setImapPassword("");
+  };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosReportPanel", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosReportPanelHeader", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "\u90AE\u4EF6\u53D1\u9001" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "\u90AE\u4EF6\u7531\u672C\u673A SMTP \u76F4\u63A5\u53D1\u9001\u3002\u5BC6\u7801\u4EA4\u7ED9 DSH \u51ED\u636E\u5B58\u50A8\uFF0C\u62A5\u544A\u914D\u7F6E\u6587\u4EF6\u4E2D\u53EA\u4FDD\u5B58\u975E\u654F\u611F\u8FDE\u63A5\u4FE1\u606F\u3002" })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "\u90AE\u4EF6\u53D1\u9001\u4E0E\u5DF2\u53D1\u9001\u540C\u6B65" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "SMTP \u8D1F\u8D23\u6295\u9012\uFF1B\u53EF\u9009\u7684 IMAP \u540C\u6B65\u4F1A\u5728\u5B8C\u6574\u6295\u9012\u540E\uFF0C\u628A\u540C\u4E00\u4EFD\u6392\u7248\u90AE\u4EF6\u5199\u5165\u90AE\u7BB1\u201C\u5DF2\u53D1\u9001\u201D\u3002\u5BC6\u7801\u4EA4\u7ED9 DSH \u51ED\u636E\u5B58\u50A8\u3002" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "telosReportStatus", "data-ready": configured?.passwordConfigured || void 0, children: configured?.passwordConfigured ? `\u5BC6\u7801\u5DF2\u914D\u7F6E${configured.passwordSource === void 0 ? "" : ` \xB7 ${configured.passwordSource}`}` : "\u5BC6\u7801\u672A\u914D\u7F6E" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "telosReportStatus", "data-ready": configured?.passwordConfigured || void 0, children: configured?.passwordConfigured ? `SMTP \u5BC6\u7801\u5DF2\u914D\u7F6E${configured.passwordSource === void 0 ? "" : ` \xB7 ${configured.passwordSource}`}` : "SMTP \u5BC6\u7801\u672A\u914D\u7F6E" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosReportGrid telosReportMailGrid", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
@@ -269,16 +306,91 @@ function Mail({ controller, configured }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { checked: mail.secure, onChange: (event) => update({ secure: event.target.checked }), type: "checkbox" }),
       "\u4F7F\u7528 TLS \u76F4\u8FDE\uFF08\u5E38\u7528\u4E8E 465 \u7AEF\u53E3\uFF09"
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosReportSubsection", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "telosReportCheckbox", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { checked: mail.sentSync !== void 0, onChange: (event) => setSyncEnabled(event.target.checked), type: "checkbox" }),
+        "\u53D1\u9001\u5168\u90E8\u6210\u529F\u540E\uFF0C\u540C\u6B65\u5230\u90AE\u7BB1\u201C\u5DF2\u53D1\u9001\u201D\u6587\u4EF6\u5939"
+      ] }),
+      mail.sentSync === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosReportGrid telosReportImapGrid", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
+            "IMAP \u4E3B\u673A",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { onChange: (event) => updateSync({ host: event.target.value }), placeholder: "imap.example.com", value: mail.sentSync.host })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
+            "\u7AEF\u53E3",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { min: "1", max: "65535", onChange: (event) => updateSync({ port: Number(event.target.value) }), type: "number", value: mail.sentSync.port })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
+            "IMAP \u7528\u6237\u540D",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { onChange: (event) => updateSync({ username: event.target.value }), placeholder: "sender@example.com", value: mail.sentSync.username })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
+            "\u5DF2\u53D1\u9001\u6587\u4EF6\u5939",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { onChange: (event) => updateSync({ mailbox: event.target.value.trim() === "" ? void 0 : event.target.value }), placeholder: "\u7559\u7A7A\u5219\u81EA\u52A8\u8BC6\u522B", value: mail.sentSync.mailbox ?? "" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { children: "\u65E0\u6CD5\u81EA\u52A8\u8BC6\u522B\u65F6\u586B\u5199\u670D\u52A1\u5668\u4E2D\u7684\u51C6\u786E\u8DEF\u5F84\uFF0C\u4F8B\u5982 Sent Messages\u3002" })
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosReportInlineOptions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "telosReportCheckbox", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { checked: mail.sentSync.secure, onChange: (event) => updateSync({ secure: event.target.checked }), type: "checkbox" }),
+            "\u4F7F\u7528 IMAP TLS \u76F4\u8FDE\uFF08\u5E38\u7528\u4E8E 993 \u7AEF\u53E3\uFF09"
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "telosReportCheckbox", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { checked: mail.sentSync.passwordMode === "smtp", onChange: (event) => updateSync({ passwordMode: event.target.checked ? "smtp" : "imap" }), type: "checkbox" }),
+            "\u590D\u7528 SMTP \u5BC6\u7801"
+          ] })
+        ] }),
+        mail.sentSync.passwordMode === "smtp" ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "telosReportImapPassword", children: [
+          "IMAP \u5BC6\u7801",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { autoComplete: "new-password", onChange: (event) => setImapPassword(event.target.value), placeholder: configured?.sentSync?.passwordConfigured ? "\u7559\u7A7A\u5219\u4FDD\u6301\u73B0\u6709\u5BC6\u7801" : "\u8F93\u5165 IMAP \u5BC6\u7801\u6216\u5E94\u7528\u4E13\u7528\u5BC6\u7801", type: "password", value: imapPassword })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "telosReportHint", children: "IMAP \u540C\u6B65\u5931\u8D25\u4E0D\u4F1A\u91CD\u65B0\u53D1\u9001\u90AE\u4EF6\uFF1B\u53EF\u5728\u5BF9\u8BDD\u4E2D\u8981\u6C42\u201C\u91CD\u8BD5\u540C\u6B65\u5DF2\u53D1\u9001\u201D\u3002" })
+      ] })
+    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosReportActions", children: [
+      configured?.sentSync?.passwordMode === "imap" && configured.sentSync.passwordConfigured && configured.sentSync.passwordWritable !== false ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "data-danger": true, onClick: () => {
+        setImapPassword("");
+        void controller.saveMail(mail, void 0, null);
+      }, type: "button", children: "\u6E05\u9664 IMAP \u5BC6\u7801" }) : null,
       configured?.passwordConfigured && configured.passwordWritable !== false ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "data-danger": true, onClick: () => {
         setPassword("");
         void controller.saveMail(mail, null);
-      }, type: "button", children: "\u6E05\u9664\u5DF2\u4FDD\u5B58\u5BC6\u7801" }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "data-primary": true, onClick: () => {
-        void controller.saveMail(mail, password.trim() === "" ? void 0 : password);
-        setPassword("");
-      }, type: "button", children: "\u4FDD\u5B58\u90AE\u4EF6\u914D\u7F6E" })
+      }, type: "button", children: "\u6E05\u9664 SMTP \u5BC6\u7801" }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "data-primary": true, onClick: save, type: "button", children: "\u4FDD\u5B58\u90AE\u4EF6\u914D\u7F6E" })
     ] })
+  ] });
+}
+function syncLabel(record) {
+  if (record.sentFolderSync.status === "synced") return `\u5DF2\u540C\u6B65${record.sentFolderSync.mailbox === void 0 ? "" : ` \xB7 ${record.sentFolderSync.mailbox}`}`;
+  if (record.sentFolderSync.status === "failed") return "\u540C\u6B65\u5931\u8D25";
+  if (record.sentFolderSync.status === "pending") return "\u7B49\u5F85\u540C\u6B65";
+  return "\u672A\u542F\u7528\u540C\u6B65";
+}
+function DeliveryHistory({ records }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosReportPanel", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosReportPanelHeader", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "\u5DF2\u53D1\u9001\u5DE5\u4F5C\u62A5\u544A" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "\u8BB0\u5F55\u5B9E\u9645\u6536\u4EF6\u4EBA\u3001SMTP \u6295\u9012\u7ED3\u679C\u548C\u201C\u5DF2\u53D1\u9001\u201D\u6587\u4EF6\u5939\u540C\u6B65\u72B6\u6001\u3002\u8BB0\u5F55\u4EC5\u4FDD\u5B58\u5728\u672C\u673A\u3002" })
+    ] }) }),
+    records.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosReportEmpty", children: "\u8FD8\u6CA1\u6709\u5DF2\u53D1\u9001\u7684\u5DE5\u4F5C\u62A5\u544A\u3002" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosReportDeliveryList", children: records.map((record) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosReportDelivery", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: record.report.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("small", { children: [
+          record.subject,
+          " \xB7 ",
+          new Date(record.sentAt ?? record.createdAt).toLocaleString("zh-CN")
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: record.status === "sent" ? `\u5DF2\u53D1\u9001\u7ED9 ${String(record.sentCount)} \u4EBA` : `${String(record.sentCount)} \u4EBA\u6210\u529F\uFF0C${String(record.failedCount)} \u4EBA\u5931\u8D25` }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { title: record.recipients.map((recipient) => recipient.email).join("\u3001"), children: record.recipients.map((recipient) => recipient.name).join("\u3001") })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-sync": record.sentFolderSync.status, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: syncLabel(record) }),
+        record.sentFolderSync.error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { title: record.sentFolderSync.error, children: "\u5728\u5BF9\u8BDD\u4E2D\u8BF4\u201C\u91CD\u8BD5\u540C\u6B65\u5DF2\u53D1\u9001\u201D" })
+      ] })
+    ] }, record.deliveryId)) })
   ] });
 }
 function WorkReportSettingsSection({ controller }) {
@@ -322,7 +434,8 @@ function WorkReportSettingsSection({ controller }) {
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Standards, { controller, values: settings.standards }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Recipients, { controller, directory: settings.directory }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Mail, { controller, configured: settings.mail })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Mail, { controller, configured: settings.mail }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DeliveryHistory, { records: state.deliveries })
     ] })
   ] });
 }

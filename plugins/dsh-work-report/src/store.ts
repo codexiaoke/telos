@@ -15,6 +15,7 @@ import {
   REPORT_TYPES,
   type Contact,
   type ContactGroup,
+  type DeliveryRecord,
   type MailConfig,
   type RecipientDirectory,
   type ReportContext,
@@ -22,6 +23,8 @@ import {
   type ReportReference,
   type ReportType,
   type ResolvedRecipient,
+  type SentFolderSyncState,
+  type SentMailSyncConfig,
 } from './contracts.js'
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -57,6 +60,7 @@ export interface DeliveryDraft {
   sentEmails: string[]
   attempts: DeliveryAttempt[]
   sentAt?: string
+  sentFolderSync: SentFolderSyncState
 }
 
 export interface ReportListInput {
@@ -237,13 +241,38 @@ export function parseMailConfig(value: unknown): MailConfig {
   if (/\s/.test(host)) throw new TypeError('mail host must not contain whitespace')
   const fromAddress = requiredString(input.fromAddress, 'mail fromAddress', 320).toLowerCase()
   if (!EMAIL_PATTERN.test(fromAddress)) throw new TypeError('mail fromAddress is invalid')
-  return {
+  const config: MailConfig = {
     host,
     port: port as number,
     secure: input.secure,
     username: requiredString(input.username, 'mail username', 320),
     fromName: typeof input.fromName === 'string' ? input.fromName.trim().slice(0, 120) : '',
     fromAddress,
+  }
+  if (input.sentSync !== undefined && input.sentSync !== null) config.sentSync = parseSentMailSyncConfig(input.sentSync)
+  return config
+}
+
+function parseSentMailSyncConfig(value: unknown): SentMailSyncConfig {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new TypeError('mail sentSync must be an object')
+  const input = value as Record<string, unknown>
+  if (input.enabled !== true) throw new TypeError('mail sentSync enabled must be true')
+  const port = input.port
+  if (!Number.isSafeInteger(port) || (port as number) < 1 || (port as number) > 65_535) throw new RangeError('IMAP port must be an integer between 1 and 65535')
+  if (typeof input.secure !== 'boolean') throw new TypeError('IMAP secure must be a boolean')
+  if (input.passwordMode !== 'smtp' && input.passwordMode !== 'imap') throw new TypeError('IMAP passwordMode must be smtp or imap')
+  const host = requiredString(input.host, 'IMAP host', 253)
+  if (/\s/.test(host)) throw new TypeError('IMAP host must not contain whitespace')
+  const mailbox = typeof input.mailbox === 'string' ? input.mailbox.trim() : ''
+  if (mailbox.length > 500) throw new RangeError('IMAP mailbox is too long')
+  return {
+    enabled: true,
+    host,
+    port: port as number,
+    secure: input.secure,
+    username: requiredString(input.username, 'IMAP username', 320),
+    passwordMode: input.passwordMode,
+    ...(mailbox === '' ? {} : { mailbox }),
   }
 }
 
@@ -409,6 +438,26 @@ export class WorkReportStore {
     return parseDeliveryDraft(value)
   }
 
+  async deliveryRecords(limitValue: unknown = 50): Promise<DeliveryRecord[]> {
+    const limit = limitValue === undefined ? 50 : limitValue
+    if (!Number.isSafeInteger(limit) || (limit as number) < 1 || (limit as number) > 500) {
+      throw new RangeError('delivery record limit must be an integer between 1 and 500')
+    }
+    await this.initialize()
+    const records: DeliveryRecord[] = []
+    for (const filename of await readdir(this.deliveryDirectory())) {
+      const match = /^([A-Za-z0-9][A-Za-z0-9._-]{0,63})\.json$/.exec(filename)
+      if (match?.[1] === undefined) continue
+      const value = await this.readOptionalJson(this.deliveryPath(match[1]))
+      if (value === undefined) continue
+      const draft = parseDeliveryDraft(value)
+      if (draft.status !== 'sent' && draft.status !== 'partial') continue
+      records.push(deliveryRecordOf(draft))
+    }
+    records.sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    return records.slice(0, limit as number)
+  }
+
   async appendDeliveryHistory(value: unknown): Promise<void> {
     await this.initialize()
     const line = `${JSON.stringify(value)}\n`
@@ -519,5 +568,30 @@ function parseDeliveryDraft(value: unknown): DeliveryDraft {
     || !Array.isArray(draft.attempts)) {
     throw new TypeError('delivery draft is invalid')
   }
-  return draft as DeliveryDraft
+  const normalized = draft as DeliveryDraft
+  if (normalized.sentFolderSync === undefined) {
+    normalized.sentFolderSync = normalized.immutable.mail.sentSync?.enabled === true
+      ? { status: 'pending' }
+      : { status: 'not-configured' }
+  }
+  if (!['not-configured', 'pending', 'synced', 'failed'].includes(normalized.sentFolderSync.status)) {
+    throw new TypeError('delivery draft sent-folder sync state is invalid')
+  }
+  return normalized
+}
+
+function deliveryRecordOf(draft: DeliveryDraft): DeliveryRecord {
+  const sent = new Set(draft.sentEmails)
+  return {
+    deliveryId: draft.id,
+    createdAt: draft.createdAt,
+    report: draft.immutable.report,
+    subject: draft.immutable.subject,
+    recipients: draft.immutable.recipients,
+    status: draft.status as 'partial' | 'sent',
+    ...(draft.sentAt === undefined ? {} : { sentAt: draft.sentAt }),
+    sentCount: draft.immutable.recipients.filter(recipient => sent.has(recipient.email)).length,
+    failedCount: draft.immutable.recipients.filter(recipient => !sent.has(recipient.email)).length,
+    sentFolderSync: draft.sentFolderSync,
+  }
 }

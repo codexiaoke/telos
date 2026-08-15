@@ -5,6 +5,7 @@ import { credentialRef, type CredentialProvider } from '@deepseek-ai/dsh-credent
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import { defineTool, type JsonValue, type PreToolDecision, type ToolExecution, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import {
+  IMAP_PASSWORD_REF,
   REPORT_TYPES,
   SMTP_PASSWORD_REF,
   WORK_REPORT_RPC_CHANNEL,
@@ -15,10 +16,11 @@ import {
 import { WorkReportMailer, type PrepareEmailInput, type SendEmailInput } from './mailer.js'
 import { parseMailConfig, WorkReportStore } from './store.js'
 
-export { WORK_REPORT_RPC_CHANNEL, SMTP_PASSWORD_REF } from './contracts.js'
+export { IMAP_PASSWORD_REF, WORK_REPORT_RPC_CHANNEL, SMTP_PASSWORD_REF } from './contracts.js'
 export type * from './contracts.js'
 export { WorkReportMailer } from './mailer.js'
 export { renderMarkdownEmail, markdownToPlainText } from './markdown-email.js'
+export { compileSentMessage, SentMailSynchronizer } from './sent-sync.js'
 export { WorkReportStore, parseDirectory, parseMailConfig } from './store.js'
 
 export const name = 'telos-work-report'
@@ -27,6 +29,7 @@ export const inject = ['agents', 'connection', 'credentials', 'tools']
 export interface Config {
   rootPath: string
   smtpPasswordRef?: string
+  imapPasswordRef?: string
   maxReportBytes?: number
   maxContextBytes?: number
 }
@@ -67,7 +70,7 @@ function assertTopLevelAgent(ctx: Context, exec: ToolExecution | ToolRunContext)
   const agent = exec.agent
   if (agent === undefined || ctx.agents.get(agent.id) !== agent || !ctx.agents.roots().includes(agent)
     || ctx.agents.currentInitiator() !== agent || agent.status !== 'running') {
-    throw new Error('email delivery requires the exact live top-level DSH agent')
+    throw new Error('email action requires the exact live top-level DSH agent')
   }
   return agent
 }
@@ -76,39 +79,54 @@ async function settingsView(
   store: WorkReportStore,
   credentials: CredentialProvider,
   passwordRef: string,
+  imapPasswordRef: string,
 ): Promise<WorkReportSettingsView> {
-  const [standards, directory, mail, password] = await Promise.all([
+  const [standards, directory, mail, password, imapPassword] = await Promise.all([
     store.standards(),
     store.directory(),
     store.mailConfig(),
     credentials.describe(credentialRef(passwordRef)),
+    credentials.describe(credentialRef(imapPasswordRef)),
   ])
-  const mailView: MailSettingsView | undefined = mail === undefined ? undefined : {
-    ...mail,
-    passwordConfigured: password.configured,
-    ...(password.source === undefined ? {} : { passwordSource: password.source }),
-    passwordWritable: password.writable,
+  let mailView: MailSettingsView | undefined
+  if (mail !== undefined) {
+    const { sentSync, ...smtp } = mail
+    const syncPassword = sentSync?.passwordMode === 'imap' ? imapPassword : password
+    mailView = {
+      ...smtp,
+      passwordConfigured: password.configured,
+      ...(password.source === undefined ? {} : { passwordSource: password.source }),
+      passwordWritable: password.writable,
+      ...(sentSync === undefined ? {} : {
+        sentSync: {
+          ...sentSync,
+          passwordConfigured: syncPassword.configured,
+          ...(syncPassword.source === undefined ? {} : { passwordSource: syncPassword.source }),
+          passwordWritable: syncPassword.writable,
+        },
+      }),
+    }
   }
   return { rootPath: store.rootPath, standards, directory, ...(mailView === undefined ? {} : { mail: mailView }) }
 }
 
-function installRpc(ctx: Context, store: WorkReportStore, passwordRef: string): void {
+function installRpc(ctx: Context, store: WorkReportStore, passwordRef: string, imapPasswordRef: string): void {
   ctx.connection.rpc.handle(
     WORK_REPORT_RPC_CHANNEL,
     (endpoint, payload) => {
-      if (endpoint === 'snapshot') return result(() => settingsView(store, ctx.credentials, passwordRef))
+      if (endpoint === 'snapshot') return result(() => settingsView(store, ctx.credentials, passwordRef, imapPasswordRef))
       if (endpoint === 'save-standard') {
         return result(async () => {
           if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) throw new TypeError('payload must be an object')
           const input = payload as Record<string, unknown>
           await store.saveStandard(input.type, input.content)
-          return settingsView(store, ctx.credentials, passwordRef)
+          return settingsView(store, ctx.credentials, passwordRef, imapPasswordRef)
         })
       }
       if (endpoint === 'save-directory') {
         return result(async () => {
           await store.saveDirectory(payload)
-          return settingsView(store, ctx.credentials, passwordRef)
+          return settingsView(store, ctx.credentials, passwordRef, imapPasswordRef)
         })
       }
       if (endpoint === 'save-mail') {
@@ -117,16 +135,28 @@ function installRpc(ctx: Context, store: WorkReportStore, passwordRef: string): 
           const input = payload as Record<string, unknown>
           const config = parseMailConfig(input.config)
           const password = input.password
+          const imapPassword = input.imapPassword
           if (password !== undefined && password !== null && (typeof password !== 'string' || password.length === 0)) {
             throw new TypeError('SMTP password must be a non-empty string or null')
+          }
+          if (imapPassword !== undefined && imapPassword !== null && (typeof imapPassword !== 'string' || imapPassword.length === 0)) {
+            throw new TypeError('IMAP password must be a non-empty string or null')
           }
           await store.saveMailConfig(config)
           if (typeof password === 'string') await ctx.credentials.set(credentialRef(passwordRef), password)
           else if (password === null) await ctx.credentials.unset(credentialRef(passwordRef))
-          return settingsView(store, ctx.credentials, passwordRef)
+          if (typeof imapPassword === 'string') await ctx.credentials.set(credentialRef(imapPasswordRef), imapPassword)
+          else if (imapPassword === null) await ctx.credentials.unset(credentialRef(imapPasswordRef))
+          return settingsView(store, ctx.credentials, passwordRef, imapPasswordRef)
         })
       }
       if (endpoint === 'list-reports') return result(() => store.list(typeof payload === 'object' && payload !== null ? payload : {}))
+      if (endpoint === 'delivery-records') {
+        const limit = typeof payload === 'object' && payload !== null && 'limit' in payload
+          ? (payload as { limit?: unknown }).limit
+          : undefined
+        return result(() => store.deliveryRecords(limit))
+      }
       return result(() => { throw new TypeError(`unknown work-report endpoint: ${endpoint}`) })
     },
     { authority: 'loopback' },
@@ -224,6 +254,15 @@ function installTools(ctx: Context, store: WorkReportStore, mailer: WorkReportMa
   }))
 
   ctx.tools.register(defineTool({
+    name: 'work_report_delivery_history',
+    description: 'List locally recorded work-report deliveries, including actual recipients, SMTP delivery status, and whether the sent message was synchronized to the IMAP Sent mailbox. This returns metadata only, never credentials or raw email bodies.',
+    parameters: { limit: { type: 'integer', default: 20 } },
+    output: JSON_OUTPUT,
+    isConcurrencySafe: () => true,
+    async execute(args) { return json(await store.deliveryRecords(args.limit)) },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'work_report_prepare_email',
     description: 'Prepare but do not send an email for one saved report. It expands local contact groups, snapshots the actual recipients and report, converts Markdown into safe HTML plus plain-text fallback, and returns an immutable delivery id/hash. After the human asks to send, call work_report_send_email with that exact id/hash; the send tool raises the native DSH approval prompt.',
     parameters: {
@@ -248,7 +287,7 @@ function installTools(ctx: Context, store: WorkReportStore, mailer: WorkReportMa
 
   ctx.tools.register(defineTool({
     name: 'work_report_send_email',
-    description: 'Send one immutable email draft prepared by work_report_prepare_email. This is an external action and always raises the native DSH approval prompt. Use the exact delivery id and hash from the preparation result. Never retry after user rejection; a partial SMTP result may be retried only after telling the user another approval will be required.',
+    description: 'Send one immutable email draft prepared by work_report_prepare_email. This is an external action and always raises the native DSH approval prompt. When IMAP Sent synchronization is configured, a fully successful delivery is also appended to Sent. An IMAP failure never resends SMTP mail. Use the exact delivery id and hash from the preparation result. Never retry after user rejection; a partial SMTP result may be retried only after telling the user another approval will be required.',
     parameters: {
       delivery_id: { type: 'string', required: true },
       delivery_hash: { type: 'string', required: true },
@@ -260,13 +299,31 @@ function installTools(ctx: Context, store: WorkReportStore, mailer: WorkReportMa
     },
   }))
 
+  ctx.tools.register(defineTool({
+    name: 'work_report_sync_sent_email',
+    description: 'Retry only the IMAP Sent-folder synchronization for a fully sent work report. This never sends another SMTP message to recipients. It is an external mailbox write and always raises the native DSH approval prompt. Use the exact delivery id and hash from the original preparation result.',
+    parameters: {
+      delivery_id: { type: 'string', required: true },
+      delivery_hash: { type: 'string', required: true },
+    },
+    output: JSON_OUTPUT,
+    async execute(args, exec) {
+      assertTopLevelAgent(ctx, exec)
+      return json(await mailer.syncSentEmail({ deliveryId: args.delivery_id, deliveryHash: args.delivery_hash }, exec.signal))
+    },
+  }))
+
   ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
-    if (exec.name !== 'work_report_send_email') return next()
+    if (exec.name !== 'work_report_send_email' && exec.name !== 'work_report_sync_sent_email') return next()
     try {
       assertTopLevelAgent(ctx, exec)
-      return { kind: 'ask', reason: await mailer.approvalReason(sendInput(exec.arguments)) }
+      const input = sendInput(exec.arguments)
+      const reason = exec.name === 'work_report_send_email'
+        ? await mailer.approvalReason(input)
+        : await mailer.sentSyncApprovalReason(input)
+      return { kind: 'ask', reason }
     } catch (error) {
-      return { kind: 'deny', reason: `email approval could not be prepared: ${message(error)}` }
+      return { kind: 'deny', reason: `email action approval could not be prepared: ${message(error)}` }
     }
   })
 }
@@ -276,7 +333,7 @@ function installPrompt(ctx: Context): void {
     promptCtx.systemPrompt.section({
       name: 'tool:telos-work-report',
       order: 116,
-      text: 'Telos work reports are ordinary local Markdown documents, not structured work-fact records. For every daily, weekly, or monthly request, call work_report_context first. If its standardConfigured field is false, ask the human to confirm audience, tone, approximate length, and expected sections, then save the confirmed wording with work_report_save_standard before generating. A daily report may use only facts the human supplied in the current report request and its follow-up clarification, never unrelated historical reports. A weekly report may use only returned daily sources. A monthly report may use only returned weekly sources, or returned daily sources when context explicitly falls back. If sources are absent, ask the human for content; never fabricate. Save the complete generated Markdown with work_report_save and also show the readable report in the reply. To send mail, resolve recipients, prepare an immutable draft, then call work_report_send_email so DSH asks for native approval. The email renderer sends HTML and plain text, never raw Markdown. Do not retry a rejected send.',
+      text: 'Telos work reports are ordinary local Markdown documents, not structured work-fact records. For every daily, weekly, or monthly request, call work_report_context first. If its standardConfigured field is false, ask the human to confirm audience, tone, approximate length, and expected sections, then save the confirmed wording with work_report_save_standard before generating. A daily report may use only facts the human supplied in the current report request and its follow-up clarification, never unrelated historical reports. A weekly report may use only returned daily sources. A monthly report may use only returned weekly sources, or returned daily sources when context explicitly falls back. If sources are absent, ask the human for content; never fabricate. Save the complete generated Markdown with work_report_save and also show the readable report in the reply. To send mail, resolve recipients, prepare an immutable draft, then call work_report_send_email so DSH asks for native approval. The email renderer sends HTML and plain text, never raw Markdown. Successful and partial deliveries remain visible through work_report_delivery_history. When configured, a fully sent report is appended to the IMAP Sent mailbox. If only that synchronization fails, use work_report_sync_sent_email after explaining that it will not resend SMTP mail. Do not retry a rejected send.',
     })
   })
 }
@@ -284,13 +341,15 @@ function installPrompt(ctx: Context): void {
 export function apply(ctx: Context, config: Config): void {
   if (typeof config.rootPath !== 'string' || config.rootPath.trim() === '') throw new TypeError('telos-work-report rootPath must be a non-empty string')
   const passwordRef = config.smtpPasswordRef ?? SMTP_PASSWORD_REF
+  const imapPasswordRef = config.imapPasswordRef ?? IMAP_PASSWORD_REF
   credentialRef(passwordRef)
+  credentialRef(imapPasswordRef)
   const store = new WorkReportStore(config.rootPath, {
     maxReportBytes: config.maxReportBytes,
     maxContextBytes: config.maxContextBytes,
   })
-  const mailer = new WorkReportMailer(store, ctx.credentials, { passwordRef })
-  installRpc(ctx, store, passwordRef)
+  const mailer = new WorkReportMailer(store, ctx.credentials, { passwordRef, imapPasswordRef })
+  installRpc(ctx, store, passwordRef, imapPasswordRef)
   installTools(ctx, store, mailer)
   installPrompt(ctx)
 }

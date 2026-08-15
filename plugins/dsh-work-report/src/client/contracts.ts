@@ -1,4 +1,4 @@
-import type { MailConfig, ReportReference, WorkReportSettingsView } from '../contracts.js'
+import type { DeliveryRecord, MailConfig, ReportReference, WorkReportSettingsView } from '../contracts.js'
 
 export interface ClientRpc {
   call(channel: string, endpoint: string, payload: unknown, signal?: AbortSignal): Promise<
@@ -11,6 +11,7 @@ export interface WorkReportClientSnapshot {
   loading: boolean
   settings?: WorkReportSettingsView
   reports: ReportReference[]
+  deliveries: DeliveryRecord[]
   error?: string
   notice?: string
 }
@@ -18,4 +19,5 @@ export interface WorkReportClientSnapshot {
 export interface SaveMailInput {
   config: MailConfig
   password?: string | null
+  imapPassword?: string | null
 }

@@ -2,7 +2,7 @@ import type { MailConfig, RecipientDirectory, ReportType, WorkReportSettingsView
 import { WORK_REPORT_RPC_CHANNEL } from '../contracts.js'
 import type { ClientRpc, WorkReportClientSnapshot } from './contracts.js'
 
-const EMPTY: WorkReportClientSnapshot = { loading: false, reports: [] }
+const EMPTY: WorkReportClientSnapshot = { loading: false, reports: [], deliveries: [] }
 
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error) }
 
@@ -20,11 +20,12 @@ export class WorkReportClientController {
 
   async refresh(): Promise<void> {
     await this.run(async () => {
-      const [settings, reports] = await Promise.all([
+      const [settings, reports, deliveries] = await Promise.all([
         this.call<WorkReportSettingsView>('snapshot', {}),
         this.call<WorkReportClientSnapshot['reports']>('list-reports', { limit: 50 }),
+        this.call<WorkReportClientSnapshot['deliveries']>('delivery-records', { limit: 50 }),
       ])
-      this.update({ settings, reports, loading: false })
+      this.update({ settings, reports, deliveries, loading: false })
     })
   }
 
@@ -42,13 +43,15 @@ export class WorkReportClientController {
     })
   }
 
-  async saveMail(config: MailConfig, password?: string | null): Promise<void> {
+  async saveMail(config: MailConfig, password?: string | null, imapPassword?: string | null): Promise<void> {
     await this.run(async () => {
       const settings = await this.call<WorkReportSettingsView>('save-mail', {
         config,
         ...(password === undefined ? {} : { password }),
+        ...(imapPassword === undefined ? {} : { imapPassword }),
       })
-      this.update({ settings, loading: false, notice: password === null ? 'SMTP 配置已保存，密码已清除' : 'SMTP 配置已保存' })
+      const cleared = [password === null ? 'SMTP' : '', imapPassword === null ? 'IMAP' : ''].filter(Boolean).join('、')
+      this.update({ settings, loading: false, notice: cleared === '' ? '邮件配置已保存' : `邮件配置已保存，${cleared} 密码已清除` })
     })
   }
 

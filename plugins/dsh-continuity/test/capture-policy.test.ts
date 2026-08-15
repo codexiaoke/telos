@@ -15,6 +15,9 @@ describe('durable memory capture policy', () => {
       '我今天心血来潮想学吉他，这个先别进长期计划，最多放 mentions。',
     ))).toBe(true)
     expect(explicitMemoryVetoRequested(messages('这个不要保存成长期记忆。'))).toBe(true)
+    expect(explicitMemoryVetoRequested(messages(
+      '这个不用记成运动计划，我就是随口说。',
+    ))).toBe(true)
   })
 
   it('does not confuse ordinary negation with a memory veto', () => {

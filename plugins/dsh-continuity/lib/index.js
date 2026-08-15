@@ -1899,7 +1899,7 @@ function explicitReviewRequested(messages2) {
   return /待确认|先(?:别|不要)确认|暂(?:不|时不)?确认|不确定|可能记错|暂定/u.test(joined(messages2));
 }
 function explicitMemoryVetoRequested(messages2) {
-  return /(?:先|暂时)?别进长期(?:记忆|计划)|(?:先|暂时)?不要(?:记住|记录|保存|进入长期)|(?:先|暂时)?别(?:记住|记录|保存)|不需要(?:记住|记录|保存)|最多放\s*mentions?|只(?:放|留)在\s*mentions?/iu.test(joined(messages2));
+  return /(?:先|暂时)?别进长期(?:记忆|计划)|(?:先|暂时)?不要(?:记住|记录|保存|进入长期)|(?:先|暂时)?别(?:记住|记录|保存)|不(?:需要|用)(?:记住|记录|保存|记成|记为)|最多放\s*mentions?|只(?:放|留)在\s*mentions?/iu.test(joined(messages2));
 }
 
 // src/formation.ts

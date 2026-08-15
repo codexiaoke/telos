@@ -13,5 +13,5 @@ export function explicitReviewRequested(messages: readonly DirectTextMessage[]):
 
 /** A direct durable-memory veto outranks an accidental remember tool call. */
 export function explicitMemoryVetoRequested(messages: readonly DirectTextMessage[]): boolean {
-  return /(?:先|暂时)?别进长期(?:记忆|计划)|(?:先|暂时)?不要(?:记住|记录|保存|进入长期)|(?:先|暂时)?别(?:记住|记录|保存)|不需要(?:记住|记录|保存)|最多放\s*mentions?|只(?:放|留)在\s*mentions?/iu.test(joined(messages))
+  return /(?:先|暂时)?别进长期(?:记忆|计划)|(?:先|暂时)?不要(?:记住|记录|保存|进入长期)|(?:先|暂时)?别(?:记住|记录|保存)|不(?:需要|用)(?:记住|记录|保存|记成|记为)|最多放\s*mentions?|只(?:放|留)在\s*mentions?/iu.test(joined(messages))
 }

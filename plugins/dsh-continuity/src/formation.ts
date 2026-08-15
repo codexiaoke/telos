@@ -1,93 +1,284 @@
+import type { Context } from '@deepseek-ai/cordis'
+import {
+  BlockAssembler,
+  createUserMessage,
+  deepFreeze,
+  ReasoningEffortId,
+} from '@deepseek-ai/dsh-llm'
+import type { FinishReason, GenerateOptions } from '@deepseek-ai/dsh-llm'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import {
+  containsCredentialLikeContent,
+  validateExtractionEnvelope,
+} from '@telos/personal-core'
 import type {
-  ClaimKind,
-  ExtractionEnvelopeV1,
+  ContinuityScope,
   ExtractionProposal,
 } from '@telos/personal-core'
 
-type InferenceScope = ExtractionProposal['scope']
+const MAX_PROPOSALS = 6
+const MAX_EVIDENCE_LENGTH = 500
+const RESPONSE_KEYS = new Set(['schemaVersion', 'proposals'])
+const PROPOSAL_KEYS = new Set([
+  'kind',
+  'statement',
+  'predicate',
+  'objectValue',
+  'confidence',
+  'importance',
+  'sensitivity',
+  'evidence',
+  'durability',
+  'validFrom',
+  'validTo',
+])
 
-interface Pattern {
-  expression: RegExp
-  kind: ClaimKind
-  predicate: string
-  importance: number
+type UnknownRecord = Record<string, unknown>
+
+export interface MemoryFormationMessage {
+  seq: number
+  text: string
 }
 
-const PATTERNS: readonly Pattern[] = [
-  { expression: /^我(?:更|一直|通常)?(?:偏好|喜欢|习惯|常用)\s*(.+)$/u, kind: 'semantic', predicate: 'preference.stated', importance: 0.7 },
-  { expression: /^我的(?:长期|当前|近期)?目标是\s*(.+)$/u, kind: 'prospective', predicate: 'goal.stated', importance: 0.85 },
-  { expression: /^我(?:已经)?决定(?:了)?\s*(.+)$/u, kind: 'episodic', predicate: 'decision.stated', importance: 0.8 },
-  { expression: /^(?:以后)?请(?:一直|总是|优先)?\s*(.+)$/u, kind: 'procedural', predicate: 'procedure.requested', importance: 0.75 },
-  { expression: /^不要(?:再)?\s*(.+)$/u, kind: 'constraint', predicate: 'constraint.stated', importance: 0.9 },
-  { expression: /^提醒我\s*(.+)$/u, kind: 'prospective', predicate: 'commitment.stated', importance: 0.8 },
-  { expression: /^I (?:strongly )?(?:prefer|like|usually use)\s+(.+)$/iu, kind: 'semantic', predicate: 'preference.stated', importance: 0.7 },
-  { expression: /^My (?:long-term |current )?goal is\s+(.+)$/iu, kind: 'prospective', predicate: 'goal.stated', importance: 0.85 },
-  { expression: /^I (?:have )?decided(?: to)?\s+(.+)$/iu, kind: 'episodic', predicate: 'decision.stated', importance: 0.8 },
-  { expression: /^Please (?:always |preferentially )?\s*(.+)$/iu, kind: 'procedural', predicate: 'procedure.requested', importance: 0.75 },
-  { expression: /^(?:Do not|Never)\s+(.+)$/iu, kind: 'constraint', predicate: 'constraint.stated', importance: 0.9 },
-  { expression: /^Remind me(?: to| about)?\s+(.+)$/iu, kind: 'prospective', predicate: 'commitment.stated', importance: 0.8 },
-]
-
-const EXPLICIT_MEMORY_PATTERN = /(?:记住|记下来|写入记忆|remember|save (?:this|that))/iu
-const SECRET_PATTERN = /(?:api[ _-]?key|password|passwd|secret|access[ _-]?token|refresh[ _-]?token|private[ _-]?key|密码|口令|密钥|令牌|sk-[a-z0-9_-]{8,})/iu
-const QUESTION_VALUE_PATTERN = /(?:什么|吗|呢|是否|为什么|怎么|哪一个|what|why|which|should i)$/iu
-
-function segments(text: string): string[] {
-  return text.normalize('NFKC').slice(0, 20_000).split(/[。！？!?\n]+/u)
-    .map(segment => segment.trim())
-    .filter(segment => segment.length >= 4 && segment.length <= 240)
+export interface MemoryFormationRoute {
+  provider: string
+  model: string
+  reasoningEffort?: string
 }
 
-function matchSegment(segment: string, scope: InferenceScope): ExtractionProposal | undefined {
-  if (EXPLICIT_MEMORY_PATTERN.test(segment) || SECRET_PATTERN.test(segment)) return undefined
-  for (const pattern of PATTERNS) {
-    const match = pattern.expression.exec(segment)
-    const objectValue = match?.[1]?.trim()
-    if (objectValue === undefined || objectValue.length < 2 || objectValue.length > 240 || QUESTION_VALUE_PATTERN.test(objectValue)) continue
-    return {
-      kind: pattern.kind,
-      statement: segment,
-      predicate: pattern.predicate,
-      objectValue,
-      confidence: 0.92,
-      importance: pattern.importance,
-      sensitivity: 'personal',
-      scope,
-    }
-  }
-  return undefined
+export interface MemoryFormationPolicy {
+  maxInputBytes: number
+  maxOutputTokens: number
+  timeoutMs: number
 }
 
-/** Returns only short, high-precision evidence snippets; full turns are never retained for inference. */
-export function candidateEvidence(text: string): string[] {
-  const seen = new Set<string>()
-  const results: string[] = []
-  for (const segment of segments(text)) {
-    if (matchSegment(segment, { type: 'session', id: 'evidence-only' }) === undefined) continue
-    const key = segment.toLocaleLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    results.push(segment)
-    if (results.length >= 6) break
-  }
-  return results
+export interface MemoryFormationInput {
+  sessionId: string
+  messages: readonly MemoryFormationMessage[]
+  scope: Exclude<ContinuityScope, { type: 'global' }>
+  route: MemoryFormationRoute
+  policy: MemoryFormationPolicy
+  signal?: AbortSignal
 }
 
-export function extractCandidateEnvelope(input: {
-  sourceEpisodeId: string
+export interface FormedMemoryProposal extends ExtractionProposal {
+  /** Exact direct-human substring retained as provenance after validation. */
   evidence: string
-  scope: InferenceScope
-}): ExtractionEnvelopeV1 {
-  const seen = new Set<string>()
-  const proposals: ExtractionProposal[] = []
-  for (const segment of segments(input.evidence)) {
-    const proposal = matchSegment(segment, input.scope)
-    if (proposal === undefined) continue
-    const key = `${proposal.predicate}\u0000${proposal.objectValue.toLocaleLowerCase()}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    proposals.push(proposal)
-    if (proposals.length >= 6) break
+}
+
+export interface MemoryFormationResult {
+  route: MemoryFormationRoute
+  proposals: readonly FormedMemoryProposal[]
+}
+
+/**
+ * The model makes the semantic durability decision. Deterministic code only
+ * constrains provenance, scope, secrets, size and the versioned wire shape.
+ */
+export const MEMORY_FORMATION_SYSTEM_PROMPT = [
+  'You are the memory-formation stage for a local-first personal AI.',
+  'Decide whether the direct human messages contain durable personal information that will remain useful in a future conversation.',
+  'Do not extract ordinary one-turn instructions, response-format requests, tool-use controls, test/debug prompts, questions, brainstorming, quoted text, or facts stated only by the assistant.',
+  'Ignore temporary clauses instead of discarding an otherwise durable message. If a message combines a stable cross-session fact or constraint with a one-turn control such as "do not call tools", extract only the durable part.',
+  'A message whose entire meaning is temporary, such as "Do not call tools; reply only with X" or "summarize this file", MUST produce an empty proposals array.',
+  'Eligible memories include stable preferences, durable goals, decisions, commitments, procedures, and constraints whose meaning extends beyond the current turn.',
+  'Never extract credentials, secrets, inferred sensitive attributes, or unsupported conclusions.',
+  'Every proposal must contain an evidence field copied verbatim from exactly one supplied human message.',
+  'Use concise normalized statements and stable lowercase dotted predicates.',
+  'Return exactly one JSON object and no Markdown or commentary.',
+  'The required shape is:',
+  '{"schemaVersion":1,"proposals":[{"kind":"semantic|episodic|procedural|prospective|constraint","statement":"...","predicate":"lowercase.dotted_name","objectValue":"...","confidence":0.0,"importance":0.0,"sensitivity":"personal","evidence":"exact human substring","durability":"cross-session","validFrom":null,"validTo":null}]}',
+  `Return at most ${String(MAX_PROPOSALS)} proposals. When nothing qualifies, return {"schemaVersion":1,"proposals" : []}.`,
+].join('\n')
+
+function record(value: unknown, field: string): UnknownRecord {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError(`${field} must be an object`)
   }
-  return { schemaVersion: 1, sourceEpisodeId: input.sourceEpisodeId, proposals }
+  return value as UnknownRecord
+}
+
+function text(value: unknown, field: string, maximum: number): string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new TypeError(`${field} must be a non-empty string`)
+  }
+  const normalized = value.trim().normalize('NFKC')
+  if (normalized.length > maximum) throw new RangeError(`${field} exceeds ${String(maximum)} characters`)
+  return normalized
+}
+
+function assertKnownKeys(value: UnknownRecord, allowed: ReadonlySet<string>, field: string): void {
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) throw new TypeError(`${field} contains unknown field ${key}`)
+  }
+}
+
+function optionalIso(value: unknown, field: string): string | undefined {
+  if (value === undefined || value === null) return undefined
+  const result = text(value, field, 64)
+  if (!Number.isFinite(Date.parse(result))) throw new TypeError(`${field} must be an ISO-8601 timestamp or null`)
+  return result
+}
+
+function unwrapJson(textValue: string): string {
+  const trimmed = textValue.trim()
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/iu.exec(trimmed)
+  return fenced?.[1]?.trim() ?? trimmed
+}
+
+function frameMessages(input: MemoryFormationInput): string {
+  return [
+    'Evaluate this JSON array of direct human messages for durable personal memory.',
+    'The host will enforce the supplied local scope; do not invent another scope.',
+    JSON.stringify({ scope: input.scope, messages: input.messages }),
+  ].join('\n')
+}
+
+function finishError(finish: FinishReason): Error | undefined {
+  switch (finish.kind) {
+    case 'stop': return undefined
+    case 'error':
+    case 'aborted': {
+      const error = new Error(finish.failure.message) as Error & { code?: string }
+      error.code = finish.failure.code
+      return error
+    }
+    case 'max-tokens': return new Error('memory formation output reached maxOutputTokens')
+    case 'tool-calls': return new Error('memory formation model unexpectedly requested a tool')
+    default: return new Error(`unsupported memory formation finish reason ${String((finish as { kind?: unknown }).kind)}`)
+  }
+}
+
+/** Parse and evidence-ground one model response before it reaches Personal Core. */
+export function parseMemoryFormationOutput(
+  output: string,
+  input: Pick<MemoryFormationInput, 'messages' | 'scope'>,
+): FormedMemoryProposal[] {
+  let decoded: unknown
+  try {
+    decoded = JSON.parse(unwrapJson(output))
+  } catch (error) {
+    throw new TypeError('memory formation model returned invalid JSON', { cause: error })
+  }
+  const envelope = record(decoded, 'memory formation response')
+  assertKnownKeys(envelope, RESPONSE_KEYS, 'memory formation response')
+  if (envelope.schemaVersion !== 1) throw new TypeError('memory formation response schemaVersion must be 1')
+  if (!Array.isArray(envelope.proposals)) throw new TypeError('memory formation response proposals must be an array')
+  if (envelope.proposals.length > MAX_PROPOSALS) {
+    throw new RangeError(`memory formation response exceeds ${String(MAX_PROPOSALS)} proposals`)
+  }
+
+  const normalizedMessages = input.messages.map(message => message.text.normalize('NFKC'))
+  const evidence: string[] = []
+  const proposals = envelope.proposals.map((value, index) => {
+    const proposal = record(value, `proposals[${String(index)}]`)
+    assertKnownKeys(proposal, PROPOSAL_KEYS, `proposals[${String(index)}]`)
+    if (proposal.durability !== 'cross-session') {
+      throw new TypeError(`proposals[${String(index)}].durability must be cross-session`)
+    }
+    const excerpt = text(proposal.evidence, `proposals[${String(index)}].evidence`, MAX_EVIDENCE_LENGTH)
+    if (!normalizedMessages.some(message => message.includes(excerpt))) {
+      throw new TypeError(`proposals[${String(index)}].evidence is not an exact human-message substring`)
+    }
+    if (containsCredentialLikeContent(excerpt)) {
+      throw new TypeError(`proposals[${String(index)}].evidence contains credential-like content`)
+    }
+    evidence.push(excerpt)
+    return {
+      kind: proposal.kind,
+      statement: proposal.statement,
+      predicate: proposal.predicate,
+      objectValue: proposal.objectValue,
+      confidence: proposal.confidence,
+      importance: proposal.importance,
+      sensitivity: proposal.sensitivity,
+      scope: input.scope,
+      validFrom: optionalIso(proposal.validFrom, `proposals[${String(index)}].validFrom`),
+      validTo: optionalIso(proposal.validTo, `proposals[${String(index)}].validTo`),
+    }
+  })
+  const validated = validateExtractionEnvelope({
+    schemaVersion: 1,
+    sourceEpisodeId: 'model-formation-validation',
+    proposals,
+  })
+  return validated.proposals.map((proposal, index) => ({
+    ...proposal,
+    // The one-to-one map above and bounded validator preserve index identity.
+    evidence: evidence[index]!,
+  }))
+}
+
+/** Run one tool-free auxiliary call through the exact main-model route. */
+export async function formMemoriesWithMainModel(
+  ctx: Context,
+  input: MemoryFormationInput,
+): Promise<MemoryFormationResult> {
+  if (input.messages.length === 0) throw new TypeError('memory formation requires at least one human message')
+  if (input.route.provider.trim().length === 0 || input.route.model.trim().length === 0) {
+    throw new TypeError('memory formation requires a non-empty main-model route')
+  }
+  const directText = input.messages.map(message => message.text).join('\n')
+  if (containsCredentialLikeContent(directText)) {
+    throw new TypeError('credential-like human input cannot be sent to memory formation')
+  }
+  const framedInput = frameMessages(input)
+  const inputBytes = Buffer.byteLength(framedInput, 'utf8')
+  if (inputBytes > input.policy.maxInputBytes) {
+    throw new RangeError(`memory formation input is ${String(inputBytes)} bytes, exceeding maxInputBytes ${String(input.policy.maxInputBytes)}`)
+  }
+  const timeoutSignal = AbortSignal.timeout(input.policy.timeoutMs)
+  const signal = input.signal === undefined
+    ? timeoutSignal
+    : AbortSignal.any([input.signal, timeoutSignal])
+  signal.throwIfAborted()
+  const modelInfo = await ctx.llm.resolveModelInfo(
+    input.route.provider,
+    input.route.model,
+    signal,
+  )
+  const supportsReasoningOff = modelInfo.reasoning?.efforts
+    .some(effort => String(effort.id) === 'off') === true
+  const formationRoute: MemoryFormationRoute = {
+    ...input.route,
+    ...(supportsReasoningOff ? { reasoningEffort: 'off' } : {}),
+  }
+  const messages = [createUserMessage({
+    content: [{ type: 'text', text: framedInput }],
+    source: { kind: 'plugin', plugin: 'telos-continuity' },
+  })]
+  const options: GenerateOptions = deepFreeze({
+    provider: formationRoute.provider,
+    model: formationRoute.model,
+    ...(formationRoute.reasoningEffort === undefined
+      ? {}
+      : { reasoningEffort: ReasoningEffortId(formationRoute.reasoningEffort) }),
+    messages,
+    system: MEMORY_FORMATION_SYSTEM_PROMPT,
+    maxTokens: input.policy.maxOutputTokens,
+    sessionId: SessionId(input.sessionId),
+    signal,
+  })
+  signal.throwIfAborted()
+  const assembler = new BlockAssembler()
+  for await (const chunk of ctx.llm.stream(options)) {
+    signal.throwIfAborted()
+    assembler.push(chunk)
+  }
+  signal.throwIfAborted()
+  const terminalError = finishError(assembler.finish)
+  if (terminalError !== undefined) throw terminalError
+  const blocks = assembler.blocks()
+  if (blocks.some(block => block.type === 'tool-call')) {
+    throw new Error('memory formation output must contain text only')
+  }
+  const output = blocks
+    .filter((block): block is Extract<(typeof blocks)[number], { type: 'text' }> => block.type === 'text')
+    .map(block => block.text)
+    .join('')
+  if (output.trim().length === 0) throw new Error('memory formation model produced no JSON output')
+  return {
+    route: formationRoute,
+    proposals: parseMemoryFormationOutput(output, input),
+  }
 }

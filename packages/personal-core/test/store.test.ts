@@ -584,12 +584,13 @@ describe('privacy, receipts and recovery', () => {
     expect(retry).toMatchObject({ status: 'pending', attempts: 2 })
     const finalLease = f.store.claimOutbox(1, 1_000)[0]
     expect(finalLease.attempts).toBe(3)
-    const dead = f.store.failOutbox(enqueued.id, 'permanent', { maxAttempts: 3 })
-    expect(dead).toMatchObject({ status: 'dead', attempts: 3, lastError: 'permanent' })
+    const dead = f.store.failOutbox(enqueued.id, 'permanent', { maxAttempts: 3, scrubPayloadOnDead: true })
+    expect(dead).toMatchObject({ status: 'dead', attempts: 3, lastError: 'permanent', payload: {} })
 
     const second = f.store.enqueue('reindex', {}, 'job:reindex')
     const leasedSecond = f.store.claimOutbox(1, 1_000)[0]
     expect(leasedSecond.id).toBe(second.id)
-    expect(f.store.completeOutbox(second.id)).toMatchObject({ status: 'completed', attempts: 1 })
+    expect(f.store.completeOutbox(second.id, { scrubPayload: true }))
+      .toMatchObject({ status: 'completed', attempts: 1, payload: {} })
   })
 })

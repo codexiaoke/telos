@@ -13,6 +13,11 @@ const SECRET_PATTERN = /(?:api[ _-]?key|password|passwd|secret|access[ _-]?token
 
 type UnknownRecord = Record<string, unknown>
 
+/** Shared fail-closed credential boundary for formation, RPC and storage inputs. */
+export function containsCredentialLikeContent(value: string): boolean {
+  return SECRET_PATTERN.test(value)
+}
+
 function record(value: unknown, field: string): UnknownRecord {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new TypeError(`${field} must be an object`)
   return value as UnknownRecord
@@ -52,7 +57,7 @@ function proposal(value: unknown, index: number): ExtractionProposal {
   }
   const statement = text(input.statement, `proposals[${String(index)}].statement`)
   const objectValue = text(input.objectValue, `proposals[${String(index)}].objectValue`)
-  if (SECRET_PATTERN.test(`${statement}\n${objectValue}`)) {
+  if (containsCredentialLikeContent(`${statement}\n${objectValue}`)) {
     throw new TypeError(`proposals[${String(index)}] contains credential-like content`)
   }
   const predicate = text(input.predicate, `proposals[${String(index)}].predicate`, 80).toLocaleLowerCase()

@@ -902,6 +902,12 @@ export class PersonalContinuityStore {
     return this.requireOutbox(id)
   }
 
+  getOutbox(id: string): OutboxJob | undefined {
+    this.assertOpen()
+    const row = this.db.prepare('SELECT * FROM continuity_outbox WHERE id = ?').get(id) as Row | undefined
+    return row === undefined ? undefined : this.outboxFromRow(row)
+  }
+
   claimOutbox(limit = 10, leaseMs = 60_000, jobType?: string): OutboxJob[] {
     this.assertOpen()
     const boundedLimit = Math.max(1, Math.min(Math.trunc(limit), 100))
@@ -932,19 +938,25 @@ export class PersonalContinuityStore {
     return ids.map(id => this.requireOutbox(id))
   }
 
-  completeOutbox(id: string): OutboxJob {
+  completeOutbox(id: string, options: { scrubPayload?: boolean } = {}): OutboxJob {
     this.assertOpen()
     const now = this.isoNow()
     const result = this.db.prepare(`
       UPDATE continuity_outbox
-      SET status = 'completed', lease_until = NULL, last_error = NULL, updated_at = ?
+      SET status = 'completed', lease_until = NULL, last_error = NULL,
+          payload_json = CASE WHEN ? THEN '{}' ELSE payload_json END,
+          updated_at = ?
       WHERE id = ? AND status = 'processing'
-    `).run(now, id)
+    `).run(options.scrubPayload === true ? 1 : 0, now, id)
     if (Number(result.changes) !== 1) throw new Error(`outbox job ${id} is not processing`)
     return this.requireOutbox(id)
   }
 
-  failOutbox(id: string, error: unknown, options: { maxAttempts?: number; retryDelayMs?: number } = {}): OutboxJob {
+  failOutbox(id: string, error: unknown, options: {
+    maxAttempts?: number
+    retryDelayMs?: number
+    scrubPayloadOnDead?: boolean
+  } = {}): OutboxJob {
     this.assertOpen()
     const job = this.requireOutbox(id)
     if (job.status !== 'processing') throw new Error(`outbox job ${id} is not processing`)
@@ -955,9 +967,18 @@ export class PersonalContinuityStore {
     const availableAt = new Date(Date.parse(now) + retryDelayMs).toISOString()
     this.db.prepare(`
       UPDATE continuity_outbox
-      SET status = ?, available_at = ?, lease_until = NULL, last_error = ?, updated_at = ?
+      SET status = ?, available_at = ?, lease_until = NULL, last_error = ?,
+          payload_json = CASE WHEN ? THEN '{}' ELSE payload_json END,
+          updated_at = ?
       WHERE id = ?
-    `).run(status, availableAt, String(error), now, id)
+    `).run(
+      status,
+      availableAt,
+      String(error),
+      status === 'dead' && options.scrubPayloadOnDead === true ? 1 : 0,
+      now,
+      id,
+    )
     return this.requireOutbox(id)
   }
 

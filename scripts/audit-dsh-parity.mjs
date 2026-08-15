@@ -179,6 +179,9 @@ try {
       graphDepth: 2,
       captureTurnSources: true,
       queueInference: true,
+      formationMaxInputBytes: 16000,
+      formationMaxOutputTokens: 4096,
+      formationTimeoutMs: 60000,
     }),
     'Telos continuity bounded runtime configuration changed',
   )

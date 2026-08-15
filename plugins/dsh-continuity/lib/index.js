@@ -1,130 +1,7 @@
 // src/index.ts
 import { createHash as createHash2 } from "node:crypto";
-import { createUserMessage } from "@deepseek-ai/dsh-llm";
+import { createUserMessage as createUserMessage2 } from "@deepseek-ai/dsh-llm";
 import { defineTool } from "@deepseek-ai/dsh-tools";
-
-// src/contracts.ts
-var CONTINUITY_RPC_CHANNEL = "/telos-continuity";
-
-// src/formation.ts
-var PATTERNS = [
-  { expression: /^我(?:更|一直|通常)?(?:偏好|喜欢|习惯|常用)\s*(.+)$/u, kind: "semantic", predicate: "preference.stated", importance: 0.7 },
-  { expression: /^我的(?:长期|当前|近期)?目标是\s*(.+)$/u, kind: "prospective", predicate: "goal.stated", importance: 0.85 },
-  { expression: /^我(?:已经)?决定(?:了)?\s*(.+)$/u, kind: "episodic", predicate: "decision.stated", importance: 0.8 },
-  { expression: /^(?:以后)?请(?:一直|总是|优先)?\s*(.+)$/u, kind: "procedural", predicate: "procedure.requested", importance: 0.75 },
-  { expression: /^不要(?:再)?\s*(.+)$/u, kind: "constraint", predicate: "constraint.stated", importance: 0.9 },
-  { expression: /^提醒我\s*(.+)$/u, kind: "prospective", predicate: "commitment.stated", importance: 0.8 },
-  { expression: /^I (?:strongly )?(?:prefer|like|usually use)\s+(.+)$/iu, kind: "semantic", predicate: "preference.stated", importance: 0.7 },
-  { expression: /^My (?:long-term |current )?goal is\s+(.+)$/iu, kind: "prospective", predicate: "goal.stated", importance: 0.85 },
-  { expression: /^I (?:have )?decided(?: to)?\s+(.+)$/iu, kind: "episodic", predicate: "decision.stated", importance: 0.8 },
-  { expression: /^Please (?:always |preferentially )?\s*(.+)$/iu, kind: "procedural", predicate: "procedure.requested", importance: 0.75 },
-  { expression: /^(?:Do not|Never)\s+(.+)$/iu, kind: "constraint", predicate: "constraint.stated", importance: 0.9 },
-  { expression: /^Remind me(?: to| about)?\s+(.+)$/iu, kind: "prospective", predicate: "commitment.stated", importance: 0.8 }
-];
-var EXPLICIT_MEMORY_PATTERN = /(?:记住|记下来|写入记忆|remember|save (?:this|that))/iu;
-var SECRET_PATTERN = /(?:api[ _-]?key|password|passwd|secret|access[ _-]?token|refresh[ _-]?token|private[ _-]?key|密码|口令|密钥|令牌|sk-[a-z0-9_-]{8,})/iu;
-var QUESTION_VALUE_PATTERN = /(?:什么|吗|呢|是否|为什么|怎么|哪一个|what|why|which|should i)$/iu;
-function segments(text2) {
-  return text2.normalize("NFKC").slice(0, 2e4).split(/[。！？!?\n]+/u).map((segment) => segment.trim()).filter((segment) => segment.length >= 4 && segment.length <= 240);
-}
-function matchSegment(segment, scope2) {
-  if (EXPLICIT_MEMORY_PATTERN.test(segment) || SECRET_PATTERN.test(segment)) return void 0;
-  for (const pattern of PATTERNS) {
-    const match = pattern.expression.exec(segment);
-    const objectValue = match?.[1]?.trim();
-    if (objectValue === void 0 || objectValue.length < 2 || objectValue.length > 240 || QUESTION_VALUE_PATTERN.test(objectValue)) continue;
-    return {
-      kind: pattern.kind,
-      statement: segment,
-      predicate: pattern.predicate,
-      objectValue,
-      confidence: 0.92,
-      importance: pattern.importance,
-      sensitivity: "personal",
-      scope: scope2
-    };
-  }
-  return void 0;
-}
-function candidateEvidence(text2) {
-  const seen = /* @__PURE__ */ new Set();
-  const results = [];
-  for (const segment of segments(text2)) {
-    if (matchSegment(segment, { type: "session", id: "evidence-only" }) === void 0) continue;
-    const key = segment.toLocaleLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    results.push(segment);
-    if (results.length >= 6) break;
-  }
-  return results;
-}
-function extractCandidateEnvelope(input) {
-  const seen = /* @__PURE__ */ new Set();
-  const proposals = [];
-  for (const segment of segments(input.evidence)) {
-    const proposal2 = matchSegment(segment, input.scope);
-    if (proposal2 === void 0) continue;
-    const key = `${proposal2.predicate}\0${proposal2.objectValue.toLocaleLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    proposals.push(proposal2);
-    if (proposals.length >= 6) break;
-  }
-  return { schemaVersion: 1, sourceEpisodeId: input.sourceEpisodeId, proposals };
-}
-
-// src/formation-worker.ts
-function requiredString(value, field) {
-  if (typeof value !== "string" || value.trim().length === 0) throw new TypeError(`${field} must be a non-empty string`);
-  return value.trim();
-}
-function optionalString(value, field) {
-  if (value === void 0) return void 0;
-  return requiredString(value, field);
-}
-function processJob(gateway, job) {
-  const sourceEpisodeId = requiredString(job.payload.sourceEpisodeId, "sourceEpisodeId");
-  const sessionId = requiredString(job.payload.sessionId, "sessionId");
-  const workspaceId = optionalString(job.payload.workspaceId, "workspaceId");
-  const source2 = gateway.store.getSourceEpisode(sourceEpisodeId);
-  if (source2 === void 0) throw new Error(`unknown source episode ${sourceEpisodeId}`);
-  const envelope = extractCandidateEnvelope({
-    sourceEpisodeId,
-    evidence: source2.content ?? "",
-    scope: workspaceId === void 0 ? { type: "session", id: sessionId } : { type: "workspace", id: workspaceId }
-  });
-  const reconciliation = gateway.store.applyExtractionBatch(envelope, {
-    subjectEntityId: gateway.ownerEntity.id,
-    actor: "agent",
-    idempotencyKey: job.idempotencyKey
-  });
-  return reconciliation.outcomes.filter((outcome) => outcome.decision === "created-candidate").length;
-}
-function processInferenceJobs(gateway, options = {}) {
-  const jobs = gateway.store.claimOutbox(options.limit ?? 4, 6e4, "infer-turn-candidates");
-  let completed = 0;
-  let failed = 0;
-  let candidatesCreated = 0;
-  for (const job of jobs) {
-    try {
-      candidatesCreated += processJob(gateway, job);
-      gateway.store.completeOutbox(job.id);
-      completed += 1;
-    } catch (error) {
-      try {
-        gateway.store.failOutbox(job.id, error, { maxAttempts: 5, retryDelayMs: 1e3 });
-      } catch {
-      }
-      try {
-        options.onFailure?.(error, job);
-      } catch {
-      }
-      failed += 1;
-    }
-  }
-  return { claimed: jobs.length, completed, failed, candidatesCreated };
-}
 
 // ../../packages/personal-core/dist/schema.js
 var PERSONAL_CORE_SCHEMA_VERSION = 1;
@@ -353,7 +230,10 @@ var CLAIM_KINDS = ["semantic", "episodic", "procedural", "prospective", "constra
 var MAX_PROPOSALS = 6;
 var MAX_TEXT_LENGTH = 240;
 var PREDICATE_PATTERN = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
-var SECRET_PATTERN2 = /(?:api[ _-]?key|password|passwd|secret|access[ _-]?token|refresh[ _-]?token|private[ _-]?key|密码|口令|密钥|令牌|sk-[a-z0-9_-]{8,})/iu;
+var SECRET_PATTERN = /(?:api[ _-]?key|password|passwd|secret|access[ _-]?token|refresh[ _-]?token|private[ _-]?key|密码|口令|密钥|令牌|sk-[a-z0-9_-]{8,})/iu;
+function containsCredentialLikeContent(value) {
+  return SECRET_PATTERN.test(value);
+}
 function record(value, field) {
   if (value === null || typeof value !== "object" || Array.isArray(value))
     throw new TypeError(`${field} must be an object`);
@@ -394,7 +274,7 @@ function proposal(value, index) {
   }
   const statement = text(input.statement, `proposals[${String(index)}].statement`);
   const objectValue = text(input.objectValue, `proposals[${String(index)}].objectValue`);
-  if (SECRET_PATTERN2.test(`${statement}
+  if (containsCredentialLikeContent(`${statement}
 ${objectValue}`)) {
     throw new TypeError(`proposals[${String(index)}] contains credential-like content`);
   }
@@ -487,8 +367,8 @@ function canonicalJson(value) {
     return JSON.stringify(value);
   if (Array.isArray(value))
     return `[${value.map(canonicalJson).join(",")}]`;
-  const record3 = value;
-  return `{${Object.keys(record3).filter((key) => record3[key] !== void 0).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record3[key])}`).join(",")}}`;
+  const record5 = value;
+  return `{${Object.keys(record5).filter((key) => record5[key] !== void 0).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record5[key])}`).join(",")}}`;
 }
 function scopeColumns(scope2) {
   if (scope2.type === "global")
@@ -903,13 +783,13 @@ var PersonalContinuityStore = class {
     }
     const contradictionSets = this.findContradictionSets(selected);
     const id = this.newId("recall");
-    const text2 = this.renderContextPack(id, selected, contradictionSets);
+    const text3 = this.renderContextPack(id, selected, contradictionSets);
     const contextPack = {
       recallId: id,
-      text: text2,
+      text: text3,
       claimIds: selected.map((claim) => claim.id),
-      contentHash: hash(text2),
-      charCount: text2.length
+      contentHash: hash(text3),
+      charCount: text3.length
     };
     const latencyMs = performance.now() - started;
     this.transaction(() => {
@@ -919,7 +799,7 @@ var PersonalContinuityStore = class {
           context_pack_text, context_pack_hash, selected_claim_ids_json, char_count,
           latency_ms, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, query, hash(normalizedText(query)), canonicalJson({ ...context, at, allowedSensitivities }), canonicalJson(contradictionSets), text2, contextPack.contentHash, canonicalJson(contextPack.claimIds), contextPack.charCount, latencyMs, createdAt);
+      `).run(id, query, hash(normalizedText(query)), canonicalJson({ ...context, at, allowedSensitivities }), canonicalJson(contradictionSets), text3, contextPack.contentHash, canonicalJson(contextPack.claimIds), contextPack.charCount, latencyMs, createdAt);
       const insert = this.db.prepare("INSERT INTO recall_candidate (recall_id, claim_id, score, reason) VALUES (?, ?, ?, ?)");
       for (const candidate of candidates)
         insert.run(id, candidate.claimId, candidate.score, candidate.reason);
@@ -950,7 +830,7 @@ var PersonalContinuityStore = class {
       reason: asString(candidate.reason, "reason")
     }));
     const selectedClaims = selectedIds.map((claimId) => this.getClaim(claimId)).filter((claim) => claim !== void 0);
-    const text2 = asString(row.context_pack_text, "context_pack_text");
+    const text3 = asString(row.context_pack_text, "context_pack_text");
     return {
       id,
       query: asString(row.query_text, "query_text"),
@@ -961,7 +841,7 @@ var PersonalContinuityStore = class {
       contradictionSets: parseJson(row.contradiction_sets_json, "contradiction_sets_json"),
       contextPack: {
         recallId: id,
-        text: text2,
+        text: text3,
         claimIds: selectedIds,
         contentHash: asString(row.context_pack_hash, "context_pack_hash"),
         charCount: asNumber(row.char_count, "char_count")
@@ -1206,6 +1086,11 @@ var PersonalContinuityStore = class {
     `).run(id, assertNonEmpty(jobType, "jobType"), canonicalJson(payload), assertIso(availableAt, "availableAt"), idempotencyKey, now, now);
     return this.requireOutbox(id);
   }
+  getOutbox(id) {
+    this.assertOpen();
+    const row = this.db.prepare("SELECT * FROM continuity_outbox WHERE id = ?").get(id);
+    return row === void 0 ? void 0 : this.outboxFromRow(row);
+  }
   claimOutbox(limit = 10, leaseMs = 6e4, jobType) {
     this.assertOpen();
     const boundedLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
@@ -1236,14 +1121,16 @@ var PersonalContinuityStore = class {
     });
     return ids.map((id) => this.requireOutbox(id));
   }
-  completeOutbox(id) {
+  completeOutbox(id, options = {}) {
     this.assertOpen();
     const now = this.isoNow();
     const result = this.db.prepare(`
       UPDATE continuity_outbox
-      SET status = 'completed', lease_until = NULL, last_error = NULL, updated_at = ?
+      SET status = 'completed', lease_until = NULL, last_error = NULL,
+          payload_json = CASE WHEN ? THEN '{}' ELSE payload_json END,
+          updated_at = ?
       WHERE id = ? AND status = 'processing'
-    `).run(now, id);
+    `).run(options.scrubPayload === true ? 1 : 0, now, id);
     if (Number(result.changes) !== 1)
       throw new Error(`outbox job ${id} is not processing`);
     return this.requireOutbox(id);
@@ -1260,9 +1147,11 @@ var PersonalContinuityStore = class {
     const availableAt = new Date(Date.parse(now) + retryDelayMs).toISOString();
     this.db.prepare(`
       UPDATE continuity_outbox
-      SET status = ?, available_at = ?, lease_until = NULL, last_error = ?, updated_at = ?
+      SET status = ?, available_at = ?, lease_until = NULL, last_error = ?,
+          payload_json = CASE WHEN ? THEN '{}' ELSE payload_json END,
+          updated_at = ?
       WHERE id = ?
-    `).run(status, availableAt, String(error), now, id);
+    `).run(status, availableAt, String(error), status === "dead" && options.scrubPayloadOnDead === true ? 1 : 0, now, id);
     return this.requireOutbox(id);
   }
   rebuildProjections() {
@@ -1777,14 +1666,369 @@ ${lines.join("\n")}${contradiction}
   }
 };
 
+// src/contracts.ts
+var CONTINUITY_RPC_CHANNEL = "/telos-continuity";
+
+// src/formation.ts
+import {
+  BlockAssembler,
+  createUserMessage,
+  deepFreeze,
+  ReasoningEffortId
+} from "@deepseek-ai/dsh-llm";
+import { SessionId } from "@deepseek-ai/dsh-session";
+var MAX_PROPOSALS2 = 6;
+var MAX_EVIDENCE_LENGTH = 500;
+var RESPONSE_KEYS = /* @__PURE__ */ new Set(["schemaVersion", "proposals"]);
+var PROPOSAL_KEYS = /* @__PURE__ */ new Set([
+  "kind",
+  "statement",
+  "predicate",
+  "objectValue",
+  "confidence",
+  "importance",
+  "sensitivity",
+  "evidence",
+  "durability",
+  "validFrom",
+  "validTo"
+]);
+var MEMORY_FORMATION_SYSTEM_PROMPT = [
+  "You are the memory-formation stage for a local-first personal AI.",
+  "Decide whether the direct human messages contain durable personal information that will remain useful in a future conversation.",
+  "Do not extract ordinary one-turn instructions, response-format requests, tool-use controls, test/debug prompts, questions, brainstorming, quoted text, or facts stated only by the assistant.",
+  'Ignore temporary clauses instead of discarding an otherwise durable message. If a message combines a stable cross-session fact or constraint with a one-turn control such as "do not call tools", extract only the durable part.',
+  'A message whose entire meaning is temporary, such as "Do not call tools; reply only with X" or "summarize this file", MUST produce an empty proposals array.',
+  "Eligible memories include stable preferences, durable goals, decisions, commitments, procedures, and constraints whose meaning extends beyond the current turn.",
+  "Never extract credentials, secrets, inferred sensitive attributes, or unsupported conclusions.",
+  "Every proposal must contain an evidence field copied verbatim from exactly one supplied human message.",
+  "Use concise normalized statements and stable lowercase dotted predicates.",
+  "Return exactly one JSON object and no Markdown or commentary.",
+  "The required shape is:",
+  '{"schemaVersion":1,"proposals":[{"kind":"semantic|episodic|procedural|prospective|constraint","statement":"...","predicate":"lowercase.dotted_name","objectValue":"...","confidence":0.0,"importance":0.0,"sensitivity":"personal","evidence":"exact human substring","durability":"cross-session","validFrom":null,"validTo":null}]}',
+  `Return at most ${String(MAX_PROPOSALS2)} proposals. When nothing qualifies, return {"schemaVersion":1,"proposals" : []}.`
+].join("\n");
+function record2(value, field) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError(`${field} must be an object`);
+  }
+  return value;
+}
+function text2(value, field, maximum) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new TypeError(`${field} must be a non-empty string`);
+  }
+  const normalized = value.trim().normalize("NFKC");
+  if (normalized.length > maximum) throw new RangeError(`${field} exceeds ${String(maximum)} characters`);
+  return normalized;
+}
+function assertKnownKeys(value, allowed, field) {
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) throw new TypeError(`${field} contains unknown field ${key}`);
+  }
+}
+function optionalIso2(value, field) {
+  if (value === void 0 || value === null) return void 0;
+  const result = text2(value, field, 64);
+  if (!Number.isFinite(Date.parse(result))) throw new TypeError(`${field} must be an ISO-8601 timestamp or null`);
+  return result;
+}
+function unwrapJson(textValue) {
+  const trimmed = textValue.trim();
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/iu.exec(trimmed);
+  return fenced?.[1]?.trim() ?? trimmed;
+}
+function frameMessages(input) {
+  return [
+    "Evaluate this JSON array of direct human messages for durable personal memory.",
+    "The host will enforce the supplied local scope; do not invent another scope.",
+    JSON.stringify({ scope: input.scope, messages: input.messages })
+  ].join("\n");
+}
+function finishError(finish) {
+  switch (finish.kind) {
+    case "stop":
+      return void 0;
+    case "error":
+    case "aborted": {
+      const error = new Error(finish.failure.message);
+      error.code = finish.failure.code;
+      return error;
+    }
+    case "max-tokens":
+      return new Error("memory formation output reached maxOutputTokens");
+    case "tool-calls":
+      return new Error("memory formation model unexpectedly requested a tool");
+    default:
+      return new Error(`unsupported memory formation finish reason ${String(finish.kind)}`);
+  }
+}
+function parseMemoryFormationOutput(output, input) {
+  let decoded;
+  try {
+    decoded = JSON.parse(unwrapJson(output));
+  } catch (error) {
+    throw new TypeError("memory formation model returned invalid JSON", { cause: error });
+  }
+  const envelope = record2(decoded, "memory formation response");
+  assertKnownKeys(envelope, RESPONSE_KEYS, "memory formation response");
+  if (envelope.schemaVersion !== 1) throw new TypeError("memory formation response schemaVersion must be 1");
+  if (!Array.isArray(envelope.proposals)) throw new TypeError("memory formation response proposals must be an array");
+  if (envelope.proposals.length > MAX_PROPOSALS2) {
+    throw new RangeError(`memory formation response exceeds ${String(MAX_PROPOSALS2)} proposals`);
+  }
+  const normalizedMessages = input.messages.map((message) => message.text.normalize("NFKC"));
+  const evidence = [];
+  const proposals = envelope.proposals.map((value, index) => {
+    const proposal2 = record2(value, `proposals[${String(index)}]`);
+    assertKnownKeys(proposal2, PROPOSAL_KEYS, `proposals[${String(index)}]`);
+    if (proposal2.durability !== "cross-session") {
+      throw new TypeError(`proposals[${String(index)}].durability must be cross-session`);
+    }
+    const excerpt = text2(proposal2.evidence, `proposals[${String(index)}].evidence`, MAX_EVIDENCE_LENGTH);
+    if (!normalizedMessages.some((message) => message.includes(excerpt))) {
+      throw new TypeError(`proposals[${String(index)}].evidence is not an exact human-message substring`);
+    }
+    if (containsCredentialLikeContent(excerpt)) {
+      throw new TypeError(`proposals[${String(index)}].evidence contains credential-like content`);
+    }
+    evidence.push(excerpt);
+    return {
+      kind: proposal2.kind,
+      statement: proposal2.statement,
+      predicate: proposal2.predicate,
+      objectValue: proposal2.objectValue,
+      confidence: proposal2.confidence,
+      importance: proposal2.importance,
+      sensitivity: proposal2.sensitivity,
+      scope: input.scope,
+      validFrom: optionalIso2(proposal2.validFrom, `proposals[${String(index)}].validFrom`),
+      validTo: optionalIso2(proposal2.validTo, `proposals[${String(index)}].validTo`)
+    };
+  });
+  const validated = validateExtractionEnvelope({
+    schemaVersion: 1,
+    sourceEpisodeId: "model-formation-validation",
+    proposals
+  });
+  return validated.proposals.map((proposal2, index) => ({
+    ...proposal2,
+    // The one-to-one map above and bounded validator preserve index identity.
+    evidence: evidence[index]
+  }));
+}
+async function formMemoriesWithMainModel(ctx, input) {
+  if (input.messages.length === 0) throw new TypeError("memory formation requires at least one human message");
+  if (input.route.provider.trim().length === 0 || input.route.model.trim().length === 0) {
+    throw new TypeError("memory formation requires a non-empty main-model route");
+  }
+  const directText = input.messages.map((message) => message.text).join("\n");
+  if (containsCredentialLikeContent(directText)) {
+    throw new TypeError("credential-like human input cannot be sent to memory formation");
+  }
+  const framedInput = frameMessages(input);
+  const inputBytes = Buffer.byteLength(framedInput, "utf8");
+  if (inputBytes > input.policy.maxInputBytes) {
+    throw new RangeError(`memory formation input is ${String(inputBytes)} bytes, exceeding maxInputBytes ${String(input.policy.maxInputBytes)}`);
+  }
+  const timeoutSignal = AbortSignal.timeout(input.policy.timeoutMs);
+  const signal = input.signal === void 0 ? timeoutSignal : AbortSignal.any([input.signal, timeoutSignal]);
+  signal.throwIfAborted();
+  const modelInfo = await ctx.llm.resolveModelInfo(
+    input.route.provider,
+    input.route.model,
+    signal
+  );
+  const supportsReasoningOff = modelInfo.reasoning?.efforts.some((effort) => String(effort.id) === "off") === true;
+  const formationRoute = {
+    ...input.route,
+    ...supportsReasoningOff ? { reasoningEffort: "off" } : {}
+  };
+  const messages2 = [createUserMessage({
+    content: [{ type: "text", text: framedInput }],
+    source: { kind: "plugin", plugin: "telos-continuity" }
+  })];
+  const options = deepFreeze({
+    provider: formationRoute.provider,
+    model: formationRoute.model,
+    ...formationRoute.reasoningEffort === void 0 ? {} : { reasoningEffort: ReasoningEffortId(formationRoute.reasoningEffort) },
+    messages: messages2,
+    system: MEMORY_FORMATION_SYSTEM_PROMPT,
+    maxTokens: input.policy.maxOutputTokens,
+    sessionId: SessionId(input.sessionId),
+    signal
+  });
+  signal.throwIfAborted();
+  const assembler = new BlockAssembler();
+  for await (const chunk of ctx.llm.stream(options)) {
+    signal.throwIfAborted();
+    assembler.push(chunk);
+  }
+  signal.throwIfAborted();
+  const terminalError = finishError(assembler.finish);
+  if (terminalError !== void 0) throw terminalError;
+  const blocks = assembler.blocks();
+  if (blocks.some((block) => block.type === "tool-call")) {
+    throw new Error("memory formation output must contain text only");
+  }
+  const output = blocks.filter((block) => block.type === "text").map((block) => block.text).join("");
+  if (output.trim().length === 0) throw new Error("memory formation model produced no JSON output");
+  return {
+    route: formationRoute,
+    proposals: parseMemoryFormationOutput(output, input)
+  };
+}
+
+// src/formation-worker.ts
+function record3(value, field) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError(`${field} must be an object`);
+  }
+  return value;
+}
+function requiredString(value, field) {
+  if (typeof value !== "string" || value.trim().length === 0) throw new TypeError(`${field} must be a non-empty string`);
+  return value.trim();
+}
+function optionalString(value, field) {
+  return value === void 0 ? void 0 : requiredString(value, field);
+}
+function safeInteger(value, field) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new TypeError(`${field} must be a non-negative safe integer`);
+  }
+  return value;
+}
+function positiveInteger(value, field) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError(`${field} must be a positive safe integer`);
+  }
+  return value;
+}
+function messages(value) {
+  if (!Array.isArray(value) || value.length === 0) throw new TypeError("messages must be a non-empty array");
+  return value.map((entry, index) => {
+    const message = record3(entry, `messages[${String(index)}]`);
+    return {
+      seq: safeInteger(message.seq, `messages[${String(index)}].seq`),
+      text: requiredString(message.text, `messages[${String(index)}].text`)
+    };
+  });
+}
+function route(value) {
+  const input = record3(value, "route");
+  return {
+    provider: requiredString(input.provider, "route.provider"),
+    model: requiredString(input.model, "route.model"),
+    reasoningEffort: optionalString(input.reasoningEffort, "route.reasoningEffort")
+  };
+}
+function policy(value) {
+  const input = record3(value, "policy");
+  return {
+    maxInputBytes: positiveInteger(input.maxInputBytes, "policy.maxInputBytes"),
+    maxOutputTokens: positiveInteger(input.maxOutputTokens, "policy.maxOutputTokens"),
+    timeoutMs: positiveInteger(input.timeoutMs, "policy.timeoutMs")
+  };
+}
+function withoutEvidence(proposal2) {
+  const { evidence: _evidence, ...claim } = proposal2;
+  return claim;
+}
+async function processJob(gateway, job, form) {
+  const sessionId = requiredString(job.payload.sessionId, "sessionId");
+  const workspaceId = optionalString(job.payload.workspaceId, "workspaceId");
+  const turn = safeInteger(job.payload.turn, "turn");
+  const directMessages = messages(job.payload.messages);
+  const formationRoute = route(job.payload.route);
+  const contentHash = requiredString(job.payload.contentHash, "contentHash");
+  const observedAt = requiredString(job.payload.observedAt, "observedAt");
+  const scope2 = workspaceId === void 0 ? { type: "session", id: sessionId } : { type: "workspace", id: workspaceId };
+  const result = await form({
+    sessionId,
+    messages: directMessages,
+    scope: scope2,
+    route: formationRoute,
+    policy: policy(job.payload.policy)
+  });
+  let sourceEpisodeIds = [];
+  let candidatesCreated = 0;
+  if (result.proposals.length > 0) {
+    const retainedEvidence = [...new Set(result.proposals.map((proposal2) => proposal2.evidence))];
+    const source2 = gateway.store.createSourceEpisode({
+      sourceKind: "dsh.llm-memory-formation",
+      runtimeId: "dsh",
+      sourceInstanceId: `${sessionId}:turn:${String(turn)}:llm-memory-formation`,
+      sessionId,
+      seqStart: directMessages[0].seq,
+      seqEnd: directMessages.at(-1).seq,
+      observedAt,
+      content: retainedEvidence.join("\n"),
+      contentHash,
+      sensitivity: "personal"
+    });
+    sourceEpisodeIds = [source2.id];
+    const reconciliation = gateway.store.applyExtractionBatch({
+      schemaVersion: 1,
+      sourceEpisodeId: source2.id,
+      proposals: result.proposals.map(withoutEvidence)
+    }, {
+      subjectEntityId: gateway.ownerEntity.id,
+      actor: "agent",
+      idempotencyKey: job.idempotencyKey
+    });
+    candidatesCreated = reconciliation.outcomes.filter((outcome) => outcome.decision === "created-candidate").length;
+  }
+  gateway.store.recordActionReceipt({
+    action: "memory.formation",
+    authorization: "not-required",
+    runtimeId: "dsh",
+    provider: `${result.route.provider}/${result.route.model}${result.route.reasoningEffort === void 0 ? "" : `#${result.route.reasoningEffort}`}`,
+    result: "succeeded",
+    scope: scope2,
+    sourceEpisodeIds,
+    affectedEntityIds: result.proposals.length === 0 ? [] : [gateway.ownerEntity.id],
+    occurredAt: observedAt,
+    idempotencyKey: `receipt:${job.idempotencyKey}`
+  });
+  return candidatesCreated;
+}
+async function processInferenceJobs(gateway, options) {
+  const jobs = gateway.store.claimOutbox(options.limit ?? 4, 6e4, "infer-turn-candidates");
+  let completed = 0;
+  let failed = 0;
+  let candidatesCreated = 0;
+  for (const job of jobs) {
+    try {
+      candidatesCreated += await processJob(gateway, job, options.form);
+      gateway.store.completeOutbox(job.id, { scrubPayload: true });
+      completed += 1;
+    } catch (error) {
+      try {
+        gateway.store.failOutbox(job.id, error, {
+          maxAttempts: 5,
+          retryDelayMs: 1e3,
+          scrubPayloadOnDead: true
+        });
+      } catch {
+      }
+      try {
+        options.onFailure?.(error, job);
+      } catch {
+      }
+      failed += 1;
+    }
+  }
+  return { claimed: jobs.length, completed, failed, candidatesCreated };
+}
+
 // src/gateway.ts
 var OWNER_ENTITY_ID = "telos:owner";
 var CLAIM_KINDS2 = ["semantic", "episodic", "procedural", "prospective", "constraint"];
 var CLAIM_STATUSES = ["candidate", "confirmed", "superseded", "contradicted", "revoked", "expired"];
 var SENSITIVITIES = ["personal", "sensitive", "secret"];
 var ENTITY_KINDS = ["person", "workspace", "project", "topic", "goal", "commitment", "decision", "constraint", "preference", "artifact"];
-var CREDENTIAL_PATTERN = /(?:api[ _-]?key|password|passwd|secret|access[ _-]?token|refresh[ _-]?token|private[ _-]?key|密码|口令|密钥|令牌|sk-[a-z0-9_-]{8,})/iu;
-function record2(value, field = "payload") {
+function record4(value, field = "payload") {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`${field} must be an object`);
   return value;
 }
@@ -1819,7 +2063,7 @@ function stringArray(value, values, field) {
   return value.map((entry, index) => member(entry, values, `${field}[${String(index)}]`));
 }
 function scope(value) {
-  const input = record2(value, "scope");
+  const input = record4(value, "scope");
   const type = member(input.type, ["global", "workspace", "session"], "scope.type");
   if (type === "global") return { type };
   return { type, id: string(input.id, "scope.id") };
@@ -1828,7 +2072,7 @@ function optionalScope(value) {
   return value === void 0 ? void 0 : scope(value);
 }
 function source(value) {
-  const input = record2(value, "source");
+  const input = record4(value, "source");
   return {
     sourceKind: string(input.sourceKind, "source.sourceKind"),
     runtimeId: optionalString2(input.runtimeId, "source.runtimeId"),
@@ -1843,7 +2087,7 @@ function source(value) {
   };
 }
 function rememberCommand(value) {
-  const input = record2(value);
+  const input = record4(value);
   return {
     statement: string(input.statement, "statement"),
     predicate: string(input.predicate, "predicate"),
@@ -1862,14 +2106,14 @@ function rememberCommand(value) {
   };
 }
 function correctCommand(value) {
-  const input = record2(value);
+  const input = record4(value);
   return {
     ...rememberCommand(input),
     claimId: string(input.claimId, "claimId")
   };
 }
 function confirmCommand(value) {
-  const input = record2(value);
+  const input = record4(value);
   return {
     claimId: string(input.claimId, "claimId"),
     source: source(input.source),
@@ -1878,7 +2122,7 @@ function confirmCommand(value) {
   };
 }
 function forgetCommand(value) {
-  const input = record2(value);
+  const input = record4(value);
   return {
     claimId: string(input.claimId, "claimId"),
     physical: boolean(input.physical, "physical", false),
@@ -1888,7 +2132,7 @@ function forgetCommand(value) {
   };
 }
 function recallCommand(value) {
-  const input = record2(value);
+  const input = record4(value);
   return {
     query: string(input.query, "query"),
     workspaceId: optionalString2(input.workspaceId, "workspaceId"),
@@ -1902,7 +2146,7 @@ function recallCommand(value) {
   };
 }
 function listClaimsCommand(value) {
-  const input = value === void 0 ? {} : record2(value);
+  const input = value === void 0 ? {} : record4(value);
   return {
     statuses: stringArray(input.statuses, CLAIM_STATUSES, "statuses"),
     scope: optionalScope(input.scope),
@@ -1911,7 +2155,7 @@ function listClaimsCommand(value) {
 }
 function assertNoCredentialContent(command) {
   const content = [command.statement, command.objectValue, command.source.content].filter(Boolean).join("\n");
-  if (CREDENTIAL_PATTERN.test(content)) {
+  if (containsCredentialLikeContent(content)) {
     throw new TypeError("credentials and secrets cannot be stored in Telos continuity");
   }
 }
@@ -2051,11 +2295,11 @@ var ContinuityGateway = class {
         case "memory/recall":
           return success(this.recall(recallCommand(payload)));
         case "memory/explain": {
-          const input = record2(payload);
+          const input = record4(payload);
           return success(this.store.explainRecall(string(input.recallId, "recallId")) ?? null);
         }
         case "recall/list": {
-          const input = payload === void 0 ? {} : record2(payload);
+          const input = payload === void 0 ? {} : record4(payload);
           return success(this.store.listRecallDecisions({
             sessionId: optionalString2(input.sessionId, "sessionId"),
             claimId: optionalString2(input.claimId, "claimId"),
@@ -2063,7 +2307,7 @@ var ContinuityGateway = class {
           }));
         }
         case "materialization/list": {
-          const input = payload === void 0 ? {} : record2(payload);
+          const input = payload === void 0 ? {} : record4(payload);
           return success(this.store.listMaterializations({
             recallId: optionalString2(input.recallId, "recallId"),
             claimId: optionalString2(input.claimId, "claimId"),
@@ -2072,11 +2316,11 @@ var ContinuityGateway = class {
           }));
         }
         case "source/get": {
-          const input = record2(payload);
+          const input = record4(payload);
           return success(this.store.getSourceEpisode(string(input.sourceEpisodeId, "sourceEpisodeId")) ?? null);
         }
         case "entity/list": {
-          const input = payload === void 0 ? {} : record2(payload);
+          const input = payload === void 0 ? {} : record4(payload);
           return success(this.store.listEntities({
             scope: optionalScope(input.scope),
             kinds: stringArray(input.kinds, ENTITY_KINDS, "kinds"),
@@ -2084,7 +2328,7 @@ var ContinuityGateway = class {
           }));
         }
         case "graph/list": {
-          const input = payload === void 0 ? {} : record2(payload);
+          const input = payload === void 0 ? {} : record4(payload);
           return success(this.store.listRelations({
             entityId: optionalString2(input.entityId, "entityId"),
             statuses: stringArray(input.statuses, CLAIM_STATUSES, "statuses"),
@@ -2092,14 +2336,14 @@ var ContinuityGateway = class {
           }));
         }
         case "receipt/list": {
-          const input = payload === void 0 ? {} : record2(payload);
+          const input = payload === void 0 ? {} : record4(payload);
           return success(this.store.listActionReceipts({
             scope: optionalScope(input.scope),
             limit: optionalNumber(input.limit, "limit")
           }));
         }
         case "deletion/list": {
-          const input = payload === void 0 ? {} : record2(payload);
+          const input = payload === void 0 ? {} : record4(payload);
           return success(this.store.listForgetReports(optionalString2(input.claimId, "claimId")));
         }
         default:
@@ -2113,7 +2357,7 @@ var ContinuityGateway = class {
 
 // src/index.ts
 var name = "telos-continuity";
-var inject = ["agents", "connection", "tools", "workspaceRegistry"];
+var inject = ["agents", "connection", "llm", "tools", "workspaceRegistry"];
 var TEXT_OUTPUT = {
   schema: { type: "string" },
   render: (_args, value) => [{ type: "text", text: value }]
@@ -2137,7 +2381,10 @@ function resolveConfig(config) {
     maxRecallChars: boundedInteger(config.maxRecallChars, 2400, 128, 2e4, "maxRecallChars"),
     graphDepth: boundedInteger(config.graphDepth, 2, 0, 4, "graphDepth"),
     captureTurnSources: config.captureTurnSources ?? true,
-    queueInference: config.queueInference ?? true
+    queueInference: config.queueInference ?? true,
+    formationMaxInputBytes: boundedInteger(config.formationMaxInputBytes, 16e3, 512, 2e5, "formationMaxInputBytes"),
+    formationMaxOutputTokens: boundedInteger(config.formationMaxOutputTokens, 4096, 64, 16384, "formationMaxOutputTokens"),
+    formationTimeoutMs: boundedInteger(config.formationTimeoutMs, 6e4, 1e3, 3e5, "formationTimeoutMs")
   };
 }
 function eventHash(event) {
@@ -2367,9 +2614,9 @@ function installTools(ctx, gateway) {
   }));
 }
 function installRecallHook(ctx, gateway, config, reportBackgroundError) {
-  ctx.on("agent/pre-step", async ({ agent, messages, signal }, next) => {
+  ctx.on("agent/pre-step", async ({ agent, messages: messages2, signal }, next) => {
     if (signal.aborted) return next();
-    const query = messages.filter((message) => message.source.kind === "user").map((message) => textOf(message.content)).filter(Boolean).join("\n");
+    const query = messages2.filter((message) => message.source.kind === "user").map((message) => textOf(message.content)).filter(Boolean).join("\n");
     if (query.length === 0) return next();
     let decision;
     try {
@@ -2388,7 +2635,7 @@ function installRecallHook(ctx, gateway, config, reportBackgroundError) {
     }
     const downstream = await next();
     if (downstream.kind !== "enter" || decision.contextPack.text.length === 0) return downstream;
-    const recallMessage = createUserMessage({
+    const recallMessage = createUserMessage2({
       content: [{ type: "text", text: decision.contextPack.text }],
       source: { kind: "plugin", plugin: "telos-continuity", form: "recall" }
     });
@@ -2403,7 +2650,13 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError, sch
       if (event.type === "turn/start") {
         const digest = createHash2("sha256");
         digest.update(JSON.stringify(event));
-        turns.set(session, { turn: event.data.turn, startSeq: event.seq, digest, candidateEvidence: [] });
+        turns.set(session, {
+          turn: event.data.turn,
+          startSeq: event.seq,
+          digest,
+          directMessages: [],
+          continuityMutationCompleted: false
+        });
       } else {
         turns.get(session)?.digest.update(JSON.stringify(event));
       }
@@ -2427,6 +2680,10 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError, sch
             contentHash: eventHash(event)
           });
           const isError = event.data.message.content.some((block) => block.type === "tool-result" && block.isError);
+          if (!isError && ["continuity_remember", "continuity_correct", "continuity_forget"].includes(call.name)) {
+            const trace = turns.get(session);
+            if (trace !== void 0) trace.continuityMutationCompleted = true;
+          }
           const workspace = workspaceFor(ctx, String(session.id));
           gateway.store.recordActionReceipt({
             action: call.name,
@@ -2444,14 +2701,13 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError, sch
       if (event.type === "user/message" && event.data.source.kind === "user" && config.queueInference) {
         const trace = turns.get(session);
         if (trace !== void 0) {
-          for (const evidence of candidateEvidence(textOf(event.data.content))) {
-            trace.candidateEvidence.push({ seq: event.seq, text: evidence });
-          }
+          const text3 = textOf(event.data.content);
+          if (text3.length > 0) trace.directMessages.push({ seq: event.seq, time: event.time, text: text3 });
         }
       }
       if (event.type === "user/message" && event.data.source.kind === "plugin" && event.data.source.plugin === "telos-continuity" && event.data.source.form === "recall") {
-        const text2 = textOf(event.data.content);
-        const recallId = /<telos_continuity recall_id="([^"]+)">/.exec(text2)?.[1];
+        const text3 = textOf(event.data.content);
+        const recallId = /<telos_continuity recall_id="([^"]+)">/.exec(text3)?.[1];
         if (recallId !== void 0) {
           gateway.store.recordMaterialization({
             recallId,
@@ -2459,14 +2715,16 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError, sch
             sessionId: String(session.id),
             seqStart: event.seq,
             seqEnd: event.seq,
-            renderedContentHash: createHash2("sha256").update(text2).digest("hex")
+            renderedContentHash: createHash2("sha256").update(text3).digest("hex")
           });
         }
       }
       if (event.type === "turn/end") {
         const trace = turns.get(session);
         turns.delete(session);
-        if (trace !== void 0 && trace.turn === event.data.turn && config.captureTurnSources) {
+        if (trace === void 0 || trace.turn !== event.data.turn) return;
+        const contentHash = trace.digest.digest("hex");
+        if (config.captureTurnSources) {
           gateway.store.createSourceEpisode({
             sourceKind: "dsh.turn",
             runtimeId: "dsh",
@@ -2475,30 +2733,33 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError, sch
             seqStart: trace.startSeq,
             seqEnd: event.seq,
             observedAt: new Date(event.time).toISOString(),
-            contentHash: trace.digest.digest("hex")
+            contentHash
           });
-          if (config.queueInference && trace.candidateEvidence.length > 0) {
-            const evidence = trace.candidateEvidence;
-            const workspace = workspaceFor(ctx, String(session.id));
-            const episode = gateway.store.createSourceEpisode({
-              sourceKind: "dsh.turn-candidates",
-              runtimeId: "dsh",
-              sourceInstanceId: `${String(session.id)}:turn:${String(trace.turn)}:candidates`,
-              sessionId: String(session.id),
-              seqStart: evidence[0].seq,
-              seqEnd: evidence.at(-1).seq,
-              observedAt: new Date(event.time).toISOString(),
-              content: evidence.map((entry) => entry.text).join("\n")
-            });
-            gateway.store.enqueue("infer-turn-candidates", {
-              sourceEpisodeId: episode.id,
-              sessionId: String(session.id),
-              workspaceId: workspace === void 0 ? void 0 : String(workspace.id),
-              turn: trace.turn
-            }, `infer:${String(session.id)}:${String(trace.turn)}`);
-            scheduleInference();
-          }
         }
+        const directText = trace.directMessages.map((message) => message.text).join("\n");
+        if (!config.queueInference || trace.directMessages.length === 0 || trace.continuityMutationCompleted || containsCredentialLikeContent(directText)) return;
+        const route2 = session.requestHeader()?.config;
+        if (route2 === void 0) return;
+        const workspace = workspaceFor(ctx, String(session.id));
+        gateway.store.enqueue("infer-turn-candidates", {
+          sessionId: String(session.id),
+          workspaceId: workspace === void 0 ? void 0 : String(workspace.id),
+          turn: trace.turn,
+          messages: trace.directMessages.map((message) => ({ seq: message.seq, text: message.text })),
+          route: {
+            provider: route2.provider,
+            model: route2.model,
+            reasoningEffort: route2.reasoningEffort
+          },
+          policy: {
+            maxInputBytes: config.formationMaxInputBytes,
+            maxOutputTokens: config.formationMaxOutputTokens,
+            timeoutMs: config.formationTimeoutMs
+          },
+          contentHash,
+          observedAt: new Date(trace.directMessages.at(-1).time).toISOString()
+        }, `infer:${String(session.id)}:${String(trace.turn)}`);
+        scheduleInference();
       }
     } catch (error) {
       reportBackgroundError(error);
@@ -2516,28 +2777,54 @@ function apply(ctx, input) {
     databasePath: config.databasePath,
     onBackgroundError: () => lastBackgroundError
   });
-  let inferenceScheduled = false;
+  const inferenceAbort = new AbortController();
+  let closing = false;
+  let inferenceRequested = false;
+  let inferenceRunning;
+  let inferenceRetryTimer;
+  const scheduleRetry = () => {
+    if (closing || inferenceRetryTimer !== void 0) return;
+    inferenceRetryTimer = setTimeout(() => {
+      inferenceRetryTimer = void 0;
+      scheduleInference();
+    }, 1e3);
+  };
   const scheduleInference = () => {
-    if (!config.queueInference || inferenceScheduled) return;
-    inferenceScheduled = true;
-    queueMicrotask(() => {
-      inferenceScheduled = false;
-      try {
-        const result = processInferenceJobs(gateway, {
-          onFailure: (error, job) => {
-            reportBackgroundError(error);
-            ctx.logger.warn(`telos-continuity inference job ${job.id} failed: ${String(error)}`);
-          }
-        });
-        if (result.claimed === 4 && result.failed === 0) scheduleInference();
-      } catch (error) {
-        reportBackgroundError(error);
-        ctx.logger.warn(`telos-continuity inference worker failed: ${String(error)}`);
+    if (!config.queueInference || closing) return;
+    inferenceRequested = true;
+    if (inferenceRunning !== void 0) return;
+    inferenceRunning = (async () => {
+      while (inferenceRequested && !closing) {
+        inferenceRequested = false;
+        try {
+          const result = await processInferenceJobs(gateway, {
+            form: (input2) => formMemoriesWithMainModel(ctx, { ...input2, signal: inferenceAbort.signal }),
+            onFailure: (error, job) => {
+              reportBackgroundError(error);
+              ctx.logger.warn(`telos-continuity inference job ${job.id} failed: ${String(error)}`);
+            }
+          });
+          if (result.claimed === 4 && result.failed === 0) inferenceRequested = true;
+          if (result.failed > 0) scheduleRetry();
+        } catch (error) {
+          reportBackgroundError(error);
+          ctx.logger.warn(`telos-continuity inference worker failed: ${String(error)}`);
+          scheduleRetry();
+        }
       }
+    })().finally(() => {
+      inferenceRunning = void 0;
+      if (inferenceRequested && !closing) scheduleInference();
     });
   };
   ctx.provide("telosContinuity", gateway);
-  ctx.effect(() => () => gateway.close(), "telos-continuity: close personal core");
+  ctx.effect(() => async () => {
+    closing = true;
+    inferenceAbort.abort(new Error("telos-continuity is stopping"));
+    if (inferenceRetryTimer !== void 0) clearTimeout(inferenceRetryTimer);
+    await inferenceRunning;
+    gateway.close();
+  }, "telos-continuity: close personal core");
   ctx.connection.rpc.handle(
     CONTINUITY_RPC_CHANNEL,
     async (endpoint, payload) => gateway.handle(endpoint, payload),

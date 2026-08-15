@@ -29,6 +29,9 @@
     "react": "19.2.8"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../third_party/deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-llm": "link:../../third_party/deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-session": "link:../../third_party/deepseek-harness/packages/core/session",
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "typescript": "7.0.2"

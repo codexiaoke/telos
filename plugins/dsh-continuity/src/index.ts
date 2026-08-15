@@ -15,8 +15,9 @@ import type {
   RecallDecision,
   Sensitivity,
 } from '@telos/personal-core'
+import { containsCredentialLikeContent } from '@telos/personal-core'
 import { CONTINUITY_RPC_CHANNEL, type CorrectCommand, type RememberCommand } from './contracts.js'
-import { candidateEvidence } from './formation.js'
+import { formMemoriesWithMainModel } from './formation.js'
 import { processInferenceJobs } from './formation-worker.js'
 import { ContinuityGateway } from './gateway.js'
 
@@ -25,7 +26,7 @@ export type * from './contracts.js'
 export { ContinuityGateway } from './gateway.js'
 
 export const name = 'telos-continuity'
-export const inject = ['agents', 'connection', 'tools', 'workspaceRegistry']
+export const inject = ['agents', 'connection', 'llm', 'tools', 'workspaceRegistry']
 
 export interface Config {
   databasePath: string
@@ -34,6 +35,9 @@ export interface Config {
   graphDepth?: number
   captureTurnSources?: boolean
   queueInference?: boolean
+  formationMaxInputBytes?: number
+  formationMaxOutputTokens?: number
+  formationTimeoutMs?: number
 }
 
 interface ResolvedConfig {
@@ -43,6 +47,9 @@ interface ResolvedConfig {
   graphDepth: number
   captureTurnSources: boolean
   queueInference: boolean
+  formationMaxInputBytes: number
+  formationMaxOutputTokens: number
+  formationTimeoutMs: number
 }
 
 interface DirectHumanExecution {
@@ -54,7 +61,8 @@ interface TurnTrace {
   turn: number
   startSeq: number
   digest: ReturnType<typeof createHash>
-  candidateEvidence: { seq: number; text: string }[]
+  directMessages: { seq: number; time: number; text: string }[]
+  continuityMutationCompleted: boolean
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -90,6 +98,9 @@ function resolveConfig(config: Config): ResolvedConfig {
     graphDepth: boundedInteger(config.graphDepth, 2, 0, 4, 'graphDepth'),
     captureTurnSources: config.captureTurnSources ?? true,
     queueInference: config.queueInference ?? true,
+    formationMaxInputBytes: boundedInteger(config.formationMaxInputBytes, 16_000, 512, 200_000, 'formationMaxInputBytes'),
+    formationMaxOutputTokens: boundedInteger(config.formationMaxOutputTokens, 4_096, 64, 16_384, 'formationMaxOutputTokens'),
+    formationTimeoutMs: boundedInteger(config.formationTimeoutMs, 60_000, 1_000, 300_000, 'formationTimeoutMs'),
   }
 }
 
@@ -392,7 +403,13 @@ function installSessionObserver(
       if (event.type === 'turn/start') {
         const digest = createHash('sha256')
         digest.update(JSON.stringify(event))
-        turns.set(session, { turn: event.data.turn, startSeq: event.seq, digest, candidateEvidence: [] })
+        turns.set(session, {
+          turn: event.data.turn,
+          startSeq: event.seq,
+          digest,
+          directMessages: [],
+          continuityMutationCompleted: false,
+        })
       } else {
         turns.get(session)?.digest.update(JSON.stringify(event))
       }
@@ -418,6 +435,10 @@ function installSessionObserver(
             contentHash: eventHash(event),
           })
           const isError = event.data.message.content.some(block => block.type === 'tool-result' && block.isError)
+          if (!isError && ['continuity_remember', 'continuity_correct', 'continuity_forget'].includes(call.name)) {
+            const trace = turns.get(session)
+            if (trace !== undefined) trace.continuityMutationCompleted = true
+          }
           const workspace = workspaceFor(ctx, String(session.id))
           gateway.store.recordActionReceipt({
             action: call.name,
@@ -438,9 +459,8 @@ function installSessionObserver(
       if (event.type === 'user/message' && event.data.source.kind === 'user' && config.queueInference) {
         const trace = turns.get(session)
         if (trace !== undefined) {
-          for (const evidence of candidateEvidence(textOf(event.data.content))) {
-            trace.candidateEvidence.push({ seq: event.seq, text: evidence })
-          }
+          const text = textOf(event.data.content)
+          if (text.length > 0) trace.directMessages.push({ seq: event.seq, time: event.time, text })
         }
       }
 
@@ -463,7 +483,9 @@ function installSessionObserver(
       if (event.type === 'turn/end') {
         const trace = turns.get(session)
         turns.delete(session)
-        if (trace !== undefined && trace.turn === event.data.turn && config.captureTurnSources) {
+        if (trace === undefined || trace.turn !== event.data.turn) return
+        const contentHash = trace.digest.digest('hex')
+        if (config.captureTurnSources) {
           gateway.store.createSourceEpisode({
             sourceKind: 'dsh.turn',
             runtimeId: 'dsh',
@@ -472,30 +494,36 @@ function installSessionObserver(
             seqStart: trace.startSeq,
             seqEnd: event.seq,
             observedAt: new Date(event.time).toISOString(),
-            contentHash: trace.digest.digest('hex'),
+            contentHash,
           })
-          if (config.queueInference && trace.candidateEvidence.length > 0) {
-            const evidence = trace.candidateEvidence
-            const workspace = workspaceFor(ctx, String(session.id))
-            const episode = gateway.store.createSourceEpisode({
-              sourceKind: 'dsh.turn-candidates',
-              runtimeId: 'dsh',
-              sourceInstanceId: `${String(session.id)}:turn:${String(trace.turn)}:candidates`,
-              sessionId: String(session.id),
-              seqStart: evidence[0]!.seq,
-              seqEnd: evidence.at(-1)!.seq,
-              observedAt: new Date(event.time).toISOString(),
-              content: evidence.map(entry => entry.text).join('\n'),
-            })
-            gateway.store.enqueue('infer-turn-candidates', {
-              sourceEpisodeId: episode.id,
-              sessionId: String(session.id),
-              workspaceId: workspace === undefined ? undefined : String(workspace.id),
-              turn: trace.turn,
-            }, `infer:${String(session.id)}:${String(trace.turn)}`)
-            scheduleInference()
-          }
         }
+        const directText = trace.directMessages.map(message => message.text).join('\n')
+        if (!config.queueInference
+          || trace.directMessages.length === 0
+          || trace.continuityMutationCompleted
+          || containsCredentialLikeContent(directText)) return
+        const route = session.requestHeader()?.config
+        if (route === undefined) return
+        const workspace = workspaceFor(ctx, String(session.id))
+        gateway.store.enqueue('infer-turn-candidates', {
+          sessionId: String(session.id),
+          workspaceId: workspace === undefined ? undefined : String(workspace.id),
+          turn: trace.turn,
+          messages: trace.directMessages.map(message => ({ seq: message.seq, text: message.text })),
+          route: {
+            provider: route.provider,
+            model: route.model,
+            reasoningEffort: route.reasoningEffort,
+          },
+          policy: {
+            maxInputBytes: config.formationMaxInputBytes,
+            maxOutputTokens: config.formationMaxOutputTokens,
+            timeoutMs: config.formationTimeoutMs,
+          },
+          contentHash,
+          observedAt: new Date(trace.directMessages.at(-1)!.time).toISOString(),
+        }, `infer:${String(session.id)}:${String(trace.turn)}`)
+        scheduleInference()
       }
     } catch (error) {
       reportBackgroundError(error)
@@ -514,28 +542,54 @@ export function apply(ctx: Context, input: Config): void {
     databasePath: config.databasePath,
     onBackgroundError: () => lastBackgroundError,
   })
-  let inferenceScheduled = false
+  const inferenceAbort = new AbortController()
+  let closing = false
+  let inferenceRequested = false
+  let inferenceRunning: Promise<void> | undefined
+  let inferenceRetryTimer: ReturnType<typeof setTimeout> | undefined
+  const scheduleRetry = (): void => {
+    if (closing || inferenceRetryTimer !== undefined) return
+    inferenceRetryTimer = setTimeout(() => {
+      inferenceRetryTimer = undefined
+      scheduleInference()
+    }, 1_000)
+  }
   const scheduleInference = (): void => {
-    if (!config.queueInference || inferenceScheduled) return
-    inferenceScheduled = true
-    queueMicrotask(() => {
-      inferenceScheduled = false
-      try {
-        const result = processInferenceJobs(gateway, {
-          onFailure: (error, job) => {
-            reportBackgroundError(error)
-            ctx.logger.warn(`telos-continuity inference job ${job.id} failed: ${String(error)}`)
-          },
-        })
-        if (result.claimed === 4 && result.failed === 0) scheduleInference()
-      } catch (error) {
-        reportBackgroundError(error)
-        ctx.logger.warn(`telos-continuity inference worker failed: ${String(error)}`)
+    if (!config.queueInference || closing) return
+    inferenceRequested = true
+    if (inferenceRunning !== undefined) return
+    inferenceRunning = (async () => {
+      while (inferenceRequested && !closing) {
+        inferenceRequested = false
+        try {
+          const result = await processInferenceJobs(gateway, {
+            form: input => formMemoriesWithMainModel(ctx, { ...input, signal: inferenceAbort.signal }),
+            onFailure: (error, job) => {
+              reportBackgroundError(error)
+              ctx.logger.warn(`telos-continuity inference job ${job.id} failed: ${String(error)}`)
+            },
+          })
+          if (result.claimed === 4 && result.failed === 0) inferenceRequested = true
+          if (result.failed > 0) scheduleRetry()
+        } catch (error) {
+          reportBackgroundError(error)
+          ctx.logger.warn(`telos-continuity inference worker failed: ${String(error)}`)
+          scheduleRetry()
+        }
       }
+    })().finally(() => {
+      inferenceRunning = undefined
+      if (inferenceRequested && !closing) scheduleInference()
     })
   }
   ctx.provide('telosContinuity', gateway)
-  ctx.effect(() => () => gateway.close(), 'telos-continuity: close personal core')
+  ctx.effect(() => async () => {
+    closing = true
+    inferenceAbort.abort(new Error('telos-continuity is stopping'))
+    if (inferenceRetryTimer !== undefined) clearTimeout(inferenceRetryTimer)
+    await inferenceRunning
+    gateway.close()
+  }, 'telos-continuity: close personal core')
 
   ctx.connection.rpc.handle(
     CONTINUITY_RPC_CHANNEL,

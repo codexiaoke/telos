@@ -147,6 +147,15 @@ importers:
         specifier: 19.2.8
         version: 19.2.8
     devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../third_party/deepseek-harness/vendor/cordis
+        version: link:../../third_party/deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-llm':
+        specifier: link:../../third_party/deepseek-harness/packages/llm/llm
+        version: link:../../third_party/deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../third_party/deepseek-harness/packages/core/session
+        version: link:../../third_party/deepseek-harness/packages/core/session
       '@types/node':
         specifier: 26.2.0
         version: 26.2.0

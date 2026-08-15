@@ -580,8 +580,8 @@ export const TELOS_LAYOUT_CSS = `
 .telos-editor-tab[data-active]::before {
   position: absolute;
   z-index: 1;
-  top: 0;
   right: 0;
+  bottom: 0;
   left: 0;
   height: 2px;
   background: var(--dsw-alias-state-business-primary);

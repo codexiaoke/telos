@@ -52,6 +52,7 @@ nsis:
 
 linux:
   category: Utility
+  executableName: telos
   target:
     - AppImage
     - deb

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { MaterialFileIcon } from './material-file-icons'
+import { MonacoCodeEditor } from './MonacoCodeEditor'
 
 const WORKBENCH_FILES_RPC_CHANNEL = '/telos-workbench-files'
 
@@ -86,15 +88,6 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
   )
 }
 
-function FileIcon() {
-  return (
-    <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
-      <path d="M3.5 1.75h5l4 4v8.5h-9z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.2" />
-      <path d="M8.5 1.9v4h3.85" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.2" />
-    </svg>
-  )
-}
-
 function RefreshIcon() {
   return (
     <svg aria-hidden="true" fill="none" viewBox="0 0 18 18">
@@ -132,6 +125,7 @@ function FileTree({ activePath, directories, expanded, loading, onDirectory, onF
             type="button"
           >
             <span className="telos-file-tree-chevron"><ChevronIcon expanded={expanded.has(entry.path)} /></span>
+            <span className="telos-file-tree-icon"><MaterialFileIcon expanded={expanded.has(entry.path)} kind="folder" name={entry.name} /></span>
             <span className="telos-file-tree-name">{entry.name}</span>
           </button>
           {expanded.has(entry.path) && (
@@ -158,7 +152,7 @@ function FileTree({ activePath, directories, expanded, loading, onDirectory, onF
           style={{ paddingLeft: 30 + depth * 14 }}
           type="button"
         >
-          <span className="telos-file-tree-file"><FileIcon /></span>
+          <span className="telos-file-tree-icon"><MaterialFileIcon kind="file" name={entry.name} /></span>
           <span className="telos-file-tree-name">{entry.name}</span>
         </button>
       ))}
@@ -304,6 +298,7 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
               <div aria-selected={file.path === activePath} className="telos-editor-tab" data-active={file.path === activePath || undefined} key={file.path} role="tab">
                 <button onClick={() => setActivePath(file.path)} title={file.path} type="button">
                   {file.content !== file.savedContent && <span className="telos-editor-dirty" />}
+                  <MaterialFileIcon kind="file" name={file.path} />
                   {basename(file.path)}
                 </button>
                 <button aria-label={`关闭 ${basename(file.path)}`} className="telos-editor-tab-close" onClick={() => closeFile(file.path)} type="button">×</button>
@@ -325,17 +320,12 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
                 {activeFile.saving ? '保存中…' : '保存'}
               </button>
             </div>
-            <textarea
-              aria-label={`编辑 ${activeFile.path}`}
-              onChange={event => updateActiveFile(event.target.value)}
-              onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
-                  event.preventDefault()
-                  void saveActiveFile()
-                }
-              }}
-              spellCheck={false}
-              value={activeFile.content}
+            <MonacoCodeEditor
+              content={activeFile.content}
+              onChange={updateActiveFile}
+              onSave={() => void saveActiveFile()}
+              openPaths={files.map(file => file.path)}
+              path={activeFile.path}
             />
             {activeFile.error !== undefined && <div className="telos-editor-save-error">{activeFile.error}</div>}
           </div>

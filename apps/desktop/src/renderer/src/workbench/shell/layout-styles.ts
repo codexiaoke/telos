@@ -492,7 +492,7 @@ export const TELOS_LAYOUT_CSS = `
 }
 
 .telos-file-tree-chevron,
-.telos-file-tree-file {
+.telos-file-tree-icon {
   display: grid;
   width: 15px;
   min-width: 15px;
@@ -502,7 +502,7 @@ export const TELOS_LAYOUT_CSS = `
 }
 
 .telos-file-tree-chevron svg,
-.telos-file-tree-file svg {
+.telos-file-tree-icon img {
   width: 15px;
   height: 15px;
 }
@@ -583,6 +583,12 @@ export const TELOS_LAYOUT_CSS = `
   cursor: pointer;
 }
 
+.telos-editor-tab > button:first-child img {
+  width: 15px;
+  min-width: 15px;
+  height: 15px;
+}
+
 .telos-editor-dirty {
   width: 6px;
   min-width: 6px;
@@ -644,22 +650,27 @@ export const TELOS_LAYOUT_CSS = `
   cursor: default;
 }
 
-.telos-editor-document textarea {
-  width: 100%;
+.telos-monaco-shell {
+  position: relative;
   min-height: 0;
   flex: 1;
-  box-sizing: border-box;
-  padding: 18px 22px 40px;
-  resize: none;
-  border: 0;
-  outline: 0;
-  color: var(--dsw-alias-label-primary);
+  overflow: hidden;
   background: var(--dsw-alias-bg-base);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.65;
-  tab-size: 2;
-  white-space: pre;
+}
+
+.telos-monaco-editor {
+  width: 100%;
+  height: 100%;
+}
+
+.telos-monaco-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--dsw-alias-label-tertiary);
+  background: var(--dsw-alias-bg-base);
+  font-size: 12px;
 }
 
 .telos-editor-save-error {

@@ -51,10 +51,16 @@ const result = await build({
   entryPoints: [entry],
   bundle: true,
   write: false,
+  outfile: 'telos-ui-layout.js',
   format: 'cjs',
   platform: 'browser',
   target: ['es2022'],
   jsx: 'automatic',
+  minify: true,
+  loader: {
+    '.svg': 'dataurl',
+    '.ttf': 'dataurl',
+  },
   external: [
     'react',
     'react/jsx-runtime',
@@ -67,11 +73,14 @@ const result = await build({
   logLevel: 'warning',
 })
 
-if (result.outputFiles.length !== 1 || result.outputFiles[0]?.text === undefined) {
-  throw new Error(`Telos layout build expected one JavaScript output, found ${String(result.outputFiles.length)}`)
+const javascriptOutput = result.outputFiles.find(output => output.path.endsWith('.js'))
+const cssOutput = result.outputFiles.find(output => output.path.endsWith('.css'))
+if (javascriptOutput?.text === undefined || result.outputFiles.some(output => !output.path.endsWith('.js') && !output.path.endsWith('.css'))) {
+  throw new Error(`Telos layout build expected JavaScript and optional CSS outputs, found ${String(result.outputFiles.length)}`)
 }
 
-const compiled = result.outputFiles[0].text
+const compiled = javascriptOutput.text
+const bundledCss = cssOutput?.text
 const requiredModules = [...compiled.matchAll(/require\(["']([^"']+)["']\)/g)].map(match => match[1])
 const allowedModules = new Set([
   'react',
@@ -97,6 +106,14 @@ const generated = [
   '  factory: (require) => {',
   '    var module = { exports: {} };',
   '    var exports = module.exports;',
+  ...(bundledCss === undefined ? [] : [
+    `    var bundledCss = ${JSON.stringify(bundledCss)};`,
+    '    document.querySelector(\'style[data-telos-owner="@telos/renderer/editor-dependencies"]\')?.remove();',
+    '    var bundledStyle = document.createElement("style");',
+    '    bundledStyle.dataset.telosOwner = "@telos/renderer/editor-dependencies";',
+    '    bundledStyle.textContent = bundledCss;',
+    '    document.head.append(bundledStyle);',
+  ]),
   compiled,
   '    return module.exports;',
   '  },',

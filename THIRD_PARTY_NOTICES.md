@@ -34,6 +34,18 @@ source mapping and hash; `LICENSE.upstream` carries the MIT license text. The
 compatibility package is private and must not be published as an upstream DSH
 artifact.
 
+## Editor presentation
+
+The Telos editor workbench embeds the following MIT-licensed projects in its
+generated DSH compatibility bundle. Their runtime assets are bundled locally;
+the editor does not fetch themes, grammars, icons, or fonts from a CDN.
+
+- [Monaco Editor](https://github.com/microsoft/monaco-editor), version `0.56.0`
+- [Shiki](https://github.com/shikijs/shiki), version `4.4.3`, including the
+  JavaScript regular-expression engine and Monaco adapter
+- [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme),
+  version `5.37.0`
+
 ## thinking-orbs
 
 Portions of `apps/desktop/src/renderer/src/components/agent-orb/orbEngine.ts` are derived from the geometry and projection approach in [thinking-orbs](https://github.com/Jakubantalik/thinking-orbs) by Jakub Antalik.

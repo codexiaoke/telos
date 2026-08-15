@@ -284,7 +284,7 @@ function evaluateCase(row, state) {
     && typeof source.content_hash === 'string')
   const evidenceGrounded = state.sources
     .filter(source => typeof source.content === 'string')
-    .every(source => input.includes(source.content))
+    .every(source => source.content.split('\n').filter(Boolean).every(excerpt => input.includes(excerpt)))
   return {
     caseId: row.case_id,
     expectedDecision: shouldRemember ? 'remember' : 'ignore',

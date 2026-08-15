@@ -188,6 +188,17 @@ function assertClaimAccessible(ctx: Context, agent: Agent, claim: MemoryClaim): 
   if (claim.scope.type === 'session' && claim.scope.id !== current.sessionId) throw new Error('claim is outside the current session')
 }
 
+function assertRecallAccessible(ctx: Context, agent: Agent, decision: RecallDecision): void {
+  const current = contextFor(ctx, agent)
+  if (decision.context.workspaceId !== undefined && decision.context.workspaceId !== current.workspaceId) {
+    throw new Error('recall decision is outside the current workspace')
+  }
+  if (decision.context.sessionId !== undefined && decision.context.sessionId !== current.sessionId) {
+    throw new Error('recall decision is outside the current session')
+  }
+  for (const claim of decision.selectedClaims) assertClaimAccessible(ctx, agent, claim)
+}
+
 function installTools(ctx: Context, gateway: ContinuityGateway): void {
   ctx.tools.register(defineTool({
     name: 'continuity_remember',
@@ -292,9 +303,12 @@ function installTools(ctx: Context, gateway: ContinuityGateway): void {
     parameters: { recall_id: { type: 'string', required: true } },
     output: TEXT_OUTPUT,
     isConcurrencySafe: () => true,
-    async execute(args) {
+    async execute(args, exec) {
+      if (exec.agent === undefined) throw new Error('continuity_explain requires a calling agent')
       const decision = gateway.store.explainRecall(args.recall_id)
-      return decision === undefined ? JSON.stringify({ recallId: args.recall_id, found: false }) : recallSummary(decision)
+      if (decision === undefined) return JSON.stringify({ recallId: args.recall_id, found: false })
+      assertRecallAccessible(ctx, exec.agent, decision)
+      return recallSummary(decision)
     },
   }))
 

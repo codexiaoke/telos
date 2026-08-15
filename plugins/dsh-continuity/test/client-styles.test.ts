@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { CONTINUITY_CLIENT_CSS } from '../src/client/styles.js'
 
 describe('continuity client styles', () => {
+  it('sits flush in Settings without a nested panel border', () => {
+    const rootRule = /\.telosContinuitySettings\s*\{([^}]*)}/s.exec(CONTINUITY_CLIENT_CSS)?.[1]
+    expect(rootRule).toContain('border: 0')
+    expect(rootRule).toContain('border-radius: 0')
+  })
+
   it('owns the full body height and exposes a visible scrollbar', () => {
     expect(CONTINUITY_CLIENT_CSS).toMatch(/\.telosContinuityScrollPane\s*\{[^}]*height:\s*100%/s)
     expect(CONTINUITY_CLIENT_CSS).toContain('.telosContinuityScrollPane::-webkit-scrollbar')

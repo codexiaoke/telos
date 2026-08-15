@@ -690,8 +690,8 @@ var CONTINUITY_CLIENT_CSS = `
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-bg-layer-1);
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 14px;
+  border: 0;
+  border-radius: 0;
 }
 .telosContinuityTopbar {
   min-height: 108px;

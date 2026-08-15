@@ -539,39 +539,63 @@ export const TELOS_LAYOUT_CSS = `
 .telos-editor-tabs {
   display: flex;
   min-height: var(--telos-titlebar-height, 52px);
-  padding-right: 12px;
+  padding: 0 12px 0 1px;
   align-items: flex-end;
   overflow-x: auto;
   overflow-y: hidden;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 50%, var(--dsw-alias-bg-base));
+  scrollbar-width: none;
   -webkit-app-region: drag;
 }
 
+.telos-editor-tabs::-webkit-scrollbar {
+  display: none;
+}
+
 .telos-editor-tab {
+  position: relative;
   display: flex;
-  max-width: 220px;
-  height: 36px;
+  min-width: 112px;
+  max-width: 190px;
+  height: 35px;
   align-items: center;
   border-right: 1px solid var(--dsw-alias-border-l1);
-  border-top: 1px solid transparent;
   color: var(--dsw-alias-label-tertiary);
-  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 72%, transparent);
+  background: transparent;
   -webkit-app-region: no-drag;
+}
+
+.telos-editor-tab:hover,
+.telos-editor-tab[data-menu-open] {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .telos-editor-tab[data-active] {
   color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-bg-base);
-  border-top-color: var(--dsw-alias-state-business-primary);
+}
+
+.telos-editor-tab[data-active]::before {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--dsw-alias-state-business-primary);
+  content: '';
 }
 
 .telos-editor-tab > button:first-child {
   display: flex;
   min-width: 0;
+  flex: 1;
   height: 100%;
-  padding: 0 5px 0 12px;
+  padding: 0 4px 0 10px;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   overflow: hidden;
   border: 0;
   color: inherit;
@@ -589,6 +613,13 @@ export const TELOS_LAYOUT_CSS = `
   height: 15px;
 }
 
+.telos-editor-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .telos-editor-dirty {
   width: 6px;
   min-width: 6px;
@@ -598,19 +629,97 @@ export const TELOS_LAYOUT_CSS = `
 }
 
 .telos-editor-tab-close {
-  width: 24px;
-  height: 24px;
-  margin-right: 5px;
+  position: relative;
+  display: grid;
+  width: 25px;
+  min-width: 25px;
+  height: 25px;
+  margin-right: 4px;
   padding: 0;
+  place-items: center;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   color: inherit;
   background: transparent;
   cursor: pointer;
 }
 
+.telos-editor-tab-close-icon {
+  display: grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  opacity: 0;
+}
+
+.telos-editor-tab-close-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.telos-editor-tab[data-active]:not([data-dirty]) .telos-editor-tab-close-icon,
+.telos-editor-tab:hover .telos-editor-tab-close-icon,
+.telos-editor-tab[data-menu-open] .telos-editor-tab-close-icon {
+  opacity: .78;
+}
+
+.telos-editor-tab:hover .telos-editor-dirty,
+.telos-editor-tab[data-menu-open] .telos-editor-dirty {
+  display: none;
+}
+
 .telos-editor-tab-close:hover {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.telos-editor-tab-menu-layer {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  -webkit-app-region: no-drag;
+}
+
+.telos-editor-tab-menu {
+  position: fixed;
+  display: flex;
+  width: 190px;
+  padding: 5px;
+  flex-direction: column;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 18%);
+}
+
+.telos-editor-tab-menu button {
+  height: 31px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: default;
+}
+
+.telos-editor-tab-menu button:hover:not(:disabled),
+.telos-editor-tab-menu button:focus-visible {
+  color: var(--dsw-alias-label-primary-foreground);
+  background: var(--dsw-alias-state-business-primary);
+  outline: none;
+}
+
+.telos-editor-tab-menu button:disabled {
+  opacity: .38;
+}
+
+.telos-editor-tab-menu-separator {
+  margin-top: 5px;
+  border-top: 1px solid var(--dsw-alias-border-l1) !important;
+  border-radius: 0 0 5px 5px !important;
 }
 
 .telos-editor-document {

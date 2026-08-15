@@ -76,6 +76,12 @@ interface OpenFile extends WorkbenchTextFile {
   error?: string
 }
 
+interface TabContextMenu {
+  path: string
+  x: number
+  y: number
+}
+
 function basename(path: string): string {
   return path.split('/').at(-1) ?? path
 }
@@ -93,6 +99,14 @@ function RefreshIcon() {
     <svg aria-hidden="true" fill="none" viewBox="0 0 18 18">
       <path d="M14 6.1A5.75 5.75 0 1 0 14.35 11" stroke="currentColor" strokeLinecap="round" strokeWidth="1.45" />
       <path d="M10.9 5.9H14.2V2.6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.45" />
+    </svg>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
+      <path d="m4.5 4.5 7 7m0-7-7 7" stroke="currentColor" strokeLinecap="round" strokeWidth="1.35" />
     </svg>
   )
 }
@@ -174,6 +188,7 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
   const [loading, setLoading] = useState<Set<string>>(() => new Set())
   const [files, setFiles] = useState<OpenFile[]>([])
   const [activePath, setActivePath] = useState<string>()
+  const [tabContextMenu, setTabContextMenu] = useState<TabContextMenu>()
   const [error, setError] = useState<string>()
   const activeFile = files.find(file => file.path === activePath)
 
@@ -202,6 +217,7 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
     setExpanded(new Set())
     setFiles([])
     setActivePath(undefined)
+    setTabContextMenu(undefined)
     setError(undefined)
     if (sessionId === undefined) return
     const controller = new AbortController()
@@ -256,15 +272,43 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
     }
   }, [activeFile, client, sessionId])
 
-  const closeFile = useCallback((path: string) => {
-    const closing = files.find(file => file.path === path)
-    if (closing !== undefined && closing.content !== closing.savedContent
-      && !window.confirm(`${basename(path)} 还有未保存的修改，确定关闭吗？`)) return
-    const index = files.findIndex(file => file.path === path)
-    const next = files.filter(file => file.path !== path)
+  const closeFiles = useCallback((paths: readonly string[]) => {
+    const closingPaths = new Set(paths)
+    const dirtyFiles = files.filter(file => closingPaths.has(file.path) && file.content !== file.savedContent)
+    if (dirtyFiles.length > 0) {
+      const message = dirtyFiles.length === 1
+        ? `${basename(dirtyFiles[0]!.path)} 还有未保存的修改，确定关闭吗？`
+        : `${dirtyFiles.length} 个文件还有未保存的修改：\n${dirtyFiles.map(file => `• ${basename(file.path)}`).join('\n')}\n\n确定关闭吗？`
+      if (!window.confirm(message)) return
+    }
+
+    const activeIndex = files.findIndex(file => file.path === activePath)
+    const next = files.filter(file => !closingPaths.has(file.path))
     setFiles(next)
-    if (activePath === path) setActivePath(next[Math.min(index, next.length - 1)]?.path)
+    setTabContextMenu(undefined)
+    if (activePath === undefined || !closingPaths.has(activePath)) return
+    const nextActive = files.slice(activeIndex + 1).find(file => !closingPaths.has(file.path))
+      ?? files.slice(0, activeIndex).findLast(file => !closingPaths.has(file.path))
+    setActivePath(nextActive?.path)
   }, [activePath, files])
+
+  const closeFile = useCallback((path: string) => closeFiles([path]), [closeFiles])
+
+  useEffect(() => {
+    if (tabContextMenu === undefined) return
+    const closeMenu = () => setTabContextMenu(undefined)
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeMenu()
+    }
+    window.addEventListener('blur', closeMenu)
+    window.addEventListener('resize', closeMenu)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('blur', closeMenu)
+      window.removeEventListener('resize', closeMenu)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [tabContextMenu])
 
   const rootLoading = loading.has('')
   const title = useMemo(() => workspaceLabel?.trim() || '工作区', [workspaceLabel])
@@ -294,18 +338,79 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
       <main className="telos-editor-surface">
         {files.length > 0 && (
           <div className="telos-editor-tabs" role="tablist">
-            {files.map(file => (
-              <div aria-selected={file.path === activePath} className="telos-editor-tab" data-active={file.path === activePath || undefined} key={file.path} role="tab">
-                <button onClick={() => setActivePath(file.path)} title={file.path} type="button">
-                  {file.content !== file.savedContent && <span className="telos-editor-dirty" />}
-                  <MaterialFileIcon kind="file" name={file.path} />
-                  {basename(file.path)}
-                </button>
-                <button aria-label={`关闭 ${basename(file.path)}`} className="telos-editor-tab-close" onClick={() => closeFile(file.path)} type="button">×</button>
-              </div>
-            ))}
+            {files.map(file => {
+              const dirty = file.content !== file.savedContent
+              return (
+                <div
+                  aria-selected={file.path === activePath}
+                  className="telos-editor-tab"
+                  data-active={file.path === activePath || undefined}
+                  data-dirty={dirty || undefined}
+                  data-menu-open={tabContextMenu?.path === file.path || undefined}
+                  key={file.path}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    const menuWidth = 190
+                    const menuHeight = 176
+                    setTabContextMenu({
+                      path: file.path,
+                      x: Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8)),
+                      y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
+                    })
+                  }}
+                  role="tab"
+                >
+                  <button onClick={() => setActivePath(file.path)} title={file.path} type="button">
+                    <MaterialFileIcon kind="file" name={file.path} />
+                    <span className="telos-editor-tab-label">{basename(file.path)}</span>
+                  </button>
+                  <button aria-label={`关闭 ${basename(file.path)}`} className="telos-editor-tab-close" onClick={() => closeFile(file.path)} type="button">
+                    {dirty && <span aria-hidden="true" className="telos-editor-dirty" />}
+                    <span className="telos-editor-tab-close-icon"><CloseIcon /></span>
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
+        {tabContextMenu !== undefined && (() => {
+          const tabIndex = files.findIndex(file => file.path === tabContextMenu.path)
+          const menuItems = [
+            { label: '关闭', paths: [tabContextMenu.path], disabled: false },
+            { label: '关闭其他', paths: files.filter(file => file.path !== tabContextMenu.path).map(file => file.path), disabled: files.length < 2 },
+            { label: '关闭左侧', paths: files.slice(0, tabIndex).map(file => file.path), disabled: tabIndex <= 0 },
+            { label: '关闭右侧', paths: files.slice(tabIndex + 1).map(file => file.path), disabled: tabIndex === -1 || tabIndex >= files.length - 1 },
+            { label: '关闭全部', paths: files.map(file => file.path), disabled: files.length === 0 },
+          ]
+          return (
+            <div
+              className="telos-editor-tab-menu-layer"
+              onContextMenu={event => event.preventDefault()}
+              onMouseDown={() => setTabContextMenu(undefined)}
+            >
+              <div
+                aria-label={`${basename(tabContextMenu.path)} 标签页管理`}
+                className="telos-editor-tab-menu"
+                onMouseDown={event => event.stopPropagation()}
+                role="menu"
+                style={{ left: tabContextMenu.x, top: tabContextMenu.y }}
+              >
+                {menuItems.map((item, index) => (
+                  <button
+                    className={index === 2 ? 'telos-editor-tab-menu-separator' : undefined}
+                    disabled={item.disabled}
+                    key={item.label}
+                    onClick={() => closeFiles(item.paths)}
+                    role="menuitem"
+                    type="button"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
         {activeFile === undefined ? (
           <div className="telos-editor-empty">
             <span className="telos-editor-empty-mark">T</span>

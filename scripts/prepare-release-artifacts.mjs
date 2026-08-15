@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFi
 import { basename, extname, join, relative, resolve, sep } from 'node:path'
 import { parse, stringify } from 'yaml'
 
-const RELEASE_FILE_PATTERN = /\.(?:AppImage|blockmap|deb|dmg|exe|zip)$/i
+const RELEASE_FILE_PATTERN = /\.(?:7z|AppImage|blockmap|deb|dmg|exe|zip)$/i
 const UPDATE_METADATA_PATTERN = /^latest(?:-[a-z0-9-]+)?\.ya?ml$/i
 
 function collectFiles(root) {

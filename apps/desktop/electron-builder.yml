@@ -38,12 +38,13 @@ dmg:
   sign: false
 
 win:
-  # With CSC identity discovery disabled in CI, this produces an unsigned NSIS
-  # community installer and does not require an Authenticode certificate.
+  # The complete DSH runtime makes the unpacked app larger than standard NSIS
+  # can safely embed. The web installer and its payload are published together
+  # on GitHub Releases, so no paid download service is required.
   target:
-    - nsis
+    - nsis-web
 
-nsis:
+nsisWeb:
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true

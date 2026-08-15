@@ -41,6 +41,7 @@ describe('prepareReleaseArtifacts', () => {
     mkdirSync(x64, { recursive: true })
     writeFileSync(join(arm64, 'Telos-0.2.0-mac-arm64.zip'), 'arm64')
     writeFileSync(join(x64, 'Telos-0.2.0-mac-x64.zip'), 'x64')
+    writeFileSync(join(x64, 'Telos-0.2.0-x64.nsis.7z'), 'windows-web-payload')
     writeMetadata(join(arm64, 'latest-mac.yml'), 'arm64', 'arm64-sha')
     writeMetadata(join(x64, 'latest-mac.yml'), 'x64', 'x64-sha')
 
@@ -48,6 +49,7 @@ describe('prepareReleaseArtifacts', () => {
 
     expect(readFileSync(join(output, 'Telos-0.2.0-mac-arm64.zip'), 'utf8')).toBe('arm64')
     expect(readFileSync(join(output, 'Telos-0.2.0-mac-x64.zip'), 'utf8')).toBe('x64')
+    expect(readFileSync(join(output, 'Telos-0.2.0-x64.nsis.7z'), 'utf8')).toBe('windows-web-payload')
     const metadata = parse(readFileSync(join(output, 'latest-mac.yml'), 'utf8'))
     expect(metadata.version).toBe('0.2.0')
     expect(metadata.files.map(file => file.url)).toEqual([

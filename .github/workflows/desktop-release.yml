@@ -121,6 +121,7 @@ jobs:
             dist/*.dmg
             dist/*.zip
             dist/*.exe
+            dist/*.7z
             dist/*.AppImage
             dist/*.deb
             dist/latest*.yml

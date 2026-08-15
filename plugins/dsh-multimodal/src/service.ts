@@ -3,7 +3,6 @@ import type {} from '@deepseek-ai/dsh-llm'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import {
   TELOS_MULTIMODAL_PROVIDER,
-  type ImageRouteRequest,
   type ImageRouteResolution,
   type ModelCatalogEntry,
   type ModelProviderGroup,
@@ -13,8 +12,7 @@ import {
   type MultimodalSettingsView,
   type RouteStatus,
 } from './contracts.js'
-import { MediaProgressRegistry } from './progress.js'
-import { decodeLogicalModel, logicalSelection } from './routes.js'
+import { logicalSelection } from './routes.js'
 import { MultimodalSettingsStore, parseMultimodalSettings } from './store.js'
 
 const PI_AI_SETTINGS = settingsNamespace('llm-pi-ai')
@@ -83,11 +81,7 @@ export function buildSettingsView(
 }
 
 export class MultimodalSettingsService {
-  constructor(
-    private readonly ctx: Pick<Context, 'llm' | 'settings'>,
-    private readonly store: MultimodalSettingsStore,
-    private readonly progress = new MediaProgressRegistry(),
-  ) {}
+  constructor(private readonly ctx: Pick<Context, 'llm' | 'settings'>, private readonly store: MultimodalSettingsStore) {}
 
   async getView(): Promise<MultimodalSettingsView> {
     return buildSettingsView(this.store.load(), await buildModelCatalog(this.ctx))
@@ -106,8 +100,7 @@ export class MultimodalSettingsService {
   }
 
   async resolveImageRoute(value: unknown): Promise<ImageRouteResolution> {
-    const request = parseImageRouteRequest(value)
-    const current = unwrapLogicalSelection(request.current)
+    const current = parseSelection(value)
     const settings = this.store.load()
     const currentInfo = await this.ctx.llm.resolveModelInfo(current.provider, current.model)
     if (currentInfo.inputModalities?.includes('image')) return { kind: 'native', route: current }
@@ -127,33 +120,20 @@ export class MultimodalSettingsService {
     if (!fallbackInfo.inputModalities?.includes('image')) {
       throw new MultimodalRouteUnavailableError('默认多模态模型没有声明图片输入能力，请重新配置。')
     }
-    const operation = this.progress.enqueue({
-      sessionId: request.sessionId,
-      kind: 'image',
-      count: request.imageCount,
-      perceptionRoute: fallback,
-      perceptionName: fallbackInfo.name,
-    })
     return {
       kind: 'bridge',
       route: logicalSelection(current),
       routeName: currentInfo.name,
       perceptionRoute: fallback,
       perceptionName: fallbackInfo.name,
-      operationId: operation.operationId,
     }
   }
 
-  async handle(endpoint: string, payload: unknown): Promise<unknown> {
+  async handle(endpoint: string, payload: unknown): Promise<MultimodalSettingsView | ImageRouteResolution> {
     if (endpoint === 'get') return this.getView()
     if (endpoint === 'save') return this.save(payload)
     if (endpoint === 'reset') return this.reset()
     if (endpoint === 'resolve-image-route') return this.resolveImageRoute(payload)
-    if (endpoint === 'media-progress') return this.progress.get(parseOperationId(payload))
-    if (endpoint === 'cancel-media-progress') {
-      this.progress.cancel(parseOperationId(payload))
-      return {}
-    }
     throw new TypeError(`unknown multimodal endpoint: ${endpoint}`)
   }
 
@@ -178,30 +158,6 @@ export class MultimodalSettingsService {
       value: nextModels,
     }])
   }
-}
-
-function unwrapLogicalSelection(current: ModelSelectionRoute): ModelSelectionRoute {
-  if (current.provider !== TELOS_MULTIMODAL_PROVIDER) return current
-  return {
-    ...decodeLogicalModel(current.model),
-    ...(current.reasoningEffort === undefined ? {} : { reasoningEffort: current.reasoningEffort }),
-  }
-}
-
-function parseImageRouteRequest(value: unknown): ImageRouteRequest {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('image route request must be an object')
-  const input = value as Record<string, unknown>
-  const current = parseSelection(input.current)
-  if (typeof input.sessionId !== 'string' || input.sessionId.trim() === '') throw new TypeError('sessionId must be a non-empty string')
-  if (!Number.isSafeInteger(input.imageCount) || (input.imageCount as number) <= 0) throw new TypeError('imageCount must be a positive integer')
-  return { current, sessionId: input.sessionId, imageCount: input.imageCount as number }
-}
-
-function parseOperationId(value: unknown): string {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('operation request must be an object')
-  const operationId = (value as Record<string, unknown>).operationId
-  if (typeof operationId !== 'string' || operationId.trim() === '') throw new TypeError('operationId must be a non-empty string')
-  return operationId
 }
 
 function parseSelection(value: unknown): ModelSelectionRoute {

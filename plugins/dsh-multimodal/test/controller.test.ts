@@ -19,12 +19,9 @@ describe('MultimodalClientController', () => {
 
     const route = { kind: 'native' as const, route: { provider: 'vision', model: 'eyes' } }
     call.mockResolvedValueOnce({ ok: true, value: route })
-    await expect(controller.resolveImageRoute({ provider: 'vision', model: 'eyes' }, 'session-1', 1)).resolves.toBe(route)
-    expect(call).toHaveBeenLastCalledWith('/telos-multimodal', 'resolve-image-route', {
-      current: { provider: 'vision', model: 'eyes' }, sessionId: 'session-1', imageCount: 1,
-    })
+    await expect(controller.resolveImageRoute({ provider: 'vision', model: 'eyes' })).resolves.toBe(route)
 
     call.mockResolvedValueOnce({ ok: false, error: { code: 'model-unavailable', message: 'not configured' } })
-    await expect(controller.resolveImageRoute({ provider: 'deepseek', model: 'reasoner' }, 'session-1', 1)).rejects.toThrow('not configured')
+    await expect(controller.resolveImageRoute({ provider: 'deepseek', model: 'reasoner' })).rejects.toThrow('not configured')
   })
 })

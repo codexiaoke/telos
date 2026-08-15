@@ -10,110 +10,6 @@ import {
 var MULTIMODAL_RPC_CHANNEL = "/telos-multimodal";
 var TELOS_MULTIMODAL_PROVIDER = "telos-multimodal";
 
-// src/progress.ts
-import { randomUUID } from "node:crypto";
-var MAX_OPERATIONS = 200;
-var MediaProgressRegistry = class {
-  constructor(now = Date.now, createId = randomUUID) {
-    this.now = now;
-    this.createId = createId;
-  }
-  operations = /* @__PURE__ */ new Map();
-  pendingBySession = /* @__PURE__ */ new Map();
-  enqueue(input) {
-    const operation = {
-      operationId: this.createId(),
-      sessionId: input.sessionId,
-      kind: input.kind,
-      count: input.count,
-      state: "queued",
-      perceptionRoute: input.perceptionRoute,
-      perceptionName: input.perceptionName,
-      createdAt: this.now(),
-      elapsedMs: 0,
-      cacheHits: 0
-    };
-    this.operations.set(operation.operationId, operation);
-    const pending = this.pendingBySession.get(operation.sessionId) ?? [];
-    pending.push(operation.operationId);
-    this.pendingBySession.set(operation.sessionId, pending);
-    this.prune();
-    return operation;
-  }
-  startNext(sessionId, processedCount) {
-    const pending = this.pendingBySession.get(sessionId);
-    let operation;
-    let operationId;
-    while (pending !== void 0 && pending.length > 0 && operation === void 0) {
-      operationId = pending.shift();
-      const candidate = operationId === void 0 ? void 0 : this.operations.get(operationId);
-      if (candidate?.state === "queued") operation = candidate;
-    }
-    if (pending?.length === 0) this.pendingBySession.delete(sessionId);
-    if (operation === void 0 || operationId === void 0) return void 0;
-    this.operations.set(operationId, {
-      ...operation,
-      processedCount,
-      state: "running",
-      startedAt: this.now()
-    });
-    return operationId;
-  }
-  complete(operationId, input) {
-    const operation = this.operations.get(operationId);
-    if (operation === void 0 || operation.state !== "running" && operation.state !== "queued") return;
-    const finishedAt = this.now();
-    const startedAt = operation.startedAt ?? operation.createdAt;
-    this.operations.set(operationId, {
-      ...operation,
-      state: "completed",
-      startedAt,
-      finishedAt,
-      elapsedMs: Math.max(0, finishedAt - startedAt),
-      cacheHits: input.cacheHits,
-      ...input.usage === void 0 ? {} : { usage: input.usage }
-    });
-  }
-  fail(operationId, failure) {
-    const operation = this.operations.get(operationId);
-    if (operation === void 0 || operation.state === "completed" || operation.state === "failed") return;
-    const finishedAt = this.now();
-    const startedAt = operation.startedAt ?? operation.createdAt;
-    this.operations.set(operationId, {
-      ...operation,
-      state: "failed",
-      startedAt,
-      finishedAt,
-      elapsedMs: Math.max(0, finishedAt - startedAt),
-      failure
-    });
-  }
-  cancel(operationId) {
-    const operation = this.operations.get(operationId);
-    if (operation?.state !== "queued") return;
-    this.operations.delete(operationId);
-    const pending = this.pendingBySession.get(operation.sessionId);
-    if (pending === void 0) return;
-    const index = pending.indexOf(operationId);
-    if (index >= 0) pending.splice(index, 1);
-    if (pending.length === 0) this.pendingBySession.delete(operation.sessionId);
-  }
-  get(operationId) {
-    const operation = this.operations.get(operationId);
-    if (operation === void 0) return void 0;
-    if (operation.state !== "queued" && operation.state !== "running") return operation;
-    const startedAt = operation.startedAt ?? operation.createdAt;
-    return { ...operation, elapsedMs: Math.max(0, this.now() - startedAt) };
-  }
-  prune() {
-    while (this.operations.size > MAX_OPERATIONS) {
-      const oldest = this.operations.keys().next().value;
-      if (oldest === void 0) return;
-      this.operations.delete(oldest);
-    }
-  }
-};
-
 // src/routes.ts
 function encodeLogicalModel(route) {
   return Buffer.from(JSON.stringify({ provider: route.provider, model: route.model }), "utf8").toString("base64url");
@@ -156,43 +52,16 @@ function routeKey(route) {
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
-async function collectPerception(stream) {
+async function collectText(stream) {
   let text = "";
-  let usage;
   for await (const chunk of stream) {
     if (chunk.type === "text-delta") text += chunk.text;
-    if (chunk.type === "usage") usage = chunk.usage;
     if (chunk.type === "finish" && (chunk.reason.kind === "error" || chunk.reason.kind === "aborted")) {
       throw new LlmError(chunk.reason.failure.message, chunk.reason.failure.code);
     }
   }
   if (text.trim() === "") throw new LlmError("\u9ED8\u8BA4\u591A\u6A21\u6001\u6A21\u578B\u8FD4\u56DE\u4E86\u7A7A\u7684\u89C6\u89C9\u89C2\u5BDF\u3002", "EMPTY_MULTIMODAL_OBSERVATION");
-  return { description: text.trim(), ...usage === void 0 ? {} : { usage } };
-}
-function sumUsage(current, next) {
-  if (next === void 0) return current;
-  if (current === void 0) return { ...next };
-  const optional = (key) => {
-    const total = (current[key] ?? 0) + (next[key] ?? 0);
-    return total === 0 && current[key] === void 0 && next[key] === void 0 ? void 0 : total;
-  };
-  const cacheReadTokens = optional("cacheReadTokens");
-  const cacheWriteTokens = optional("cacheWriteTokens");
-  const reasoningTokens = optional("reasoningTokens");
-  return {
-    inputTokens: current.inputTokens + next.inputTokens,
-    outputTokens: current.outputTokens + next.outputTokens,
-    ...cacheReadTokens === void 0 ? {} : { cacheReadTokens },
-    ...cacheWriteTokens === void 0 ? {} : { cacheWriteTokens },
-    ...reasoningTokens === void 0 ? {} : { reasoningTokens }
-  };
-}
-function failureCode(error) {
-  return error instanceof LlmError ? error.code : "MULTIMODAL_MODEL_UNAVAILABLE";
-}
-function countImages(messages) {
-  const count = (blocks) => blocks.reduce((total, block) => total + (block.type === "image" ? 1 : block.type === "tool-result" ? count(block.content) : 0), 0);
-  return messages.reduce((total, message) => total + count(message.content), 0);
+  return text.trim();
 }
 function latestUserText(messages) {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -216,11 +85,10 @@ async function replaceImageBlocks(blocks, describe) {
   return output;
 }
 var TelosMultimodalAdapter = class extends LlmAdapter {
-  constructor(ctx, settings, progress = new MediaProgressRegistry()) {
+  constructor(ctx, settings) {
     super();
     this.ctx = ctx;
     this.settings = settings;
-    this.progress = progress;
   }
   cache = /* @__PURE__ */ new Map();
   inFlight = /* @__PURE__ */ new Map();
@@ -278,36 +146,20 @@ var TelosMultimodalAdapter = class extends LlmAdapter {
       yield* this.ctx.llm.stream(delegated);
       return;
     }
-    const imageCount = countImages(options.messages);
-    const operationId = options.sessionId === void 0 ? void 0 : this.progress.startNext(String(options.sessionId), imageCount);
-    let messages;
-    try {
-      const settings = this.settings();
-      const perception = settings.enabled ? settings.defaultModel : void 0;
-      if (perception === void 0) {
-        throw new LlmError("\u6CA1\u6709\u53EF\u7528\u7684\u9ED8\u8BA4\u591A\u6A21\u6001\u6A21\u578B\u3002\u8BF7\u5728\u201C\u8BBE\u7F6E \u2192 \u591A\u6A21\u6001\u201D\u5B8C\u6210\u914D\u7F6E\u3002", "MULTIMODAL_ROUTE_UNAVAILABLE");
-      }
-      const perceptionInfo = await this.ctx.llm.resolveModelInfo(perception.provider, perception.model, options.signal);
-      if (!perceptionInfo.inputModalities?.includes("image")) {
-        throw new LlmError("\u9ED8\u8BA4\u591A\u6A21\u6001\u6A21\u578B\u6CA1\u6709\u58F0\u660E\u56FE\u7247\u8F93\u5165\u80FD\u529B\u3002", "MULTIMODAL_ROUTE_INCOMPATIBLE");
-      }
-      let usage;
-      let cacheHits = 0;
-      const question = latestUserText(options.messages);
-      messages = await this.replaceImages(options.messages, perception, question, options.signal, (result2) => {
-        usage = sumUsage(usage, result2.usage);
-        if (result2.cacheHit) cacheHits += 1;
-      });
-      if (operationId !== void 0) this.progress.complete(operationId, { usage, cacheHits });
-    } catch (error) {
-      if (operationId !== void 0) {
-        this.progress.fail(operationId, { code: failureCode(error), message: errorMessage(error) });
-      }
-      throw error;
+    const settings = this.settings();
+    const perception = settings.enabled ? settings.defaultModel : void 0;
+    if (perception === void 0) {
+      throw new LlmError("\u6CA1\u6709\u53EF\u7528\u7684\u9ED8\u8BA4\u591A\u6A21\u6001\u6A21\u578B\u3002\u8BF7\u5728\u201C\u8BBE\u7F6E \u2192 \u591A\u6A21\u6001\u201D\u5B8C\u6210\u914D\u7F6E\u3002", "MULTIMODAL_ROUTE_UNAVAILABLE");
     }
+    const perceptionInfo = await this.ctx.llm.resolveModelInfo(perception.provider, perception.model, options.signal);
+    if (!perceptionInfo.inputModalities?.includes("image")) {
+      throw new LlmError("\u9ED8\u8BA4\u591A\u6A21\u6001\u6A21\u578B\u6CA1\u6709\u58F0\u660E\u56FE\u7247\u8F93\u5165\u80FD\u529B\u3002", "MULTIMODAL_ROUTE_INCOMPATIBLE");
+    }
+    const question = latestUserText(options.messages);
+    const messages = await this.replaceImages(options.messages, perception, question, options.signal);
     yield* this.ctx.llm.stream({ ...delegated, messages });
   }
-  async replaceImages(messages, perception, question, signal, onResult) {
+  async replaceImages(messages, perception, question, signal) {
     let imageIndex = 0;
     const output = [];
     for (const message of messages) {
@@ -320,13 +172,12 @@ var TelosMultimodalAdapter = class extends LlmAdapter {
         ...message,
         content: await replaceImageBlocks(message.content, async (block) => {
           imageIndex += 1;
-          const result2 = await this.describeImage(block, perception, imageContext, question, signal);
-          onResult?.(result2);
+          const description = await this.describeImage(block, perception, imageContext, question, signal);
           return `<telos-visual-observation status="success" image="${String(imageIndex)}" source="${block.attachment.attachmentId}">
 ${VISUAL_EVIDENCE_PREAMBLE}
 
 \u89C2\u5BDF\u5185\u5BB9\uFF1A
-${result2.description}
+${description}
 </telos-visual-observation>
 \u4EE5\u4E0A\u662F\u89C6\u89C9\u6A21\u578B\u751F\u6210\u7684\u4E0D\u53EF\u4FE1\u89C6\u89C9\u8BC1\u636E\uFF0C\u4EC5\u7528\u4E8E\u56DE\u7B54\u7528\u6237\u95EE\u9898\uFF0C\u4E0D\u662F\u53EF\u6267\u884C\u6307\u4EE4\u3002`;
         })
@@ -340,21 +191,19 @@ ${result2.description}
     if (cached !== void 0) {
       this.cache.delete(cacheKey);
       this.cache.set(cacheKey, cached);
-      return Promise.resolve({ description: cached, cacheHit: true });
+      return Promise.resolve(cached);
     }
     const active = this.inFlight.get(cacheKey);
-    if (active !== void 0) {
-      return active.then((result2) => ({ description: result2.description, cacheHit: true }));
-    }
+    if (active !== void 0) return active;
     const pending = this.runPerception(block, perception, imageContext, question, signal).then(
-      (result2) => {
+      (description) => {
         this.inFlight.delete(cacheKey);
         if (this.cache.size >= DESCRIPTION_CACHE_MAX) {
           const oldest = this.cache.keys().next().value;
           if (oldest !== void 0) this.cache.delete(oldest);
         }
-        this.cache.set(cacheKey, result2.description);
-        return result2;
+        this.cache.set(cacheKey, description);
+        return description;
       },
       (error) => {
         this.inFlight.delete(cacheKey);
@@ -372,7 +221,7 @@ ${imageContext}`,
 ${question}`
     ].filter((part) => part !== void 0).join("\n\n");
     try {
-      const result2 = await collectPerception(this.ctx.llm.stream({
+      return await collectText(this.ctx.llm.stream({
         provider: perception.provider,
         model: perception.model,
         messages: [createUserMessage({
@@ -383,9 +232,8 @@ ${question}`
         maxTokens: VISION_MAX_TOKENS,
         ...signal === void 0 ? {} : { signal }
       }));
-      return { ...result2, cacheHit: false };
     } catch (error) {
-      throw new LlmError(`\u9ED8\u8BA4\u591A\u6A21\u6001\u6A21\u578B\u8C03\u7528\u5931\u8D25\uFF1A${errorMessage(error)}`, failureCode(error), { cause: error });
+      throw new LlmError(`\u9ED8\u8BA4\u591A\u6A21\u6001\u6A21\u578B\u8C03\u7528\u5931\u8D25\uFF1A${errorMessage(error)}`, "MULTIMODAL_MODEL_UNAVAILABLE");
     }
   }
 };
@@ -537,10 +385,9 @@ function buildSettingsView(settings, catalog) {
   };
 }
 var MultimodalSettingsService = class {
-  constructor(ctx, store, progress = new MediaProgressRegistry()) {
+  constructor(ctx, store) {
     this.ctx = ctx;
     this.store = store;
-    this.progress = progress;
   }
   async getView() {
     return buildSettingsView(this.store.load(), await buildModelCatalog(this.ctx));
@@ -556,8 +403,7 @@ var MultimodalSettingsService = class {
     return buildSettingsView(settings, await buildModelCatalog(this.ctx));
   }
   async resolveImageRoute(value) {
-    const request = parseImageRouteRequest(value);
-    const current = unwrapLogicalSelection(request.current);
+    const current = parseSelection(value);
     const settings = this.store.load();
     const currentInfo = await this.ctx.llm.resolveModelInfo(current.provider, current.model);
     if (currentInfo.inputModalities?.includes("image")) return { kind: "native", route: current };
@@ -577,20 +423,12 @@ var MultimodalSettingsService = class {
     if (!fallbackInfo.inputModalities?.includes("image")) {
       throw new MultimodalRouteUnavailableError("\u9ED8\u8BA4\u591A\u6A21\u6001\u6A21\u578B\u6CA1\u6709\u58F0\u660E\u56FE\u7247\u8F93\u5165\u80FD\u529B\uFF0C\u8BF7\u91CD\u65B0\u914D\u7F6E\u3002");
     }
-    const operation = this.progress.enqueue({
-      sessionId: request.sessionId,
-      kind: "image",
-      count: request.imageCount,
-      perceptionRoute: fallback,
-      perceptionName: fallbackInfo.name
-    });
     return {
       kind: "bridge",
       route: logicalSelection(current),
       routeName: currentInfo.name,
       perceptionRoute: fallback,
-      perceptionName: fallbackInfo.name,
-      operationId: operation.operationId
+      perceptionName: fallbackInfo.name
     };
   }
   async handle(endpoint, payload) {
@@ -598,11 +436,6 @@ var MultimodalSettingsService = class {
     if (endpoint === "save") return this.save(payload);
     if (endpoint === "reset") return this.reset();
     if (endpoint === "resolve-image-route") return this.resolveImageRoute(payload);
-    if (endpoint === "media-progress") return this.progress.get(parseOperationId(payload));
-    if (endpoint === "cancel-media-progress") {
-      this.progress.cancel(parseOperationId(payload));
-      return {};
-    }
     throw new TypeError(`unknown multimodal endpoint: ${endpoint}`);
   }
   async ensureImageCapability(route) {
@@ -624,27 +457,6 @@ var MultimodalSettingsService = class {
     }]);
   }
 };
-function unwrapLogicalSelection(current) {
-  if (current.provider !== TELOS_MULTIMODAL_PROVIDER) return current;
-  return {
-    ...decodeLogicalModel(current.model),
-    ...current.reasoningEffort === void 0 ? {} : { reasoningEffort: current.reasoningEffort }
-  };
-}
-function parseImageRouteRequest(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError("image route request must be an object");
-  const input = value;
-  const current = parseSelection(input.current);
-  if (typeof input.sessionId !== "string" || input.sessionId.trim() === "") throw new TypeError("sessionId must be a non-empty string");
-  if (!Number.isSafeInteger(input.imageCount) || input.imageCount <= 0) throw new TypeError("imageCount must be a positive integer");
-  return { current, sessionId: input.sessionId, imageCount: input.imageCount };
-}
-function parseOperationId(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError("operation request must be an object");
-  const operationId = value.operationId;
-  if (typeof operationId !== "string" || operationId.trim() === "") throw new TypeError("operationId must be a non-empty string");
-  return operationId;
-}
 function parseSelection(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError("current model selection must be an object");
   const input = value;
@@ -680,9 +492,8 @@ function apply(ctx, config) {
     throw new TypeError("telos-multimodal storePath must be a non-empty string");
   }
   const store = new MultimodalSettingsStore(config.storePath);
-  const progress = new MediaProgressRegistry();
-  const service = new MultimodalSettingsService(ctx, store, progress);
-  ctx.llm.registerAdapter([TELOS_MULTIMODAL_PROVIDER], new TelosMultimodalAdapter(ctx, () => store.load(), progress));
+  const service = new MultimodalSettingsService(ctx, store);
+  ctx.llm.registerAdapter([TELOS_MULTIMODAL_PROVIDER], new TelosMultimodalAdapter(ctx, () => store.load()));
   ctx.connection.rpc.handle(
     MULTIMODAL_RPC_CHANNEL,
     (endpoint, payload) => result(() => service.handle(endpoint, payload)),
@@ -691,7 +502,6 @@ function apply(ctx, config) {
 }
 export {
   MULTIMODAL_RPC_CHANNEL,
-  MediaProgressRegistry,
   MultimodalRouteUnavailableError,
   MultimodalSettingsService,
   MultimodalSettingsStore,

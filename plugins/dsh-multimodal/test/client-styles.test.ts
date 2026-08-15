@@ -10,10 +10,4 @@ describe('multimodal Settings styles', () => {
     expect(MULTIMODAL_CLIENT_CSS).toContain('.telosMmModelCard')
     expect(MULTIMODAL_CLIENT_CSS).toContain('@media(max-width:900px)')
   })
-
-  it('styles the media progress row and respects reduced motion', () => {
-    expect(MULTIMODAL_CLIENT_CSS).toContain('.telosMmProgress')
-    expect(MULTIMODAL_CLIENT_CSS).toContain('@keyframes telosMmSpin')
-    expect(MULTIMODAL_CLIENT_CSS).toContain('@media(prefers-reduced-motion:reduce)')
-  })
 })

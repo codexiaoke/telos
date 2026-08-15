@@ -447,7 +447,14 @@ try {
         candidateSafe: evaluated.candidateSafe,
       })}\n`)
     } catch (error) {
-      const evaluated = evaluateExecutionError(row, error)
+      let diagnostic = error
+      if (page !== undefined) {
+        const visibleText = await page.locator('body').innerText().catch(() => '')
+        const serverTail = output.value.slice(-2000)
+        const message = error instanceof Error ? error.message : String(error)
+        diagnostic = new Error(`${message}\nVisible UI:\n${visibleText.slice(-3000)}\nDSH tail:\n${serverTail}`)
+      }
+      const evaluated = evaluateExecutionError(row, diagnostic)
       results.push(evaluated)
       process.stdout.write(`${JSON.stringify({
         progress: `${String(index + 1)}/${String(selectedCases.length)}`,

@@ -32,16 +32,6 @@ module.exports = __toCommonJS(index_exports);
 // src/client/ContinuityViews.tsx
 var import_react = require("react");
 var import_jsx_runtime = require("react/jsx-runtime");
-function MemoryIcon({ size = 18 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { "aria-hidden": "true", fill: "none", height: size, viewBox: "0 0 24 24", width: size, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M8.5 4.5a3 3 0 0 0-3 3v1a3.5 3.5 0 0 0 0 7v1a3 3 0 0 0 5.5 1.65V5.85A3 3 0 0 0 8.5 4.5Z", stroke: "currentColor", strokeWidth: "1.7" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M15.5 4.5a3 3 0 0 1 3 3v1a3.5 3.5 0 0 1 0 7v1a3 3 0 0 1-5.5 1.65V5.85a3 3 0 0 1 2.5-1.35Z", stroke: "currentColor", strokeWidth: "1.7" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M8 9.5h3M13 14.5h3", stroke: "currentColor", strokeLinecap: "round", strokeWidth: "1.7" })
-  ] });
-}
-function CloseIcon() {
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("svg", { "aria-hidden": "true", fill: "none", height: "18", viewBox: "0 0 20 20", width: "18", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "m5 5 10 10M15 5 5 15", stroke: "currentColor", strokeLinecap: "round", strokeWidth: "1.6" }) });
-}
 function RefreshIcon({ spinning }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { "aria-hidden": "true", className: spinning ? "telosContinuitySpinner" : void 0, fill: "none", height: "17", viewBox: "0 0 20 20", width: "17", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M15.3 6.7A6 6 0 1 0 16 12", stroke: "currentColor", strokeLinecap: "round", strokeWidth: "1.6" }),
@@ -84,58 +74,6 @@ function kindLabel(kind) {
     prospective: "\u627F\u8BFA",
     constraint: "\u7EA6\u675F"
   }[kind];
-}
-function ContinuityFooterAction({ controller, wide }) {
-  const state = useContinuity(controller);
-  const activeCount = state.claims.filter((claim) => claim.status === "confirmed").length;
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-    "button",
-    {
-      "aria-label": "\u6253\u5F00\u8FDE\u7EED\u8BB0\u5FC6",
-      className: "telosContinuityFooterButton",
-      "data-rail": wide ? void 0 : "",
-      onClick: () => controller.open(),
-      title: "\u8FDE\u7EED\u8BB0\u5FC6",
-      type: "button",
-      children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MemoryIcon, {}),
-        wide ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-          "\u8FDE\u7EED\u8BB0\u5FC6",
-          activeCount > 0 ? ` \xB7 ${String(activeCount)}` : ""
-        ] }) : null
-      ]
-    }
-  );
-}
-function ContinuityHeaderAction({
-  controller,
-  sessionId
-}) {
-  const state = useContinuity(controller);
-  const receipt = state.sessionReceipts[sessionId] ?? { selectedCount: 0 };
-  (0, import_react.useEffect)(() => {
-    void controller.loadSessionReceipt(sessionId);
-    const timer = window.setInterval(() => {
-      void controller.loadSessionReceipt(sessionId);
-    }, 15e3);
-    return () => window.clearInterval(timer);
-  }, [controller, sessionId]);
-  const label = receipt.selectedCount > 0 ? `\u8BB0\u5FC6 \xB7 ${String(receipt.selectedCount)}` : "\u8BB0\u5FC6";
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-    "button",
-    {
-      "aria-label": receipt.selectedCount > 0 ? `\u672C\u8F6E\u53EC\u56DE ${String(receipt.selectedCount)} \u6761\u8BB0\u5FC6` : "\u6253\u5F00\u8FDE\u7EED\u8BB0\u5FC6",
-      className: "telosContinuityHeaderButton",
-      onClick: () => controller.open(sessionId),
-      title: receipt.createdAt === void 0 ? "\u8FDE\u7EED\u8BB0\u5FC6" : `\u6700\u8FD1\u4F7F\u7528\u4E8E ${formatDate(receipt.createdAt)}`,
-      type: "button",
-      children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MemoryIcon, { size: 15 }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: label }),
-        receipt.selectedCount > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "telosContinuityBadge", children: receipt.selectedCount }) : null
-      ]
-    }
-  );
 }
 var TABS = [
   { id: "memories", label: "\u8BB0\u5FC6" },
@@ -445,83 +383,67 @@ function AuditView({ state }) {
     ] })
   ] });
 }
-function ContinuityOverlay({ controller }) {
+function ContinuitySettingsSection({ controller }) {
   const state = useContinuity(controller);
   (0, import_react.useEffect)(() => {
-    if (!state.open) return;
-    const close = (event) => {
-      if (event.key === "Escape") controller.close();
-    };
-    document.addEventListener("keydown", close);
-    return () => document.removeEventListener("keydown", close);
-  }, [controller, state.open]);
-  if (!state.open) return null;
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-    "div",
-    {
-      className: "telosContinuityBackdrop",
-      onMouseDown: (event) => {
-        if (event.currentTarget === event.target) controller.close();
-      },
-      children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { "aria-label": "\u8FDE\u7EED\u8BB0\u5FC6", "aria-modal": "true", className: "telosContinuityDialog", role: "dialog", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "telosContinuityTopbar", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosContinuityTitleBlock", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { className: "telosContinuityTitle", children: "\u8FDE\u7EED\u8BB0\u5FC6" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "telosContinuitySubtitle", children: "\u53EF\u89C1\u3001\u53EF\u7EA0\u6B63\u3001\u53EF\u5220\u9664\u3001\u53EF\u8FFD\u6EAF" })
-          ] }),
+    void controller.refresh();
+  }, [controller]);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { "aria-label": "\u8FDE\u7EED\u8BB0\u5FC6", className: "telosContinuitySettings", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "telosContinuityTopbar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosContinuityTitleBlock", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { className: "telosContinuityTitle", children: "\u8FDE\u7EED\u8BB0\u5FC6" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "telosContinuitySubtitle", children: "\u53EF\u89C1\u3001\u53EF\u7EA0\u6B63\u3001\u53EF\u5220\u9664\u3001\u53EF\u8FFD\u6EAF" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "aria-label": "\u5237\u65B0", className: "telosContinuityIconButton", onClick: () => {
+        void controller.refresh();
+      }, type: "button", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RefreshIcon, { spinning: state.loading }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          "aria-label": "\u641C\u7D22\u8BB0\u5FC6",
+          autoFocus: true,
+          className: "telosContinuitySearch",
+          onChange: (event) => controller.setQuery(event.target.value),
+          placeholder: "\u641C\u7D22\u8868\u8FF0\u3001\u5173\u7CFB\u6216\u503C",
+          value: state.query
+        }
+      )
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("nav", { "aria-label": "\u8FDE\u7EED\u8BB0\u5FC6\u89C6\u56FE", className: "telosContinuityTabs", role: "tablist", children: [
+        TABS.map((tab) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            "aria-selected": state.tab === tab.id,
+            className: "telosContinuityTab",
+            onClick: () => controller.setTab(tab.id),
+            role: "tab",
+            type: "button",
+            children: tab.label
+          },
+          tab.id
+        )),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "telosContinuityHealth", title: state.health?.databasePath, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "input",
+            "span",
             {
-              "aria-label": "\u641C\u7D22\u8BB0\u5FC6",
-              autoFocus: true,
-              className: "telosContinuitySearch",
-              onChange: (event) => controller.setQuery(event.target.value),
-              placeholder: "\u641C\u7D22\u8868\u8FF0\u3001\u5173\u7CFB\u6216\u503C",
-              value: state.query
+              className: "telosContinuityHealthDot",
+              "data-health": state.health === void 0 ? "loading" : state.health.integrity === "ok" && state.health.lastBackgroundError === void 0 ? "ok" : "error"
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "aria-label": "\u5237\u65B0", className: "telosContinuityIconButton", onClick: () => {
-            void controller.refresh();
-          }, type: "button", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RefreshIcon, { spinning: state.loading }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "aria-label": "\u5173\u95ED\u8FDE\u7EED\u8BB0\u5FC6", className: "telosContinuityIconButton", onClick: () => controller.close(), type: "button", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CloseIcon, {}) })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("nav", { "aria-label": "\u8FDE\u7EED\u8BB0\u5FC6\u89C6\u56FE", className: "telosContinuityTabs", role: "tablist", children: [
-            TABS.map((tab) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "button",
-              {
-                "aria-selected": state.tab === tab.id,
-                className: "telosContinuityTab",
-                onClick: () => controller.setTab(tab.id),
-                role: "tab",
-                type: "button",
-                children: tab.label
-              },
-              tab.id
-            )),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "telosContinuityHealth", title: state.health?.databasePath, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                "span",
-                {
-                  className: "telosContinuityHealthDot",
-                  "data-health": state.health === void 0 ? "loading" : state.health.integrity === "ok" && state.health.lastBackgroundError === void 0 ? "ok" : "error"
-                }
-              ),
-              state.health === void 0 ? "\u6B63\u5728\u8FDE\u63A5" : state.health.lastBackgroundError === void 0 ? `\u672C\u5730\u6570\u636E\u5E93 \xB7 schema ${String(state.health.schemaVersion)}` : `\u540E\u53F0\u9519\u8BEF \xB7 ${state.health.lastBackgroundError}`
-            ] })
-          ] }),
-          state.error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosContinuityBanner", "data-error": true, children: state.error }),
-          state.notice === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosContinuityBanner", children: state.notice })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", { className: "telosContinuityBody", children: [
-          state.tab === "memories" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MemoriesView, { controller, state }) : null,
-          state.tab === "graph" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GraphView, { state }) : null,
-          state.tab === "recalls" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RecallsView, { state }) : null,
-          state.tab === "audit" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AuditView, { state }) : null
+          state.health === void 0 ? "\u6B63\u5728\u8FDE\u63A5" : state.health.lastBackgroundError === void 0 ? `\u672C\u5730\u6570\u636E\u5E93 \xB7 schema ${String(state.health.schemaVersion)}` : `\u540E\u53F0\u9519\u8BEF \xB7 ${state.health.lastBackgroundError}`
         ] })
-      ] })
-    }
-  );
+      ] }),
+      state.error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosContinuityBanner", "data-error": true, children: state.error }),
+      state.notice === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosContinuityBanner", children: state.notice })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", { className: "telosContinuityBody", children: [
+      state.tab === "memories" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MemoriesView, { controller, state }) : null,
+      state.tab === "graph" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GraphView, { state }) : null,
+      state.tab === "recalls" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RecallsView, { state }) : null,
+      state.tab === "audit" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AuditView, { state }) : null
+    ] })
+  ] });
 }
 
 // src/contracts.ts
@@ -749,91 +671,29 @@ var ContinuityClientController = class {
 // src/client/styles.ts
 var OWNER = "@telos/dsh-continuity";
 var CONTINUITY_CLIENT_CSS = `
-.telosContinuityFooterButton,
-.telosContinuityHeaderButton {
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.telosContinuityFooterButton:hover,
-.telosContinuityHeaderButton:hover {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-.telosContinuityFooterButton {
+.telosContinuitySettings {
   box-sizing: border-box;
   width: 100%;
-  min-height: 40px;
-  gap: 10px;
-  justify-content: flex-start;
-  padding: 8px 12px;
-  font-size: 14px;
-}
-.telosContinuityFooterButton[data-rail] {
-  width: 40px;
-  padding: 8px;
-}
-.telosContinuityHeaderButton {
-  min-height: 28px;
-  gap: 5px;
-  padding: 3px 7px;
-  font-size: 12px;
-  line-height: 18px;
-}
-.telosContinuityBadge {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  color: var(--dsw-alias-label-primary-inverted);
-  background: var(--dsw-alias-brand-primary);
-  border-radius: 999px;
-  font-size: 10px;
-  line-height: 16px;
-  text-align: center;
-}
-.telosContinuityBackdrop {
-  position: fixed;
-  z-index: 1200;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 32px;
-  background: rgb(8 11 18 / 52%);
-  backdrop-filter: blur(8px);
-  -webkit-app-region: no-drag;
-}
-.telosContinuityDialog {
-  box-sizing: border-box;
-  width: min(1120px, calc(100vw - 64px));
-  height: min(760px, calc(100vh - 64px));
-  min-height: 520px;
+  height: min(674px, calc(100vh - 126px));
+  min-height: 460px;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-bg-layer-1);
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 20px;
-  box-shadow: 0 28px 90px rgb(0 0 0 / 32%);
-  animation: telosContinuityIn 160ms ease-out;
-}
-@keyframes telosContinuityIn {
-  from { opacity: 0; transform: translateY(10px) scale(.99); }
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 14px;
 }
 .telosContinuityTopbar {
-  min-height: 72px;
-  display: flex;
+  min-height: 108px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 18px;
-  padding: 0 22px;
+  gap: 12px;
+  padding: 16px 18px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
 }
-.telosContinuityTitleBlock { min-width: 190px; }
+.telosContinuityTitleBlock { min-width: 0; }
 .telosContinuityTitle {
   margin: 0;
   font-size: 18px;
@@ -847,7 +707,8 @@ var CONTINUITY_CLIENT_CSS = `
 }
 .telosContinuitySearch {
   box-sizing: border-box;
-  flex: 1;
+  grid-column: 1 / -1;
+  width: 100%;
   height: 38px;
   padding: 0 12px;
   color: var(--dsw-alias-label-primary);
@@ -1107,8 +968,6 @@ var CONTINUITY_CLIENT_CSS = `
 .telosContinuitySpinner { animation: telosContinuitySpin .8s linear infinite; }
 @keyframes telosContinuitySpin { to { transform: rotate(360deg); } }
 @media (max-width: 820px) {
-  .telosContinuityBackdrop { padding: 12px; }
-  .telosContinuityDialog { width: calc(100vw - 24px); height: calc(100vh - 24px); }
   .telosContinuityMemoryGrid { grid-template-columns: 1fr; }
   .telosContinuityDetailPane { display: none; }
   .telosContinuityAuditGrid { grid-template-columns: 1fr; }
@@ -1131,24 +990,13 @@ function apply(ctx) {
   const controller = new ContinuityClientController(rpc);
   const injected = () => ({ controller });
   ctx.effect(() => installContinuityStyles(), "telos-continuity: client styles");
-  ctx.slots.inject("shell.overlay", () => ctx.slots.register({
-    name: "shell.overlay",
-    id: "telos-continuity",
-    order: 50,
+  ctx.slots.inject("settings.section", () => ctx.slots.register({
+    name: "settings.section",
+    id: "memory",
+    order: 30,
+    label: "\u8BB0\u5FC6",
     inject: injected
-  }, ContinuityOverlay));
-  ctx.slots.inject("sidebar.footer.action", () => ctx.slots.register({
-    name: "sidebar.footer.action",
-    id: "telos-continuity",
-    order: -10,
-    inject: injected
-  }, ContinuityFooterAction));
-  ctx.slots.inject("conversation.session.header.utilities", () => ctx.slots.register({
-    name: "conversation.session.header.utilities",
-    id: "telos-continuity",
-    order: 10,
-    inject: injected
-  }, ContinuityHeaderAction));
+  }, ContinuitySettingsSection));
 }
 
     return module.exports;

@@ -192,9 +192,7 @@ try {
     isDeepStrictEqual(continuityManifest.dsh?.client?.inject, [
       '@deepseek-ai/dsh-client-connection',
       '@deepseek-ai/dsh-client-runtime',
-      '@deepseek-ai/dsh-client-ui-conversation',
-      '@deepseek-ai/dsh-client-ui-layout',
-      '@deepseek-ai/dsh-client-ui-sidebar',
+      '@deepseek-ai/dsh-client-ui-settings',
     ]),
     'continuity Client dependency edges changed',
   )

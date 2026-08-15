@@ -1,91 +1,29 @@
 const OWNER = '@telos/dsh-continuity'
 
 export const CONTINUITY_CLIENT_CSS = `
-.telosContinuityFooterButton,
-.telosContinuityHeaderButton {
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.telosContinuityFooterButton:hover,
-.telosContinuityHeaderButton:hover {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-.telosContinuityFooterButton {
+.telosContinuitySettings {
   box-sizing: border-box;
   width: 100%;
-  min-height: 40px;
-  gap: 10px;
-  justify-content: flex-start;
-  padding: 8px 12px;
-  font-size: 14px;
-}
-.telosContinuityFooterButton[data-rail] {
-  width: 40px;
-  padding: 8px;
-}
-.telosContinuityHeaderButton {
-  min-height: 28px;
-  gap: 5px;
-  padding: 3px 7px;
-  font-size: 12px;
-  line-height: 18px;
-}
-.telosContinuityBadge {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  color: var(--dsw-alias-label-primary-inverted);
-  background: var(--dsw-alias-brand-primary);
-  border-radius: 999px;
-  font-size: 10px;
-  line-height: 16px;
-  text-align: center;
-}
-.telosContinuityBackdrop {
-  position: fixed;
-  z-index: 1200;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 32px;
-  background: rgb(8 11 18 / 52%);
-  backdrop-filter: blur(8px);
-  -webkit-app-region: no-drag;
-}
-.telosContinuityDialog {
-  box-sizing: border-box;
-  width: min(1120px, calc(100vw - 64px));
-  height: min(760px, calc(100vh - 64px));
-  min-height: 520px;
+  height: min(674px, calc(100vh - 126px));
+  min-height: 460px;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-bg-layer-1);
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 20px;
-  box-shadow: 0 28px 90px rgb(0 0 0 / 32%);
-  animation: telosContinuityIn 160ms ease-out;
-}
-@keyframes telosContinuityIn {
-  from { opacity: 0; transform: translateY(10px) scale(.99); }
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 14px;
 }
 .telosContinuityTopbar {
-  min-height: 72px;
-  display: flex;
+  min-height: 108px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 18px;
-  padding: 0 22px;
+  gap: 12px;
+  padding: 16px 18px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
 }
-.telosContinuityTitleBlock { min-width: 190px; }
+.telosContinuityTitleBlock { min-width: 0; }
 .telosContinuityTitle {
   margin: 0;
   font-size: 18px;
@@ -99,7 +37,8 @@ export const CONTINUITY_CLIENT_CSS = `
 }
 .telosContinuitySearch {
   box-sizing: border-box;
-  flex: 1;
+  grid-column: 1 / -1;
+  width: 100%;
   height: 38px;
   padding: 0 12px;
   color: var(--dsw-alias-label-primary);
@@ -359,8 +298,6 @@ export const CONTINUITY_CLIENT_CSS = `
 .telosContinuitySpinner { animation: telosContinuitySpin .8s linear infinite; }
 @keyframes telosContinuitySpin { to { transform: rotate(360deg); } }
 @media (max-width: 820px) {
-  .telosContinuityBackdrop { padding: 12px; }
-  .telosContinuityDialog { width: calc(100vw - 24px); height: calc(100vh - 24px); }
   .telosContinuityMemoryGrid { grid-template-columns: 1fr; }
   .telosContinuityDetailPane { display: none; }
   .telosContinuityAuditGrid { grid-template-columns: 1fr; }

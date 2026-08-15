@@ -13,24 +13,6 @@ export interface ContinuityInjected {
   controller: ContinuityClientController
 }
 
-function MemoryIcon({ size = 18 }: { size?: number }) {
-  return (
-    <svg aria-hidden="true" fill="none" height={size} viewBox="0 0 24 24" width={size}>
-      <path d="M8.5 4.5a3 3 0 0 0-3 3v1a3.5 3.5 0 0 0 0 7v1a3 3 0 0 0 5.5 1.65V5.85A3 3 0 0 0 8.5 4.5Z" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M15.5 4.5a3 3 0 0 1 3 3v1a3.5 3.5 0 0 1 0 7v1a3 3 0 0 1-5.5 1.65V5.85a3 3 0 0 1 2.5-1.35Z" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M8 9.5h3M13 14.5h3" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
-    </svg>
-  )
-}
-
-function CloseIcon() {
-  return (
-    <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 20 20" width="18">
-      <path d="m5 5 10 10M15 5 5 15" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
-    </svg>
-  )
-}
-
 function RefreshIcon({ spinning }: { spinning: boolean }) {
   return (
     <svg aria-hidden="true" className={spinning ? 'telosContinuitySpinner' : undefined} fill="none" height="17" viewBox="0 0 20 20" width="17">
@@ -73,52 +55,6 @@ function kindLabel(kind: MemoryClaimView['kind']): string {
   return {
     semantic: '事实', episodic: '事件', procedural: '方法', prospective: '承诺', constraint: '约束',
   }[kind]
-}
-
-export function ContinuityFooterAction({ controller, wide }: ContinuityInjected & { wide: boolean }) {
-  const state = useContinuity(controller)
-  const activeCount = state.claims.filter(claim => claim.status === 'confirmed').length
-  return (
-    <button
-      aria-label="打开连续记忆"
-      className="telosContinuityFooterButton"
-      data-rail={wide ? undefined : ''}
-      onClick={() => controller.open()}
-      title="连续记忆"
-      type="button"
-    >
-      <MemoryIcon />
-      {wide ? <span>连续记忆{activeCount > 0 ? ` · ${String(activeCount)}` : ''}</span> : null}
-    </button>
-  )
-}
-
-export function ContinuityHeaderAction({
-  controller,
-  sessionId,
-}: ContinuityInjected & { sessionId: string }) {
-  const state = useContinuity(controller)
-  const receipt = state.sessionReceipts[sessionId] ?? { selectedCount: 0 }
-  useEffect(() => {
-    void controller.loadSessionReceipt(sessionId)
-    const timer = window.setInterval(() => { void controller.loadSessionReceipt(sessionId) }, 15_000)
-    return () => window.clearInterval(timer)
-  }, [controller, sessionId])
-
-  const label = receipt.selectedCount > 0 ? `记忆 · ${String(receipt.selectedCount)}` : '记忆'
-  return (
-    <button
-      aria-label={receipt.selectedCount > 0 ? `本轮召回 ${String(receipt.selectedCount)} 条记忆` : '打开连续记忆'}
-      className="telosContinuityHeaderButton"
-      onClick={() => controller.open(sessionId)}
-      title={receipt.createdAt === undefined ? '连续记忆' : `最近使用于 ${formatDate(receipt.createdAt)}`}
-      type="button"
-    >
-      <MemoryIcon size={15} />
-      <span>{label}</span>
-      {receipt.selectedCount > 0 ? <span className="telosContinuityBadge">{receipt.selectedCount}</span> : null}
-    </button>
-  )
 }
 
 const TABS: readonly { id: ContinuityTab; label: string }[] = [
@@ -417,29 +353,22 @@ function AuditView({ state }: { state: ContinuityClientSnapshot }) {
   )
 }
 
-export function ContinuityOverlay({ controller }: ContinuityInjected) {
+export function ContinuitySettingsSection({ controller }: ContinuityInjected) {
   const state = useContinuity(controller)
   useEffect(() => {
-    if (!state.open) return
-    const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') controller.close()
-    }
-    document.addEventListener('keydown', close)
-    return () => document.removeEventListener('keydown', close)
-  }, [controller, state.open])
-  if (!state.open) return null
+    void controller.refresh()
+  }, [controller])
 
   return (
-    <div
-      className="telosContinuityBackdrop"
-      onMouseDown={(event) => { if (event.currentTarget === event.target) controller.close() }}
-    >
-      <section aria-label="连续记忆" aria-modal="true" className="telosContinuityDialog" role="dialog">
+    <section aria-label="连续记忆" className="telosContinuitySettings">
         <header className="telosContinuityTopbar">
           <div className="telosContinuityTitleBlock">
             <h1 className="telosContinuityTitle">连续记忆</h1>
             <p className="telosContinuitySubtitle">可见、可纠正、可删除、可追溯</p>
           </div>
+          <button aria-label="刷新" className="telosContinuityIconButton" onClick={() => { void controller.refresh() }} type="button">
+            <RefreshIcon spinning={state.loading} />
+          </button>
           <input
             aria-label="搜索记忆"
             autoFocus
@@ -448,10 +377,6 @@ export function ContinuityOverlay({ controller }: ContinuityInjected) {
             placeholder="搜索表述、关系或值"
             value={state.query}
           />
-          <button aria-label="刷新" className="telosContinuityIconButton" onClick={() => { void controller.refresh() }} type="button">
-            <RefreshIcon spinning={state.loading} />
-          </button>
-          <button aria-label="关闭连续记忆" className="telosContinuityIconButton" onClick={() => controller.close()} type="button"><CloseIcon /></button>
         </header>
         <div>
           <nav aria-label="连续记忆视图" className="telosContinuityTabs" role="tablist">
@@ -486,7 +411,6 @@ export function ContinuityOverlay({ controller }: ContinuityInjected) {
           {state.tab === 'recalls' ? <RecallsView state={state} /> : null}
           {state.tab === 'audit' ? <AuditView state={state} /> : null}
         </main>
-      </section>
-    </div>
+    </section>
   )
 }

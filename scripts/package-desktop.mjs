@@ -43,6 +43,7 @@ function assertRuntimeBuilt() {
     join(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar/lib/client.js'),
     join(repositoryRoot, 'integrations/dsh/plugins/telos-ui-layout/lib/client.js'),
     join(repositoryRoot, 'plugins/dsh-continuity/lib/index.js'),
+    join(repositoryRoot, 'plugins/dsh-continuity/lib/client.js'),
     join(repositoryRoot, 'plugins/dsh-continuity/lib/BUILD.json'),
   ]
   for (const path of required) accessSync(path)
@@ -118,6 +119,7 @@ function verifyPackagedRuntime(expectedManifest) {
   accessSync(join(packagedDshRoot, 'node_modules/.pnpm'))
   accessSync(join(resourcesDirectory, 'dsh-node/LICENSE'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-continuity/lib/index.js'))
+  accessSync(join(resourcesDirectory, 'dsh-overlays/telos-continuity/lib/client.js'))
   accessSync(packagedNode)
   accessSync(packagedCli)
   run(packagedNode, [packagedCli, '--version'], packagedDshRoot)

@@ -559,6 +559,29 @@ export class PersonalContinuityStore {
     }
   }
 
+  listRecallDecisions(options: { sessionId?: string; claimId?: string; limit?: number } = {}): RecallDecision[] {
+    this.assertOpen()
+    const conditions: string[] = []
+    const params: SqlValue[] = []
+    if (options.sessionId !== undefined) {
+      conditions.push("json_extract(context_json, '$.sessionId') = ?")
+      params.push(assertNonEmpty(options.sessionId, 'sessionId'))
+    }
+    if (options.claimId !== undefined) {
+      conditions.push('EXISTS (SELECT 1 FROM json_each(selected_claim_ids_json) WHERE value = ?)')
+      params.push(assertNonEmpty(options.claimId, 'claimId'))
+    }
+    const limit = Math.max(1, Math.min(Math.trunc(options.limit ?? 50), 500))
+    params.push(limit)
+    const where = conditions.length === 0 ? '' : `WHERE ${conditions.join(' AND ')}`
+    const rows = this.db.prepare(`
+      SELECT id FROM recall_run ${where}
+      ORDER BY created_at DESC, id DESC LIMIT ?
+    `).all(...params) as Row[]
+    return rows.map(row => this.explainRecall(asString(row.id, 'id')))
+      .filter((decision): decision is RecallDecision => decision !== undefined)
+  }
+
   recordMaterialization(input: RecordMaterializationInput): RecallMaterialization[] {
     this.assertOpen()
     if (!Number.isInteger(input.seqStart) || input.seqStart < 0 || !Number.isInteger(input.seqEnd) || input.seqEnd < input.seqStart) {
@@ -589,6 +612,33 @@ export class PersonalContinuityStore {
       }
     })
     return this.listMaterializationsForRecall(input.recallId)
+  }
+
+  listMaterializations(options: {
+    recallId?: string
+    claimId?: string
+    sessionId?: string
+    limit?: number
+  } = {}): RecallMaterialization[] {
+    this.assertOpen()
+    const conditions: string[] = []
+    const params: SqlValue[] = []
+    for (const [column, value, field] of [
+      ['recall_id', options.recallId, 'recallId'],
+      ['claim_id', options.claimId, 'claimId'],
+      ['session_id', options.sessionId, 'sessionId'],
+    ] as const) {
+      if (value === undefined) continue
+      conditions.push(`${column} = ?`)
+      params.push(assertNonEmpty(value, field))
+    }
+    const limit = Math.max(1, Math.min(Math.trunc(options.limit ?? 100), 1_000))
+    params.push(limit)
+    const where = conditions.length === 0 ? '' : `WHERE ${conditions.join(' AND ')}`
+    return (this.db.prepare(`
+      SELECT * FROM recall_materialization ${where}
+      ORDER BY created_at DESC, id DESC LIMIT ?
+    `).all(...params) as Row[]).map(row => this.materializationFromRow(row))
   }
 
   forget(claimId: string, options: { physical?: boolean; purgeSourceContent?: boolean; idempotencyKey: string; actor?: ActorKind } ): ForgetReport {

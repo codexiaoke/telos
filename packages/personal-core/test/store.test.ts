@@ -410,7 +410,7 @@ describe('privacy, receipts and recovery', () => {
     const claim = remember(f, {
       suffix: 'forget', subjectEntityId: personId, sourceEpisodeId: episodeId, statement: 'private forget needle',
     })
-    const decision = f.store.recall('private forget needle', {}, { minScore: 0 })
+    const decision = f.store.recall('private forget needle', { sessionId: 'session-materialized' }, { minScore: 0 })
     const materializations = f.store.recordMaterialization({
       recallId: decision.id,
       runtimeId: 'dsh',
@@ -420,6 +420,10 @@ describe('privacy, receipts and recovery', () => {
       renderedContentHash: decision.contextPack.contentHash,
     })
     expect(materializations).toHaveLength(1)
+    expect(f.store.listRecallDecisions({ sessionId: 'session-materialized' })).toEqual([decision])
+    expect(f.store.listRecallDecisions({ claimId: claim.id })).toEqual([decision])
+    expect(f.store.listMaterializations({ sessionId: 'session-materialized' })).toEqual(materializations)
+    expect(f.store.listMaterializations({ claimId: claim.id })).toEqual(materializations)
 
     const report = f.store.forget(claim.id, {
       physical: true,

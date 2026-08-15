@@ -147,15 +147,40 @@ describe('ContinuityGateway', () => {
     expect(await gateway.handle('receipt/list', { scope: { type: 'workspace', id: 'workspace-a' } })).toMatchObject({
       ok: true, value: [{ id: receipt.id }],
     })
+    const recalled = await gateway.handle('memory/recall', {
+      query: 'views', workspaceId: 'workspace-a', minScore: 0,
+    })
+    if (!recalled.ok) throw new Error('fixture recall failed')
+    const decision = recalled.value as { id: string; contextPack: { contentHash: string } }
+    store.recordMaterialization({
+      recallId: decision.id,
+      runtimeId: 'dsh',
+      sessionId: 'session-a',
+      seqStart: 7,
+      seqEnd: 7,
+      renderedContentHash: decision.contextPack.contentHash,
+    })
+    expect(await gateway.handle('recall/list', { claimId: claim.id })).toMatchObject({
+      ok: true, value: [{ id: decision.id }],
+    })
+    expect(await gateway.handle('materialization/list', { sessionId: 'session-a' })).toMatchObject({
+      ok: true, value: [{ recallId: decision.id, claimId: claim.id }],
+    })
   })
 })
 
 describe('built DSH Host artifact', () => {
-  it('bundles the Telos core while leaving pinned DSH capabilities external', () => {
+  it('bundles the Telos core and Client while leaving runtime capabilities external', () => {
     const source = readFileSync(resolve(import.meta.dirname, '../lib/index.js'), 'utf8')
+    const client = readFileSync(resolve(import.meta.dirname, '../lib/client.js'), 'utf8')
     expect(source).toContain('telos-continuity')
     expect(source).toContain('PersonalContinuityStore')
     expect(source).toContain('from "@deepseek-ai/dsh-tools"')
     expect(source).not.toContain('from "@telos/personal-core"')
+    expect(client).toContain('window.__ModuleLoader__.load')
+    expect(client).toContain('ContinuityClientController')
+    expect(client).toContain('apply: () => apply')
+    expect(client).toContain('require("react")')
+    expect(client).not.toContain('react.production.min')
   })
 })

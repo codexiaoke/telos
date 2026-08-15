@@ -56,5 +56,6 @@ accessSync(resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-sidebar/te
 accessSync(resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-layout/lib/client.js'))
 accessSync(resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-layout/UPSTREAM.json'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-continuity/lib/index.js'))
+accessSync(resolve(repositoryRoot, 'plugins/dsh-continuity/lib/client.js'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-continuity/lib/BUILD.json'))
 process.stdout.write('DSH source runtime and complete Web application are built and ready.\n')

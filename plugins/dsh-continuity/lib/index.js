@@ -695,6 +695,27 @@ var PersonalContinuityStore = class {
       createdAt: asString(row.created_at, "created_at")
     };
   }
+  listRecallDecisions(options = {}) {
+    this.assertOpen();
+    const conditions = [];
+    const params = [];
+    if (options.sessionId !== void 0) {
+      conditions.push("json_extract(context_json, '$.sessionId') = ?");
+      params.push(assertNonEmpty(options.sessionId, "sessionId"));
+    }
+    if (options.claimId !== void 0) {
+      conditions.push("EXISTS (SELECT 1 FROM json_each(selected_claim_ids_json) WHERE value = ?)");
+      params.push(assertNonEmpty(options.claimId, "claimId"));
+    }
+    const limit = Math.max(1, Math.min(Math.trunc(options.limit ?? 50), 500));
+    params.push(limit);
+    const where = conditions.length === 0 ? "" : `WHERE ${conditions.join(" AND ")}`;
+    const rows = this.db.prepare(`
+      SELECT id FROM recall_run ${where}
+      ORDER BY created_at DESC, id DESC LIMIT ?
+    `).all(...params);
+    return rows.map((row) => this.explainRecall(asString(row.id, "id"))).filter((decision) => decision !== void 0);
+  }
   recordMaterialization(input) {
     this.assertOpen();
     if (!Number.isInteger(input.seqStart) || input.seqStart < 0 || !Number.isInteger(input.seqEnd) || input.seqEnd < input.seqStart) {
@@ -716,6 +737,28 @@ var PersonalContinuityStore = class {
       }
     });
     return this.listMaterializationsForRecall(input.recallId);
+  }
+  listMaterializations(options = {}) {
+    this.assertOpen();
+    const conditions = [];
+    const params = [];
+    for (const [column, value, field] of [
+      ["recall_id", options.recallId, "recallId"],
+      ["claim_id", options.claimId, "claimId"],
+      ["session_id", options.sessionId, "sessionId"]
+    ]) {
+      if (value === void 0)
+        continue;
+      conditions.push(`${column} = ?`);
+      params.push(assertNonEmpty(value, field));
+    }
+    const limit = Math.max(1, Math.min(Math.trunc(options.limit ?? 100), 1e3));
+    params.push(limit);
+    const where = conditions.length === 0 ? "" : `WHERE ${conditions.join(" AND ")}`;
+    return this.db.prepare(`
+      SELECT * FROM recall_materialization ${where}
+      ORDER BY created_at DESC, id DESC LIMIT ?
+    `).all(...params).map((row) => this.materializationFromRow(row));
   }
   forget(claimId, options) {
     this.assertOpen();
@@ -1662,6 +1705,23 @@ var ContinuityGateway = class {
         case "memory/explain": {
           const input = record(payload);
           return success(this.store.explainRecall(string(input.recallId, "recallId")) ?? null);
+        }
+        case "recall/list": {
+          const input = payload === void 0 ? {} : record(payload);
+          return success(this.store.listRecallDecisions({
+            sessionId: optionalString(input.sessionId, "sessionId"),
+            claimId: optionalString(input.claimId, "claimId"),
+            limit: optionalNumber(input.limit, "limit")
+          }));
+        }
+        case "materialization/list": {
+          const input = payload === void 0 ? {} : record(payload);
+          return success(this.store.listMaterializations({
+            recallId: optionalString(input.recallId, "recallId"),
+            claimId: optionalString(input.claimId, "claimId"),
+            sessionId: optionalString(input.sessionId, "sessionId"),
+            limit: optionalNumber(input.limit, "limit")
+          }));
         }
         case "source/get": {
           const input = record(payload);

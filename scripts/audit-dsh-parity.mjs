@@ -66,6 +66,7 @@ try {
     resolve(layoutRoot, 'UPSTREAM.json'),
     resolve(continuityRoot, 'package.json'),
     resolve(continuityRoot, 'lib/index.js'),
+    resolve(continuityRoot, 'lib/client.js'),
     resolve(continuityRoot, 'lib/BUILD.json'),
     patchPath,
   ]) {
@@ -180,6 +181,19 @@ try {
       queueInference: true,
     }),
     'Telos continuity bounded runtime configuration changed',
+  )
+  const continuityManifest = JSON.parse(readFileSync(resolve(continuityRoot, 'package.json'), 'utf8'))
+  assert(continuityManifest.name === '@telos/dsh-continuity', 'continuity manifest identity changed')
+  assert(continuityManifest.private === true, 'continuity package must stay private')
+  assert(
+    isDeepStrictEqual(continuityManifest.dsh?.client?.inject, [
+      '@deepseek-ai/dsh-client-connection',
+      '@deepseek-ai/dsh-client-runtime',
+      '@deepseek-ai/dsh-client-ui-conversation',
+      '@deepseek-ai/dsh-client-ui-layout',
+      '@deepseek-ai/dsh-client-ui-sidebar',
+    ]),
+    'continuity Client dependency edges changed',
   )
   assert(
     effectiveRows.length === defaultRows.length + 2,

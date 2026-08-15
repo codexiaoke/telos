@@ -23,11 +23,10 @@ function installProfilePackage(
   dshHome: string,
   sourceRoot: string,
   expectedPackageName: string,
-  expectedArtifact: string,
+  expectedArtifacts: readonly string[],
 ): void {
   const packageManifest = join(sourceRoot, 'package.json')
-  const builtArtifact = join(sourceRoot, expectedArtifact)
-  if (!existsSync(packageManifest) || !existsSync(builtArtifact)) {
+  if (!existsSync(packageManifest) || expectedArtifacts.some(artifact => !existsSync(join(sourceRoot, artifact)))) {
     throw new Error(`Telos DSH package ${expectedPackageName} is missing; run pnpm dsh:build`)
   }
   const manifest = JSON.parse(readFileSync(packageManifest, 'utf8')) as { name?: unknown; private?: unknown }
@@ -82,9 +81,9 @@ export function prepareTelosDshWebPatch(
   removeLegacyFlatPackage(dshHome, TELOS_SIDEBAR_PACKAGE)
   removeLegacyFlatPackage(dshHome, DSH_LAYOUT_PACKAGE)
   removeLegacyFlatPackage(dshHome, TELOS_CONTINUITY_PACKAGE)
-  installProfilePackage(dshHome, sources.sidebarPackageRoot, TELOS_SIDEBAR_PACKAGE, 'lib/client.js')
-  installProfilePackage(dshHome, sources.layoutPackageRoot, DSH_LAYOUT_PACKAGE, 'lib/client.js')
-  installProfilePackage(dshHome, sources.continuityPackageRoot, TELOS_CONTINUITY_PACKAGE, 'lib/index.js')
+  installProfilePackage(dshHome, sources.sidebarPackageRoot, TELOS_SIDEBAR_PACKAGE, ['lib/client.js'])
+  installProfilePackage(dshHome, sources.layoutPackageRoot, DSH_LAYOUT_PACKAGE, ['lib/client.js'])
+  installProfilePackage(dshHome, sources.continuityPackageRoot, TELOS_CONTINUITY_PACKAGE, ['lib/index.js', 'lib/client.js'])
 
   mkdirSync(dshHome, { recursive: true })
   const path = join(dshHome, PATCH_FILENAME)

@@ -297,6 +297,23 @@ export class ContinuityGateway {
           const input = record(payload)
           return success(this.store.explainRecall(string(input.recallId, 'recallId')) ?? null)
         }
+        case 'recall/list': {
+          const input = payload === undefined ? {} : record(payload)
+          return success(this.store.listRecallDecisions({
+            sessionId: optionalString(input.sessionId, 'sessionId'),
+            claimId: optionalString(input.claimId, 'claimId'),
+            limit: optionalNumber(input.limit, 'limit'),
+          }))
+        }
+        case 'materialization/list': {
+          const input = payload === undefined ? {} : record(payload)
+          return success(this.store.listMaterializations({
+            recallId: optionalString(input.recallId, 'recallId'),
+            claimId: optionalString(input.claimId, 'claimId'),
+            sessionId: optionalString(input.sessionId, 'sessionId'),
+            limit: optionalNumber(input.limit, 'limit'),
+          }))
+        }
         case 'source/get': {
           const input = record(payload)
           return success(this.store.getSourceEpisode(string(input.sourceEpisodeId, 'sourceEpisodeId')) ?? null)

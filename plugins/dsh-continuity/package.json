@@ -6,16 +6,31 @@
   "main": "./lib/index.js",
   "exports": {
     ".": "./lib/index.js",
+    "./client": "./lib/client.js",
     "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ],
+      "platform": "web"
+    }
   },
   "scripts": {
     "build": "pnpm --filter @telos/personal-core build && tsc -p tsconfig.json --noEmit && node ../../scripts/build-dsh-continuity.mjs"
   },
   "dependencies": {
-    "@telos/personal-core": "workspace:*"
+    "@telos/personal-core": "workspace:*",
+    "react": "19.2.8"
   },
   "devDependencies": {
     "@types/node": "26.2.0",
+    "@types/react": "19.2.18",
     "typescript": "7.0.2"
   },
   "license": "MIT"

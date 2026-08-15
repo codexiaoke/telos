@@ -68,6 +68,7 @@ describe('prepareTelosDshWebPatch', () => {
       private: true,
     }))
     writeFileSync(join(continuity, 'lib/index.js'), 'export const name = "telos-continuity"')
+    writeFileSync(join(continuity, 'lib/client.js'), 'window.__TELOS_CONTINUITY_TEST__ = true')
 
     const path = prepareTelosDshWebPatch(join(root, 'home'), {
       sidebarPackageRoot: sidebar,
@@ -81,6 +82,8 @@ describe('prepareTelosDshWebPatch', () => {
     expect(existsSync(join(root, 'home/profiles/web/node_modules/@deepseek-ai/dsh-client-ui-layout/lib/client.js')))
       .toBe(true)
     expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-continuity/lib/index.js')))
+      .toBe(true)
+    expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-continuity/lib/client.js')))
       .toBe(true)
   })
 })

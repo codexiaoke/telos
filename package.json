@@ -22,6 +22,7 @@
     "dsh:parity": "node scripts/audit-dsh-parity.mjs",
     "dsh:smoke": "node scripts/smoke-dsh-runtime.mjs",
     "dsh:continuity:smoke": "node scripts/smoke-dsh-continuity.mjs",
+    "continuity:study-pilo:live": "pnpm --filter @telos/dsh-continuity build && node scripts/evaluate-study-pilo-memory-live.mjs",
     "continuity:bench": "pnpm run build:packages && pnpm dsh:parity && node packages/continuity-bench/dist/cli.js --dsh-parity-pass",
     "dsh:upstream": "node scripts/audit-dsh-sync.mjs --remote",
     "dsh:verify": "pnpm dsh:audit && pnpm dsh:parity"

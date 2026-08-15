@@ -50,6 +50,8 @@ function assertRuntimeBuilt() {
     join(repositoryRoot, 'plugins/dsh-mcp-manager/lib/index.js'),
     join(repositoryRoot, 'plugins/dsh-mcp-manager/lib/client.js'),
     join(repositoryRoot, 'plugins/dsh-mcp-manager/lib/BUILD.json'),
+    join(repositoryRoot, 'plugins/dsh-workbench-files/lib/index.js'),
+    join(repositoryRoot, 'plugins/dsh-workbench-files/lib/BUILD.json'),
   ]
   for (const path of required) accessSync(path)
 }
@@ -137,6 +139,7 @@ async function smokePackagedDshWeb(resourcesDirectory, packagedDshRoot, packaged
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-ui-layout'), profileModules, '@deepseek-ai/dsh-client-ui-layout')
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-continuity'), profileModules, '@telos/dsh-continuity')
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager'), profileModules, '@telos/dsh-mcp-manager')
+    installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-workbench-files'), profileModules, '@telos/dsh-workbench-files')
     const output = { value: '' }
     child = spawn(packagedNode, [packagedCli, 'web', '--patch', patchPath, '--port', '0'], {
       cwd: packagedDshRoot,
@@ -203,6 +206,7 @@ async function verifyPackagedRuntime(expectedManifest) {
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-continuity/lib/client.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager/lib/index.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager/lib/client.js'))
+  accessSync(join(resourcesDirectory, 'dsh-overlays/telos-workbench-files/lib/index.js'))
   accessSync(packagedNode)
   accessSync(packagedCli)
   run(packagedNode, [packagedCli, '--version'], packagedDshRoot)

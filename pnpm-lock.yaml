@@ -194,6 +194,24 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  plugins/dsh-workbench-files:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../third_party/deepseek-harness/vendor/cordis
+        version: link:../../third_party/deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-client-connection':
+        specifier: link:../../third_party/deepseek-harness/packages/client/connection
+        version: link:../../third_party/deepseek-harness/packages/client/connection
+      '@deepseek-ai/dsh-workspace':
+        specifier: link:../../third_party/deepseek-harness/packages/workspace/workspace
+        version: link:../../third_party/deepseek-harness/packages/workspace/workspace
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
 packages:
 
   '@babel/code-frame@7.29.7':

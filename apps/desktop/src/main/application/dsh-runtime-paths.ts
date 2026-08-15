@@ -45,6 +45,12 @@ export function resolveTelosDshMcpManagerPackageRoot(): string {
     : join(developmentRepositoryRoot(), 'plugins/dsh-mcp-manager')
 }
 
+export function resolveTelosDshWorkbenchFilesPackageRoot(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'dsh-overlays/telos-workbench-files')
+    : join(developmentRepositoryRoot(), 'plugins/dsh-workbench-files')
+}
+
 export function loadDevelopmentEnvironment(): void {
   if (app.isPackaged) return
   const localEnvironment = join(developmentRepositoryRoot(), '.env.local')

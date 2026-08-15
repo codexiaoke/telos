@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { ReactNode } from 'react'
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+import { WorkbenchFiles, workbenchFilesClient } from '../files/WorkbenchFiles'
 import {
   computeWorkbenchColumns,
   DETAILS_MAX,
@@ -22,6 +23,10 @@ export type TelosAppFrameProps =
   & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay'>
   & PropsStore<ReturnType<typeof createTelosLayoutStore>>
 
+type TelosViewMode = 'chat' | 'editor'
+
+const VIEW_MODE_STORAGE_PREFIX = 'telos:view-mode:'
+
 function CenterColumn({ children }: { children?: ReactNode }) {
   return <div className="telos-workbench-center">{children}</div>
 }
@@ -37,6 +42,22 @@ function SidebarOpenIcon() {
       <path d="M7 3.8v12.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
     </svg>
   )
+}
+
+function WorkbenchModeIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 20 20">
+      <rect height="14" rx="3" stroke="currentColor" strokeWidth="1.45" width="16" x="2" y="3" />
+      <path d="M7 3.7v12.6M13.1 3.7v12.6" stroke="currentColor" strokeWidth="1.35" />
+      <path d="m9.1 8.1-1.35 1.35L9.1 10.8m1.8-2.7 1.35 1.35-1.35 1.35" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.05" />
+    </svg>
+  )
+}
+
+function workspaceLabel(cwd: string | undefined): string | undefined {
+  if (cwd === undefined) return undefined
+  const segments = cwd.replace(/[/\\]+$/, '').split(/[/\\]/)
+  return segments.at(-1) || cwd
 }
 
 interface ResizerProps {
@@ -120,6 +141,10 @@ export function TelosAppFrame({
   renderSlot,
 }: TelosAppFrameProps) {
   const panels = useStore(state => state)
+  const currentSession = useSessions((sessions) => {
+    const current = sessions.current
+    return current === undefined ? undefined : sessions.byId[current]
+  })
   const detailsSession = useSessions((sessions) => {
     const current = sessions.current
     return current !== undefined && sessions.byId[current]?.blank === false ? current : undefined
@@ -127,6 +152,31 @@ export function TelosAppFrame({
   const frameRef = useRef<HTMLDivElement | null>(null)
   const searchDialogClick = useRef(false)
   const [viewport, setViewport] = useState(() => window.innerWidth)
+  const viewModeStorageKey = `${VIEW_MODE_STORAGE_PREFIX}${currentSession?.cwd ?? 'global'}`
+  const [viewMode, setViewMode] = useState<TelosViewMode>('chat')
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(viewModeStorageKey)
+    setViewMode(stored === 'editor' ? 'editor' : 'chat')
+  }, [viewModeStorageKey])
+
+  const toggleViewMode = useCallback(() => {
+    setViewMode((current) => {
+      const next = current === 'chat' ? 'editor' : 'chat'
+      window.localStorage.setItem(viewModeStorageKey, next)
+      return next
+    })
+  }, [viewModeStorageKey])
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || event.key.toLowerCase() !== 'e') return
+      event.preventDefault()
+      toggleViewMode()
+    }
+    window.addEventListener('keydown', handleShortcut)
+    return () => window.removeEventListener('keydown', handleShortcut)
+  }, [toggleViewMode])
 
   const lastSession = useRef(detailsSession)
   useLayoutEffect(() => {
@@ -263,20 +313,48 @@ export function TelosAppFrame({
       data-dragging={dragging || undefined}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-telos-workbench=""
+      data-view-mode={viewMode}
       onClick={handleWorkbenchClick}
       onClickCapture={handleWorkbenchClickCapture}
       ref={frameRef}
-      style={{ gridTemplateColumns: `${columns.sidebar}px minmax(0, 1fr) ${columns.details}px` }}
+      style={viewMode === 'chat'
+        ? { gridTemplateColumns: `${columns.sidebar}px minmax(0, 1fr) ${columns.details}px` }
+        : undefined}
     >
-      <div className="telos-workbench-sidebar">
-        {renderSlot('sidebar', { collapsed: sidebarCollapsed, width: columns.sidebar })}
+      <div className="telos-editor-files-seat">
+        <WorkbenchFiles
+          active={viewMode === 'editor'}
+          client={workbenchFilesClient()}
+          sessionId={currentSession === undefined ? undefined : String(currentSession.id)}
+          workspaceLabel={workspaceLabel(currentSession?.cwd)}
+        />
       </div>
-      <CenterColumn>{renderSlot('conversation', {})}</CenterColumn>
-      <DetailsColumn>{renderSlot('details', {})}</DetailsColumn>
+      {viewMode === 'chat' ? (
+        <>
+          <div className="telos-workbench-sidebar">
+            {renderSlot('sidebar', { collapsed: sidebarCollapsed, width: columns.sidebar })}
+          </div>
+          <CenterColumn>{renderSlot('conversation', {})}</CenterColumn>
+          <DetailsColumn>{renderSlot('details', {})}</DetailsColumn>
+        </>
+      ) : (
+        <div className="telos-editor-conversation">{renderSlot('conversation', {})}</div>
+      )}
       <div className="telos-workbench-overlay" data-shell-overlay>
         {renderSlot('shell.overlay', {})}
       </div>
-      {sidebarCollapsed && (
+      <button
+        aria-label={viewMode === 'chat' ? '进入编辑工作台' : '返回自由聊天'}
+        aria-pressed={viewMode === 'editor'}
+        className="telos-view-mode-toggle"
+        data-active={viewMode === 'editor' || undefined}
+        onClick={toggleViewMode}
+        title={`${viewMode === 'chat' ? '进入编辑工作台' : '返回自由聊天'} (⌘⇧E)`}
+        type="button"
+      >
+        <WorkbenchModeIcon />
+      </button>
+      {viewMode === 'chat' && sidebarCollapsed && (
         <button
           aria-label="打开侧边栏"
           className="telos-sidebar-reopen"
@@ -287,7 +365,7 @@ export function TelosAppFrame({
           <SidebarOpenIcon />
         </button>
       )}
-      {!sidebarCollapsed && (
+      {viewMode === 'chat' && !sidebarCollapsed && (
         <Resizer
           left={columns.sidebar}
           onDrag={dragSidebar}
@@ -297,7 +375,7 @@ export function TelosAppFrame({
           value={columns.sidebar}
         />
       )}
-      {columns.details > 0 && (
+      {viewMode === 'chat' && columns.details > 0 && (
         <Resizer
           left={viewport - columns.details}
           onDrag={dragDetails}

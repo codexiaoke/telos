@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "paths": {
+      "@deepseek-ai/cordis": ["../../third_party/deepseek-harness/vendor/cordis/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-client-connection": ["../../third_party/deepseek-harness/packages/client/connection/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-workspace": ["../../third_party/deepseek-harness/packages/workspace/workspace/lib/types/index.d.ts"]
+    },
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

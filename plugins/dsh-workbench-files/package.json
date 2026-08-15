@@ -1,0 +1,22 @@
+{
+  "name": "@telos/dsh-workbench-files",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && node ../../scripts/build-dsh-workbench-files.mjs"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../third_party/deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-client-connection": "link:../../third_party/deepseek-harness/packages/client/connection",
+    "@deepseek-ai/dsh-workspace": "link:../../third_party/deepseek-harness/packages/workspace/workspace",
+    "@types/node": "26.2.0",
+    "typescript": "7.0.2"
+  },
+  "license": "MIT"
+}

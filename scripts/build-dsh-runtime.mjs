@@ -46,6 +46,14 @@ const continuityBuild = spawnSync('corepack', ['pnpm', '--filter', '@telos/dsh-c
 if (continuityBuild.error) throw continuityBuild.error
 if (continuityBuild.status !== 0) process.exit(continuityBuild.status ?? 1)
 
+const workbenchBuild = spawnSync('corepack', ['pnpm', '--filter', '@telos/dsh-workbench-files', 'build'], {
+  cwd: repositoryRoot,
+  env: process.env,
+  stdio: 'inherit',
+})
+if (workbenchBuild.error) throw workbenchBuild.error
+if (workbenchBuild.status !== 0) process.exit(workbenchBuild.status ?? 1)
+
 accessSync(resolve(dshRoot, 'packages/sdk/client/lib/index.js'))
 accessSync(resolve(dshRoot, 'packages/examples/jsonrpc-demo/lib/bin.js'))
 accessSync(resolve(dshRoot, 'python/sdk-runtime/node_modules/@deepseek-ai/dsh-sdk-jsonrpc-server'))
@@ -58,4 +66,6 @@ accessSync(resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-layout/UPS
 accessSync(resolve(repositoryRoot, 'plugins/dsh-continuity/lib/index.js'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-continuity/lib/client.js'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-continuity/lib/BUILD.json'))
+accessSync(resolve(repositoryRoot, 'plugins/dsh-workbench-files/lib/index.js'))
+accessSync(resolve(repositoryRoot, 'plugins/dsh-workbench-files/lib/BUILD.json'))
 process.stdout.write('DSH source runtime and complete Web application are built and ready.\n')

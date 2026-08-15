@@ -110,7 +110,7 @@ function fixture() {
   return { store, gateway: new ContinuityGateway({ store }) }
 }
 
-function jobPayload(text: string, suffix: string): Record<string, unknown> {
+function jobPayload(text: string, suffix: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     sessionId: `session-${suffix}`,
     workspaceId: 'workspace-a',
@@ -124,6 +124,7 @@ function jobPayload(text: string, suffix: string): Record<string, unknown> {
     policy: POLICY,
     contentHash: `hash-${suffix}`,
     observedAt: '2026-08-15T00:00:00.000Z',
+    ...overrides,
   }
 }
 
@@ -168,6 +169,7 @@ describe('main-model memory formation', () => {
     expect(adapter.requests[0]).not.toHaveProperty('tools')
     expect(adapter.requests[0]?.system).toBe(MEMORY_FORMATION_SYSTEM_PROMPT)
     expect(MEMORY_FORMATION_SYSTEM_PROMPT).toContain('concrete time-bounded events')
+    expect(MEMORY_FORMATION_SYSTEM_PROMPT).toContain('Do not translate Chinese memory into English')
     const request = adapter.requests[0]?.messages[0]?.content[0]
     expect(request?.type === 'text' && request.text).toContain('我长期偏好简洁且有证据的回答')
     expect(request?.type === 'text' && request.text).toContain('Asia/Shanghai')
@@ -210,6 +212,29 @@ describe('main-model memory formation', () => {
       objectEntityRef: 'owner',
       validFrom: '2026-08-16T00:00:00+08:00',
       validTo: '2026-08-16T23:59:59.999+08:00',
+    })])
+  })
+
+  it('accepts a normalized entity name only when an observed alias anchors it', () => {
+    const output = JSON.parse(VISIT_OUTPUT) as {
+      entities: Array<{ canonicalName: string; aliases: string[]; evidence: string }>
+    }
+    output.entities[0] = {
+      ...output.entities[0]!,
+      canonicalName: '父亲',
+      aliases: ['爸爸'],
+      evidence: '爸爸',
+    }
+
+    const result = parseMemoryFormationOutput(JSON.stringify(output), {
+      messages: [{ seq: 2, text: '爸爸明天来我家' }],
+      scope: { type: 'workspace', id: 'workspace-a' },
+    })
+
+    expect(result.entities).toEqual([expect.objectContaining({
+      canonicalName: '父亲',
+      aliases: ['爸爸'],
+      evidence: '爸爸',
     })])
   })
 
@@ -333,5 +358,39 @@ describe('asynchronous formation worker', () => {
       father!.id,
       gateway.ownerEntity.id,
     ]))
+  })
+
+  it('promotes the structured graph result only for explicit confirmed capture', async () => {
+    const { gateway, store } = fixture()
+    const prompt = '爸爸明天来我家，帮我记一下。'
+    store.enqueue('infer-turn-candidates', jobPayload(prompt, 'explicit-visit', {
+      captureIntent: 'explicit',
+      confirmationStatus: 'confirmed',
+    }), 'infer:explicit-visit')
+    const formation = parseMemoryFormationOutput(VISIT_OUTPUT, {
+      messages: [{ seq: 2, text: prompt }],
+      scope: { type: 'workspace', id: 'workspace-a' },
+    })
+
+    await expect(processInferenceJobs(gateway, {
+      form: input => {
+        expect(input.captureIntent).toBe('explicit')
+        return Promise.resolve({ route: input.route, ...formation })
+      },
+    })).resolves.toMatchObject({ completed: 1, candidatesCreated: 1 })
+
+    const [claim] = store.listClaims()
+    expect(claim).toMatchObject({
+      status: 'confirmed',
+      predicate: 'person.visits_home_of',
+    })
+    expect(store.listActionReceipts()).toEqual([expect.objectContaining({
+      action: 'memory.formation',
+      authorization: 'allowed',
+    })])
+    expect(store.listEvents(claim!.id).map(event => event.eventType)).toEqual([
+      'claim.observed',
+      'claim.confirmed',
+    ])
   })
 })

@@ -83,6 +83,18 @@ function policy(value: unknown): MemoryFormationPolicy {
   }
 }
 
+function captureIntent(value: unknown): 'automatic' | 'explicit' {
+  if (value === undefined || value === 'automatic') return 'automatic'
+  if (value === 'explicit') return 'explicit'
+  throw new TypeError('captureIntent must be automatic or explicit')
+}
+
+function confirmationStatus(value: unknown): 'candidate' | 'confirmed' {
+  if (value === undefined || value === 'candidate') return 'candidate'
+  if (value === 'confirmed') return 'confirmed'
+  throw new TypeError('confirmationStatus must be candidate or confirmed')
+}
+
 function entityWithoutEvidence(entity: FormedMemoryEntity): Omit<FormedMemoryEntity, 'evidence'> {
   const { evidence: _evidence, ...identity } = entity
   return identity
@@ -109,11 +121,14 @@ async function processJob(
   const referenceTime = optionalString(job.payload.referenceTime, 'referenceTime') ?? observedAt
   const timeZone = optionalString(job.payload.timeZone, 'timeZone') ?? 'UTC'
   const locale = optionalString(job.payload.locale, 'locale') ?? 'und'
+  const intent = captureIntent(job.payload.captureIntent)
+  const requestedStatus = confirmationStatus(job.payload.confirmationStatus)
   const scope = workspaceId === undefined
     ? { type: 'session' as const, id: sessionId }
     : { type: 'workspace' as const, id: workspaceId }
   const result = await form({
     sessionId,
+    captureIntent: intent,
     messages: directMessages,
     assistantMessages,
     referenceTime,
@@ -162,11 +177,24 @@ async function processJob(
     ])]
     candidatesCreated = reconciliation.outcomes
       .filter(outcome => outcome.decision === 'created-candidate').length
+    if (requestedStatus === 'confirmed') {
+      for (const outcome of reconciliation.outcomes) {
+        const claim = gateway.store.getClaim(outcome.claimId)
+        if (claim?.status !== 'candidate') continue
+        gateway.store.confirmCandidate({
+          claimId: claim.id,
+          sourceEpisodeIds: [source.id],
+          actor: 'user',
+          occurredAt: observedAt,
+          idempotencyKey: `${job.idempotencyKey}:confirm:${String(outcome.eventIndex)}`,
+        })
+      }
+    }
   }
 
   gateway.store.recordActionReceipt({
     action: 'memory.formation',
-    authorization: 'not-required',
+    authorization: requestedStatus === 'confirmed' ? 'allowed' : 'not-required',
     runtimeId: 'dsh',
     provider: `${result.route.provider}/${result.route.model}${result.route.reasoningEffort === undefined
       ? ''

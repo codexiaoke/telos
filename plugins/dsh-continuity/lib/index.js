@@ -1924,14 +1924,17 @@ var MEMORY_FORMATION_SYSTEM_PROMPT = [
   "Direct human messages are the only authoritative evidence. Assistant messages are non-authoritative context: they may help resolve wording or a typo, but can never introduce a fact or be copied as evidence.",
   "Do not extract ordinary one-turn instructions, response-format requests, tool-use controls, test/debug prompts, questions, brainstorming, quoted text, or facts stated only by the assistant.",
   "Ignore temporary control clauses instead of discarding an otherwise useful memory event.",
+  "An explicit captureIntent means the human directly asked Telos to remember the situation. Treat that as strong durability evidence, while still rejecting secrets, test/debug prompts and content that has no useful memory event.",
   "Eligible memories include stable preferences, goals, decisions, commitments, procedures and constraints, plus concrete time-bounded events that matter across turns, such as a family visit, appointment, deadline, trip or promised follow-up.",
   'A concrete event may qualify even when stated only once. For example, "\u7238\u7238\u660E\u5929\u6765\u6211\u5BB6" is a prospective event about a person entity, not a disposable chat detail.',
   "Resolve relative time such as today or tomorrow from referenceTime in the supplied timeZone. Use ISO-8601 offsets; for an all-day event use the local day start and end.",
-  "Use owner for the user. Create another entity only when its canonicalName is explicitly present in a direct human message. Aliases must also be explicitly present; do not invent synonyms.",
+  "Use owner for the user. Create another entity only when its canonicalName is explicitly present in a direct human message, or when a normalized canonicalName has at least one explicitly observed alias. Aliases must be copied from direct human text; do not invent synonyms.",
   "Represent relationships as edges: subjectEntityRef + predicate + exactly one of objectEntityRef or objectValue. Prefer an entity edge when both endpoints are known.",
   "Never extract credentials, secrets, inferred sensitive attributes, or unsupported conclusions.",
   "Every entity and event must contain one evidence field copied verbatim from exactly one supplied direct human message.",
   "Use concise normalized statements and stable lowercase dotted predicates.",
+  "Write statements and literal values in the direct human message language. Do not translate Chinese memory into English.",
+  "Prefer a compact connected event graph. Create each explicitly named person, organization, project, goal, commitment, topic or artifact that participates in a durable event, but do not split one situation into redundant paraphrases.",
   "Return exactly one JSON object and no Markdown or commentary.",
   "The required shape is:",
   '{"schemaVersion":2,"decision":"remember|ignore","reason":"short reason","entities":[{"ref":"local_ref","kind":"person|workspace|project|topic|goal|commitment|decision|constraint|preference|artifact","canonicalName":"exactly observed name","aliases":[],"evidence":"exact human substring"}],"events":[{"kind":"semantic|episodic|procedural|prospective|constraint","statement":"...","predicate":"lowercase.dotted_name","subjectEntityRef":"owner|local_ref","objectEntityRef":"owner|local_ref|null","objectValue":"literal|null","confidence":0.0,"importance":0.0,"sensitivity":"personal","evidence":"exact human substring","durability":"cross-session","validFrom":null,"validTo":null}]}',
@@ -1982,6 +1985,7 @@ function frameMessages(input) {
     "The host will enforce the supplied local scope; do not invent another scope.",
     JSON.stringify({
       scope: input.scope,
+      captureIntent: input.captureIntent ?? "automatic",
       referenceTime: input.referenceTime,
       timeZone: input.timeZone,
       locale: input.locale,
@@ -2047,9 +2051,6 @@ function parseMemoryFormationOutput(output, input) {
     assertKnownKeys(entity, ENTITY_KEYS, `entities[${String(index)}]`);
     const canonicalName = text2(entity.canonicalName, `entities[${String(index)}].canonicalName`, 120);
     const excerpt = exactHumanExcerpt(entity.evidence, `entities[${String(index)}].evidence`);
-    if (!excerpt.includes(canonicalName)) {
-      throw new TypeError(`entities[${String(index)}].canonicalName is not present in its human evidence`);
-    }
     if (!Array.isArray(entity.aliases) || entity.aliases.length > MAX_ALIASES2) {
       throw new TypeError(`entities[${String(index)}].aliases must contain at most ${String(MAX_ALIASES2)} items`);
     }
@@ -2060,7 +2061,11 @@ function parseMemoryFormationOutput(output, input) {
       }
       return result;
     });
-    entityEvidence.push(excerpt);
+    const observedNames = [canonicalName, ...aliases].filter((name2) => normalizedMessages.some((message) => message.includes(name2)));
+    if (observedNames.length === 0) {
+      throw new TypeError(`entities[${String(index)}] has no canonicalName or alias in a human message`);
+    }
+    entityEvidence.push(observedNames.some((name2) => excerpt.includes(name2)) ? excerpt : observedNames[0]);
     return {
       ref: entity.ref,
       kind: entity.kind,
@@ -2222,6 +2227,16 @@ function policy(value) {
     timeoutMs: positiveInteger(input.timeoutMs, "policy.timeoutMs")
   };
 }
+function captureIntent(value) {
+  if (value === void 0 || value === "automatic") return "automatic";
+  if (value === "explicit") return "explicit";
+  throw new TypeError("captureIntent must be automatic or explicit");
+}
+function confirmationStatus(value) {
+  if (value === void 0 || value === "candidate") return "candidate";
+  if (value === "confirmed") return "confirmed";
+  throw new TypeError("confirmationStatus must be candidate or confirmed");
+}
 function entityWithoutEvidence(entity) {
   const { evidence: _evidence, ...identity } = entity;
   return identity;
@@ -2242,9 +2257,12 @@ async function processJob(gateway, job, form) {
   const referenceTime = optionalString(job.payload.referenceTime, "referenceTime") ?? observedAt;
   const timeZone = optionalString(job.payload.timeZone, "timeZone") ?? "UTC";
   const locale = optionalString(job.payload.locale, "locale") ?? "und";
+  const intent = captureIntent(job.payload.captureIntent);
+  const requestedStatus = confirmationStatus(job.payload.confirmationStatus);
   const scope2 = workspaceId === void 0 ? { type: "session", id: sessionId } : { type: "workspace", id: workspaceId };
   const result = await form({
     sessionId,
+    captureIntent: intent,
     messages: directMessages,
     assistantMessages,
     referenceTime,
@@ -2291,10 +2309,23 @@ async function processJob(gateway, job, form) {
       ...reconciliation.entities.map((entity) => entity.entityId)
     ])];
     candidatesCreated = reconciliation.outcomes.filter((outcome) => outcome.decision === "created-candidate").length;
+    if (requestedStatus === "confirmed") {
+      for (const outcome of reconciliation.outcomes) {
+        const claim = gateway.store.getClaim(outcome.claimId);
+        if (claim?.status !== "candidate") continue;
+        gateway.store.confirmCandidate({
+          claimId: claim.id,
+          sourceEpisodeIds: [source2.id],
+          actor: "user",
+          occurredAt: observedAt,
+          idempotencyKey: `${job.idempotencyKey}:confirm:${String(outcome.eventIndex)}`
+        });
+      }
+    }
   }
   gateway.store.recordActionReceipt({
     action: "memory.formation",
-    authorization: "not-required",
+    authorization: requestedStatus === "confirmed" ? "allowed" : "not-required",
     runtimeId: "dsh",
     provider: `${result.route.provider}/${result.route.model}${result.route.reasoningEffort === void 0 ? "" : `#${result.route.reasoningEffort}`}`,
     result: "succeeded",
@@ -2764,6 +2795,18 @@ function claimSummary(claim) {
     sourceEpisodeIds: claim.sourceEpisodeIds
   });
 }
+function rememberStatusFromArguments(value) {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed.confirmation === "candidate" ? "candidate" : "confirmed";
+  } catch {
+    return "confirmed";
+  }
+}
+function explicitReviewRequested(messages2) {
+  const directText = messages2.map((message) => message.text).join("\n");
+  return /待确认|先(?:别|不要)确认|暂(?:不|时不)?确认|不确定|可能记错|暂定/u.test(directText);
+}
 function recallSummary(decision) {
   return JSON.stringify({
     recallId: decision.id,
@@ -2796,38 +2839,22 @@ function assertRecallAccessible(ctx, agent, decision) {
 function installTools(ctx, gateway) {
   ctx.tools.register(defineTool({
     name: "continuity_remember",
-    description: "Persist one personal fact only when the direct human explicitly asks Telos to remember it. Ordinary durable statements are handled separately as reviewable candidates. Never store secrets or inferred private attributes.",
+    description: "Authorize Telos to form structured memory from the current direct human message. Call only when the human explicitly asks to remember it. This tool queues the same main-model entity/event formation used by automatic candidates; it does not write a flat fact. Choose candidate when the human says the memory is provisional, uncertain, or pending confirmation. Never capture secrets or inferred private attributes.",
     parameters: {
-      statement: { type: "string", required: true, description: "Concise natural-language memory statement." },
-      predicate: { type: "string", required: true, description: "Stable dotted relation name such as prefers.evidence or project.requires." },
-      value: { type: "string", required: true, description: "Literal value of the fact." },
-      kind: { type: "string", enum: [...CLAIM_KINDS3], description: "Memory form; defaults to semantic." },
-      scope: { type: "string", enum: ["global", "workspace", "session"], description: "Availability boundary; defaults to workspace." },
-      sensitivity: { type: "string", enum: [...SENSITIVITIES2], description: "personal or sensitive; secrets are rejected." },
-      importance: { type: "number", description: "0 to 1; defaults to 0.7." },
-      valid_from: { type: "string", description: "Optional ISO-8601 valid-from timestamp." },
-      valid_to: { type: "string", description: "Optional ISO-8601 valid-to timestamp." }
+      confirmation: {
+        type: "string",
+        enum: ["confirmed", "candidate"],
+        description: "Use confirmed for an explicit durable save; candidate when the human asks to keep it pending review. Defaults to confirmed."
+      }
     },
     output: TEXT_OUTPUT,
     async execute(args, exec) {
-      const execution = directHumanExecution(ctx, exec);
-      const command = {
-        statement: args.statement,
-        predicate: args.predicate,
-        objectValue: args.value,
-        kind: args.kind ?? "semantic",
-        scope: scopeFor(ctx, execution.agent, args.scope ?? "workspace"),
-        sensitivity: args.sensitivity ?? "personal",
-        confidence: 1,
-        importance: args.importance ?? 0.7,
-        status: "confirmed",
-        source: sourceFor(execution),
-        actor: "user",
-        idempotencyKey: `dsh:${String(execution.agent.id)}:${String(exec.callId)}:remember`,
-        validFrom: args.valid_from || void 0,
-        validTo: args.valid_to || void 0
-      };
-      return claimSummary(gateway.remember(command));
+      directHumanExecution(ctx, exec);
+      return JSON.stringify({
+        accepted: true,
+        formation: "queued-after-turn",
+        confirmation: args.confirmation === "candidate" ? "candidate" : "confirmed"
+      });
     }
   }));
   ctx.tools.register(defineTool({
@@ -2976,7 +3003,11 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError, sch
       }
       if (event.type === "tool/call") {
         const calls = toolCalls.get(session) ?? /* @__PURE__ */ new Map();
-        calls.set(String(event.data.callId), { seq: event.seq, name: event.data.name });
+        calls.set(String(event.data.callId), {
+          seq: event.seq,
+          name: event.data.name,
+          ...event.data.name === "continuity_remember" ? { rememberStatus: rememberStatusFromArguments(event.data.arguments) } : {}
+        });
         toolCalls.set(session, calls);
       }
       if (event.type === "tool/result") {
@@ -2994,7 +3025,13 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError, sch
             contentHash: eventHash(event)
           });
           const isError = event.data.message.content.some((block) => block.type === "tool-result" && block.isError);
-          if (!isError && ["continuity_remember", "continuity_correct", "continuity_forget"].includes(call.name)) {
+          if (!isError && call.name === "continuity_remember") {
+            const trace = turns.get(session);
+            if (trace !== void 0) {
+              const requested = call.rememberStatus ?? "confirmed";
+              trace.explicitRememberStatus = trace.explicitRememberStatus === "candidate" ? "candidate" : requested;
+            }
+          } else if (!isError && ["continuity_correct", "continuity_forget"].includes(call.name)) {
             const trace = turns.get(session);
             if (trace !== void 0) trace.continuityMutationCompleted = true;
           }
@@ -3068,6 +3105,8 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError, sch
           sessionId: String(session.id),
           workspaceId: workspace === void 0 ? void 0 : String(workspace.id),
           turn: trace.turn,
+          captureIntent: trace.explicitRememberStatus === void 0 ? "automatic" : "explicit",
+          confirmationStatus: trace.explicitRememberStatus === void 0 || explicitReviewRequested(trace.directMessages) ? "candidate" : trace.explicitRememberStatus,
           messages: trace.directMessages.map((message) => ({ seq: message.seq, text: message.text })),
           assistantMessages: trace.assistantMessages,
           referenceTime: new Date(trace.directMessages.at(-1).time).toISOString(),
@@ -3165,7 +3204,7 @@ function apply(ctx, input) {
     promptCtx.systemPrompt.section({
       name: "tool:telos-continuity",
       order: 112,
-      text: "Telos personal continuity is distinct from DSH session history. Use continuity_remember only when the direct human explicitly asks to remember something, continuity_correct instead of overwriting history, continuity_forget for explicit revocation, and continuity_search or continuity_explain for evidence. Never store credentials, secrets, inferred sensitive attributes, or an entire conversation."
+      text: "Telos personal continuity is distinct from DSH session history. Use continuity_remember only as explicit human authorization to queue main-model entity/event formation; set confirmation=candidate for provisional, uncertain, or pending-review memory. continuity_correct instead of overwriting history, continuity_forget for explicit revocation, and continuity_search or continuity_explain for evidence. Never store credentials, secrets, inferred sensitive attributes, or an entire conversation."
     });
   });
 }

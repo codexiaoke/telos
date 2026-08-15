@@ -16,7 +16,7 @@ import type {
   Sensitivity,
 } from '@telos/personal-core'
 import { containsCredentialLikeContent } from '@telos/personal-core'
-import { CONTINUITY_RPC_CHANNEL, type CorrectCommand, type RememberCommand } from './contracts.js'
+import { CONTINUITY_RPC_CHANNEL, type CorrectCommand } from './contracts.js'
 import { formMemoriesWithMainModel } from './formation.js'
 import { processInferenceJobs } from './formation-worker.js'
 import { ContinuityGateway } from './gateway.js'
@@ -64,6 +64,13 @@ interface TurnTrace {
   directMessages: { seq: number; time: number; text: string }[]
   assistantMessages: { seq: number; text: string }[]
   continuityMutationCompleted: boolean
+  explicitRememberStatus?: 'candidate' | 'confirmed'
+}
+
+interface ToolCallTrace {
+  seq: number
+  name: string
+  rememberStatus?: 'candidate' | 'confirmed'
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -179,6 +186,20 @@ function claimSummary(claim: MemoryClaim): string {
   })
 }
 
+function rememberStatusFromArguments(value: string): 'candidate' | 'confirmed' {
+  try {
+    const parsed = JSON.parse(value) as { confirmation?: unknown }
+    return parsed.confirmation === 'candidate' ? 'candidate' : 'confirmed'
+  } catch {
+    return 'confirmed'
+  }
+}
+
+function explicitReviewRequested(messages: readonly { text: string }[]): boolean {
+  const directText = messages.map(message => message.text).join('\n')
+  return /待确认|先(?:别|不要)确认|暂(?:不|时不)?确认|不确定|可能记错|暂定/u.test(directText)
+}
+
 function recallSummary(decision: RecallDecision): string {
   return JSON.stringify({
     recallId: decision.id,
@@ -214,38 +235,22 @@ function assertRecallAccessible(ctx: Context, agent: Agent, decision: RecallDeci
 function installTools(ctx: Context, gateway: ContinuityGateway): void {
   ctx.tools.register(defineTool({
     name: 'continuity_remember',
-    description: 'Persist one personal fact only when the direct human explicitly asks Telos to remember it. Ordinary durable statements are handled separately as reviewable candidates. Never store secrets or inferred private attributes.',
+    description: 'Authorize Telos to form structured memory from the current direct human message. Call only when the human explicitly asks to remember it. This tool queues the same main-model entity/event formation used by automatic candidates; it does not write a flat fact. Choose candidate when the human says the memory is provisional, uncertain, or pending confirmation. Never capture secrets or inferred private attributes.',
     parameters: {
-      statement: { type: 'string', required: true, description: 'Concise natural-language memory statement.' },
-      predicate: { type: 'string', required: true, description: 'Stable dotted relation name such as prefers.evidence or project.requires.' },
-      value: { type: 'string', required: true, description: 'Literal value of the fact.' },
-      kind: { type: 'string', enum: [...CLAIM_KINDS], description: 'Memory form; defaults to semantic.' },
-      scope: { type: 'string', enum: ['global', 'workspace', 'session'], description: 'Availability boundary; defaults to workspace.' },
-      sensitivity: { type: 'string', enum: [...SENSITIVITIES], description: 'personal or sensitive; secrets are rejected.' },
-      importance: { type: 'number', description: '0 to 1; defaults to 0.7.' },
-      valid_from: { type: 'string', description: 'Optional ISO-8601 valid-from timestamp.' },
-      valid_to: { type: 'string', description: 'Optional ISO-8601 valid-to timestamp.' },
+      confirmation: {
+        type: 'string',
+        enum: ['confirmed', 'candidate'],
+        description: 'Use confirmed for an explicit durable save; candidate when the human asks to keep it pending review. Defaults to confirmed.',
+      },
     },
     output: TEXT_OUTPUT,
     async execute(args, exec) {
-      const execution = directHumanExecution(ctx, exec)
-      const command: RememberCommand = {
-        statement: args.statement,
-        predicate: args.predicate,
-        objectValue: args.value,
-        kind: (args.kind ?? 'semantic') as ClaimKind,
-        scope: scopeFor(ctx, execution.agent, (args.scope ?? 'workspace') as 'global' | 'workspace' | 'session'),
-        sensitivity: (args.sensitivity ?? 'personal') as Sensitivity,
-        confidence: 1,
-        importance: args.importance ?? 0.7,
-        status: 'confirmed',
-        source: sourceFor(execution),
-        actor: 'user',
-        idempotencyKey: `dsh:${String(execution.agent.id)}:${String(exec.callId)}:remember`,
-        validFrom: args.valid_from || undefined,
-        validTo: args.valid_to || undefined,
-      }
-      return claimSummary(gateway.remember(command))
+      directHumanExecution(ctx, exec)
+      return JSON.stringify({
+        accepted: true,
+        formation: 'queued-after-turn',
+        confirmation: args.confirmation === 'candidate' ? 'candidate' : 'confirmed',
+      })
     },
   }))
 
@@ -397,7 +402,7 @@ function installSessionObserver(
   scheduleInference: () => void,
 ): void {
   const turns = new WeakMap<Session, TurnTrace>()
-  const toolCalls = new WeakMap<Session, Map<string, { seq: number; name: string }>>()
+  const toolCalls = new WeakMap<Session, Map<string, ToolCallTrace>>()
 
   ctx.on('session/event', (session, event) => {
     try {
@@ -418,7 +423,13 @@ function installSessionObserver(
 
       if (event.type === 'tool/call') {
         const calls = toolCalls.get(session) ?? new Map()
-        calls.set(String(event.data.callId), { seq: event.seq, name: event.data.name })
+        calls.set(String(event.data.callId), {
+          seq: event.seq,
+          name: event.data.name,
+          ...(event.data.name === 'continuity_remember'
+            ? { rememberStatus: rememberStatusFromArguments(event.data.arguments) }
+            : {}),
+        })
         toolCalls.set(session, calls)
       }
 
@@ -437,7 +448,15 @@ function installSessionObserver(
             contentHash: eventHash(event),
           })
           const isError = event.data.message.content.some(block => block.type === 'tool-result' && block.isError)
-          if (!isError && ['continuity_remember', 'continuity_correct', 'continuity_forget'].includes(call.name)) {
+          if (!isError && call.name === 'continuity_remember') {
+            const trace = turns.get(session)
+            if (trace !== undefined) {
+              const requested = call.rememberStatus ?? 'confirmed'
+              trace.explicitRememberStatus = trace.explicitRememberStatus === 'candidate'
+                ? 'candidate'
+                : requested
+            }
+          } else if (!isError && ['continuity_correct', 'continuity_forget'].includes(call.name)) {
             const trace = turns.get(session)
             if (trace !== undefined) trace.continuityMutationCompleted = true
           }
@@ -521,6 +540,10 @@ function installSessionObserver(
           sessionId: String(session.id),
           workspaceId: workspace === undefined ? undefined : String(workspace.id),
           turn: trace.turn,
+          captureIntent: trace.explicitRememberStatus === undefined ? 'automatic' : 'explicit',
+          confirmationStatus: trace.explicitRememberStatus === undefined || explicitReviewRequested(trace.directMessages)
+            ? 'candidate'
+            : trace.explicitRememberStatus,
           messages: trace.directMessages.map(message => ({ seq: message.seq, text: message.text })),
           assistantMessages: trace.assistantMessages,
           referenceTime: new Date(trace.directMessages.at(-1)!.time).toISOString(),
@@ -621,7 +644,7 @@ export function apply(ctx: Context, input: Config): void {
     promptCtx.systemPrompt.section({
       name: 'tool:telos-continuity',
       order: 112,
-      text: 'Telos personal continuity is distinct from DSH session history. Use continuity_remember only when the direct human explicitly asks to remember something, '
+      text: 'Telos personal continuity is distinct from DSH session history. Use continuity_remember only as explicit human authorization to queue main-model entity/event formation; set confirmation=candidate for provisional, uncertain, or pending-review memory. '
         + 'continuity_correct instead of overwriting history, continuity_forget for explicit revocation, and continuity_search or '
         + 'continuity_explain for evidence. Never store credentials, secrets, inferred sensitive attributes, or an entire conversation.',
     })

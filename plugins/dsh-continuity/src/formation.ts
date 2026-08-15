@@ -60,6 +60,7 @@ export interface MemoryFormationPolicy {
 
 export interface MemoryFormationInput {
   sessionId: string
+  captureIntent?: 'automatic' | 'explicit'
   messages: readonly MemoryFormationMessage[]
   assistantMessages?: readonly MemoryFormationMessage[]
   referenceTime: string
@@ -99,14 +100,17 @@ export const MEMORY_FORMATION_SYSTEM_PROMPT = [
   'Direct human messages are the only authoritative evidence. Assistant messages are non-authoritative context: they may help resolve wording or a typo, but can never introduce a fact or be copied as evidence.',
   'Do not extract ordinary one-turn instructions, response-format requests, tool-use controls, test/debug prompts, questions, brainstorming, quoted text, or facts stated only by the assistant.',
   'Ignore temporary control clauses instead of discarding an otherwise useful memory event.',
+  'An explicit captureIntent means the human directly asked Telos to remember the situation. Treat that as strong durability evidence, while still rejecting secrets, test/debug prompts and content that has no useful memory event.',
   'Eligible memories include stable preferences, goals, decisions, commitments, procedures and constraints, plus concrete time-bounded events that matter across turns, such as a family visit, appointment, deadline, trip or promised follow-up.',
   'A concrete event may qualify even when stated only once. For example, "爸爸明天来我家" is a prospective event about a person entity, not a disposable chat detail.',
   'Resolve relative time such as today or tomorrow from referenceTime in the supplied timeZone. Use ISO-8601 offsets; for an all-day event use the local day start and end.',
-  'Use owner for the user. Create another entity only when its canonicalName is explicitly present in a direct human message. Aliases must also be explicitly present; do not invent synonyms.',
+  'Use owner for the user. Create another entity only when its canonicalName is explicitly present in a direct human message, or when a normalized canonicalName has at least one explicitly observed alias. Aliases must be copied from direct human text; do not invent synonyms.',
   'Represent relationships as edges: subjectEntityRef + predicate + exactly one of objectEntityRef or objectValue. Prefer an entity edge when both endpoints are known.',
   'Never extract credentials, secrets, inferred sensitive attributes, or unsupported conclusions.',
   'Every entity and event must contain one evidence field copied verbatim from exactly one supplied direct human message.',
   'Use concise normalized statements and stable lowercase dotted predicates.',
+  'Write statements and literal values in the direct human message language. Do not translate Chinese memory into English.',
+  'Prefer a compact connected event graph. Create each explicitly named person, organization, project, goal, commitment, topic or artifact that participates in a durable event, but do not split one situation into redundant paraphrases.',
   'Return exactly one JSON object and no Markdown or commentary.',
   'The required shape is:',
   '{"schemaVersion":2,"decision":"remember|ignore","reason":"short reason","entities":[{"ref":"local_ref","kind":"person|workspace|project|topic|goal|commitment|decision|constraint|preference|artifact","canonicalName":"exactly observed name","aliases":[],"evidence":"exact human substring"}],"events":[{"kind":"semantic|episodic|procedural|prospective|constraint","statement":"...","predicate":"lowercase.dotted_name","subjectEntityRef":"owner|local_ref","objectEntityRef":"owner|local_ref|null","objectValue":"literal|null","confidence":0.0,"importance":0.0,"sensitivity":"personal","evidence":"exact human substring","durability":"cross-session","validFrom":null,"validTo":null}]}',
@@ -165,6 +169,7 @@ function frameMessages(input: MemoryFormationInput): string {
     'The host will enforce the supplied local scope; do not invent another scope.',
     JSON.stringify({
       scope: input.scope,
+      captureIntent: input.captureIntent ?? 'automatic',
       referenceTime: input.referenceTime,
       timeZone: input.timeZone,
       locale: input.locale,
@@ -233,9 +238,6 @@ export function parseMemoryFormationOutput(
     assertKnownKeys(entity, ENTITY_KEYS, `entities[${String(index)}]`)
     const canonicalName = text(entity.canonicalName, `entities[${String(index)}].canonicalName`, 120)
     const excerpt = exactHumanExcerpt(entity.evidence, `entities[${String(index)}].evidence`)
-    if (!excerpt.includes(canonicalName)) {
-      throw new TypeError(`entities[${String(index)}].canonicalName is not present in its human evidence`)
-    }
     if (!Array.isArray(entity.aliases) || entity.aliases.length > MAX_ALIASES) {
       throw new TypeError(`entities[${String(index)}].aliases must contain at most ${String(MAX_ALIASES)} items`)
     }
@@ -246,7 +248,12 @@ export function parseMemoryFormationOutput(
       }
       return result
     })
-    entityEvidence.push(excerpt)
+    const observedNames = [canonicalName, ...aliases]
+      .filter(name => normalizedMessages.some(message => message.includes(name)))
+    if (observedNames.length === 0) {
+      throw new TypeError(`entities[${String(index)}] has no canonicalName or alias in a human message`)
+    }
+    entityEvidence.push(observedNames.some(name => excerpt.includes(name)) ? excerpt : observedNames[0]!)
     return {
       ref: entity.ref,
       kind: entity.kind,

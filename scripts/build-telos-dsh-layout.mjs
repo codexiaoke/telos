@@ -81,6 +81,9 @@ if (javascriptOutput?.text === undefined || result.outputFiles.some(output => !o
 
 const compiled = javascriptOutput.text
 const bundledCss = cssOutput?.text
+if (bundledCss === undefined || !bundledCss.includes('@font-face') || !bundledCss.includes('data:font/ttf;base64,')) {
+  throw new Error('Telos layout bundle is missing the inlined Monaco Codicon font')
+}
 const requiredModules = [...compiled.matchAll(/require\(["']([^"']+)["']\)/g)].map(match => match[1])
 const allowedModules = new Set([
   'react',

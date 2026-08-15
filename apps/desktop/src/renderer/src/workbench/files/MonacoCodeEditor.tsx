@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as monaco from 'monaco-editor/editor/editor.api.js'
 import { createJavaScriptRegexEngine } from '@shikijs/engine-javascript'
-import { shikiToMonaco } from '@shikijs/monaco'
+import { shikiToMonaco, textmateThemeToMonacoTheme } from '@shikijs/monaco'
 import { createHighlighterCore } from 'shiki/core'
 import bash from 'shiki/langs/bash.mjs'
 import cpp from 'shiki/langs/cpp.mjs'
@@ -64,6 +64,16 @@ function prepareMonaco(): Promise<void> {
       }
     }
     shikiToMonaco(highlighter, monaco)
+    for (const themeName of ['light-plus', 'dark-plus'] as const) {
+      const converted = textmateThemeToMonacoTheme(highlighter.getTheme(themeName)) as unknown as monaco.editor.IStandaloneThemeData
+      monaco.editor.defineTheme(themeName, {
+        base: converted.base,
+        colors: converted.colors,
+        encodedTokensColors: converted.encodedTokensColors,
+        inherit: true,
+        rules: converted.rules,
+      })
+    }
     applyEditorTheme()
   })
   return highlighterPromise

@@ -654,13 +654,27 @@ export const TELOS_LAYOUT_CSS = `
   position: relative;
   min-height: 0;
   flex: 1;
-  overflow: hidden;
+  overflow: visible;
   background: var(--dsw-alias-bg-base);
 }
 
 .telos-monaco-editor {
   width: 100%;
   height: 100%;
+}
+
+/* Shiki supplies TextMate colors while Monaco owns transient editor chrome.
+   Keep hover labels readable even when a compact Shiki theme omits one of
+   Monaco's editorHoverWidget color tokens. */
+.monaco-hover.workbench-hover {
+  color: var(--vscode-editorHoverWidget-foreground, var(--dsw-alias-label-primary));
+  background: var(--vscode-editorHoverWidget-background, var(--dsw-alias-bg-layer-2));
+  border-color: var(--vscode-editorHoverWidget-border, var(--dsw-alias-border-l2));
+  box-shadow: 0 6px 18px rgb(0 0 0 / 16%);
+}
+
+.monaco-hover.workbench-hover .hover-contents {
+  opacity: 1;
 }
 
 .telos-monaco-status {

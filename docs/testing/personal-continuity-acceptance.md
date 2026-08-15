@@ -9,7 +9,7 @@ Runtime baseline: DSH `0.1.0-rc.5`, source commit
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Unit and integration tests | PASS | 72 tests: packages 23, plugins 13, desktop 34, scripts 2 |
+| Unit and integration tests | PASS | 75 tests: packages 23, plugins 16, desktop 34, scripts 2 |
 | TypeScript | PASS | `pnpm typecheck` |
 | Lint | PASS | `pnpm lint` |
 | Production build | PASS | `pnpm build` |
@@ -18,6 +18,7 @@ Runtime baseline: DSH `0.1.0-rc.5`, source commit
 | DSH provenance | PASS | gitlink, clean Submodule, fork origin, derivative hashes, licenses and notices |
 | DSH Web parity | PASS | 129 default rows; only `ui-sidebar` replaced; `telos-ui-sidebar` and `telos-continuity` are the two explained additions |
 | Source-built continuity smoke | PASS | Real DSH Web, Host RPC, Client module and Chromium UI; remember, recall, correct, candidate confirm, graph, receipts and forget |
+| Main-model memory formation | PASS | Real configured `DeepSeek-V4-Pro` route: durable constraint produced a reviewable candidate; one-turn test control produced no claim or retained source; both jobs completed once and scrubbed their payloads |
 | Packaged runtime smoke | PASS | Packaged Node ran DSH `0.1.0-rc.5`; packaged DSH Web loaded the continuity Client and returned schema 1 with SQLite integrity `ok` |
 | DMG integrity | PASS | `hdiutil verify` |
 | ZIP integrity | PASS | `unzip -tq` |
@@ -29,6 +30,14 @@ lease recovery, and four concurrent WAL writers. Credential-like content is
 rejected before its source is persisted. Physical deletion removes local Recall
 Pack plaintext while reporting any DSH session ranges that still require
 session deletion.
+
+The live formation check used the main conversation provider/model through the
+DSH LLM service, with the model-advertised `off` reasoning effort recorded in
+the action receipt. The positive case retained only the exact durable clause,
+not the adjacent one-turn tool instruction. The negative case returned the
+requested chat response while leaving both `memory_claim` and
+`source_episode` without the test marker. No API key or credential value was
+read into the evidence report.
 
 ## Local artifacts
 

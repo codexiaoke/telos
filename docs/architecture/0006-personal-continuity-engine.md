@@ -192,20 +192,31 @@ Continuity formation has three paths:
 
 1. explicit: memory tools and direct user corrections, applied immediately;
 2. deterministic: DSH action/tool receipts converted without an LLM;
-3. inferred: a bounded extractor proposes candidates after a completed turn.
+3. inferred: a bounded auxiliary call to the current main model proposes
+   candidates after a completed turn.
 
-The extractor receives a versioned JSON contract and cannot write the store.
-Core validates its output, resolves aliases, finds duplicate or contradictory
-claims, applies policy, then emits events transactionally. Failed extraction is
-recorded and retryable; it must never fail or delay the original DSH turn.
+The formation model receives a versioned JSON contract and cannot write the
+store. It uses the same provider and model selected for the completed DSH turn;
+when that exact model advertises a reasoning-off mode, the bounded auxiliary
+call uses it to avoid paying for conversation-grade reasoning. No tools are
+available to the formation call.
 
-V1 uses a deliberately conservative local extractor for direct first-person
-preferences, goals, decisions, instructions, constraints, and reminders. It
-requires no model or external service. Only matched snippets (at most six,
-240 characters each) are retained as evidence; the full turn is represented by
-a hash-only SourceEpisode. Inferred claims are restricted to the current
-workspace or session, reject credential-like content, and remain candidates
-until the user confirms, corrects, or revokes them in the continuity view.
+The model owns the semantic decision: whether a human statement is durable,
+what kind of memory it represents, and how it should be normalized. Temporary
+format/tool controls are ignored, but they do not erase an otherwise durable
+clause in the same message. Deterministic code is limited to enforcing the
+versioned shape, exact human-message evidence, current scope, size limits,
+credential rejection, and transactional policy. It does not use regular
+expressions to decide what the user meant.
+
+The completed human turn is held only in a retryable outbox job. On success the
+job payload is scrubbed; if the model selects durable content, only its exact
+bounded evidence excerpts are retained in a `dsh.llm-memory-formation`
+SourceEpisode. An empty model decision creates an auditable formation receipt
+without creating a SourceEpisode or claim. Inferred claims are restricted to
+the current workspace or session and always remain candidates until the user
+confirms, corrects, or revokes them in the continuity view. They never
+participate in normal recall merely because the model assigned high confidence.
 
 ## Retrieval and context assembly
 

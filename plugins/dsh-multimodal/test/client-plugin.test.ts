@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { apply, inject } from '../src/client/index.js'
-import { MultimodalSettingsSection } from '../src/client/MultimodalSettingsSection.js'
+import { MultimodalSettingsSection, routeValue } from '../src/client/MultimodalSettingsSection.js'
+import type { ModelCatalogEntry } from '../src/contracts.js'
 
 describe('multimodal Client plugin', () => {
   it('registers one additive Settings section', () => {
@@ -21,5 +22,20 @@ describe('multimodal Client plugin', () => {
     expect(registrations).toEqual([expect.objectContaining({
       name: 'settings.section', id: 'multimodal', order: 20, label: '多模态', component: MultimodalSettingsSection,
     })])
+  })
+
+  it('uses the same select value for a catalog entry and its persisted model route', () => {
+    const catalogEntry: ModelCatalogEntry = {
+      provider: 'qwen-dashscope',
+      model: 'qwen3.7-flash',
+      name: 'Qwen 3.7 Flash',
+      inputModalities: ['text', 'image'],
+    }
+
+    expect(routeValue(catalogEntry)).toBe(routeValue({
+      provider: catalogEntry.provider,
+      model: catalogEntry.model,
+    }))
+    expect(routeValue(catalogEntry)).toBe('{"provider":"qwen-dashscope","model":"qwen3.7-flash"}')
   })
 })

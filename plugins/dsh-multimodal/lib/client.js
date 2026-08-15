@@ -127,7 +127,7 @@ function installImageRouting(ctx, controller) {
 var import_react = require("react");
 var import_jsx_runtime = require("react/jsx-runtime");
 function routeValue(route) {
-  return route === void 0 ? "" : JSON.stringify(route);
+  return route === void 0 ? "" : JSON.stringify({ provider: route.provider, model: route.model });
 }
 function parseRouteValue(value) {
   if (value === "") return void 0;

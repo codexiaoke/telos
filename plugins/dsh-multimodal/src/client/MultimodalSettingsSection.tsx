@@ -9,8 +9,8 @@ import type { MultimodalClientController } from './controller.js'
 
 export interface MultimodalInjected { controller: MultimodalClientController }
 
-function routeValue(route: ModelRoute | undefined): string {
-  return route === undefined ? '' : JSON.stringify(route)
+export function routeValue(route: ModelRoute | undefined): string {
+  return route === undefined ? '' : JSON.stringify({ provider: route.provider, model: route.model })
 }
 
 function parseRouteValue(value: string): ModelRoute | undefined {

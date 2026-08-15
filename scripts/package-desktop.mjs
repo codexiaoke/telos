@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os'
 import { spawn, spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { corepackInvocation } from './corepack-invocation.mjs'
+import { assertRuntimeHasNoLinks, materializeRuntimeLinks } from './materialize-runtime-links.mjs'
 import { isStrictlyContained } from './path-containment.mjs'
+import { restoreDshWorkspaceClosure } from './stage-dsh-workspace-closure.mjs'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
 const desktopRoot = join(repositoryRoot, 'apps/desktop')
@@ -13,6 +15,7 @@ const distributionRoot = join(repositoryRoot, 'dist')
 const runtimeTarget = `${process.platform}-${process.arch}`
 const stageRoot = join(repositoryRoot, '.local/desktop-runtime', runtimeTarget)
 const nodeRoot = join(stageRoot, 'dsh-node')
+const deployableDshRoot = join(stageRoot, 'dsh-runtime')
 const nodeTarget = process.platform === 'win32'
   ? join(nodeRoot, 'node.exe')
   : join(nodeRoot, 'bin/node')
@@ -91,6 +94,33 @@ function stageStandaloneNode() {
   }
   writeFileSync(join(nodeRoot, 'TELOS_NODE_RUNTIME.json'), `${JSON.stringify(manifest, null, 2)}\n`)
   return manifest
+}
+
+function stageDeployableDshRuntime() {
+  run('corepack', [
+    'pnpm',
+    '--filter',
+    '@deepseek-ai/dsh',
+    'deploy',
+    '--legacy',
+    '--prod',
+    '--config.node-linker=hoisted',
+    '--config.auto-install-peers=false',
+    '--config.link-workspace-packages=true',
+    deployableDshRoot,
+  ], dshRoot, { ...process.env, CI: 'true' })
+
+  const workspaceClosure = restoreDshWorkspaceClosure(dshRoot, deployableDshRoot)
+  process.stdout.write(
+    `Staged ${String(workspaceClosure.closure.length)} DSH workspace runtime packages`
+      + ` (${String(workspaceClosure.restored.length)} restored legacy hoists)\n`,
+  )
+  materializeRuntimeLinks(join(deployableDshRoot, 'node_modules'))
+  assertRuntimeHasNoLinks(join(deployableDshRoot, 'node_modules'))
+  copyFileSync(join(dshRoot, 'LICENSE'), join(deployableDshRoot, 'LICENSE'))
+  copyFileSync(join(dshRoot, 'THIRD_PARTY_NOTICES.md'), join(deployableDshRoot, 'THIRD_PARTY_NOTICES.md'))
+  accessSync(join(deployableDshRoot, 'lib/bin.js'))
+  accessSync(join(deployableDshRoot, 'node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html'))
 }
 
 function packagedResourceCandidates() {
@@ -229,9 +259,10 @@ async function verifyPackagedRuntime(expectedManifest) {
   const packagedNode = process.platform === 'win32'
     ? join(resourcesDirectory, 'dsh-node/node.exe')
     : join(resourcesDirectory, 'dsh-node/bin/node')
-  const packagedCli = join(packagedDshRoot, 'apps/cli/lib/bin.js')
-  accessSync(join(packagedDshRoot, 'apps/web/dist/index.html'))
-  accessSync(join(packagedDshRoot, 'node_modules/.pnpm'))
+  const packagedCli = join(packagedDshRoot, 'lib/bin.js')
+  accessSync(join(packagedDshRoot, 'node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html'))
+  accessSync(join(packagedDshRoot, 'LICENSE'))
+  accessSync(join(packagedDshRoot, 'THIRD_PARTY_NOTICES.md'))
   accessSync(join(resourcesDirectory, 'dsh-node/LICENSE'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-ui-sidebar/telos.web.patch.yml'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-ui-layout/lib/client.js'))
@@ -254,6 +285,7 @@ async function verifyPackagedRuntime(expectedManifest) {
 assertSupportedNode()
 assertRuntimeBuilt()
 const stagedRuntimeManifest = stageStandaloneNode()
+stageDeployableDshRuntime()
 
 run('corepack', ['pnpm', 'build'], repositoryRoot)
 

@@ -38,13 +38,12 @@ dmg:
   sign: false
 
 win:
-  # The complete DSH runtime makes the unpacked app larger than standard NSIS
-  # can safely embed. The web installer and its payload are published together
-  # on GitHub Releases, so no paid download service is required.
+  # The packaged DSH closure is production-only and symlink-free, so standard
+  # NSIS can provide a complete offline installer without a paid certificate.
   target:
-    - nsis-web
+    - nsis
 
-nsisWeb:
+nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true

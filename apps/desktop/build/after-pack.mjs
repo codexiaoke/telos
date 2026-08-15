@@ -36,8 +36,8 @@ function dirnameForDestination(destination) {
   throw new Error(`Unable to identify packaged Resources directory for ${destination}`)
 }
 
-function dshRuntimeFilter(source) {
-  const relativePath = relative(join(repositoryRoot, 'third_party/deepseek-harness'), source)
+function dshRuntimeFilter(source, dshRoot) {
+  const relativePath = relative(dshRoot, source)
   const segments = relativePath.split(sep)
   if (segments.some(segment => excludedDirectoryNames.has(segment))) return false
   const name = segments.at(-1) ?? ''
@@ -51,11 +51,11 @@ export default async function afterPack(context) {
   }
 
   const resourcesDirectory = context.packager.getResourcesDir(context.appOutDir)
-  const dshRoot = join(repositoryRoot, 'third_party/deepseek-harness')
+  const dshRoot = join(repositoryRoot, '.local/desktop-runtime', runtimeTarget, 'dsh-runtime')
   const overlaysRoot = join(repositoryRoot, 'integrations/dsh/plugins')
   const nodeRoot = join(repositoryRoot, '.local/desktop-runtime', runtimeTarget, 'dsh-node')
 
-  copyResource(dshRoot, join(resourcesDirectory, 'dsh-runtime'), dshRuntimeFilter)
+  copyResource(dshRoot, join(resourcesDirectory, 'dsh-runtime'), source => dshRuntimeFilter(source, dshRoot))
   copyResource(join(overlaysRoot, 'telos-ui-sidebar'), join(resourcesDirectory, 'dsh-overlays/telos-ui-sidebar'))
   copyResource(join(overlaysRoot, 'telos-ui-layout'), join(resourcesDirectory, 'dsh-overlays/telos-ui-layout'))
   copyResource(join(repositoryRoot, 'plugins/dsh-continuity'), join(resourcesDirectory, 'dsh-overlays/telos-continuity'))

@@ -124,6 +124,25 @@ describe('ContinuityGateway', () => {
     })
   })
 
+  it('rejects credential-like content before persisting its source episode', async () => {
+    const { gateway, store } = fixture()
+    const rejected = await gateway.handle('memory/remember', rememberPayload('credential', {
+      objectValue: 'sk-abcdefghijk',
+      source: {
+        sourceKind: 'telos.test',
+        sourceInstanceId: 'credential-source',
+        content: 'API key sk-abcdefghijk',
+      },
+    }))
+
+    expect(rejected).toMatchObject({
+      ok: false,
+      error: { code: 'bad-request', message: 'credentials and secrets cannot be stored in Telos continuity' },
+    })
+    expect(store.listSourceEpisodes()).toEqual([])
+    expect(store.listClaims()).toEqual([])
+  })
+
   it('requires an explicit user confirmation to promote an inferred candidate', async () => {
     const { gateway } = fixture()
     const candidate = await gateway.handle('memory/remember', rememberPayload('candidate', { status: 'candidate' }))

@@ -1771,6 +1771,7 @@ var CLAIM_KINDS2 = ["semantic", "episodic", "procedural", "prospective", "constr
 var CLAIM_STATUSES = ["candidate", "confirmed", "superseded", "contradicted", "revoked", "expired"];
 var SENSITIVITIES = ["personal", "sensitive", "secret"];
 var ENTITY_KINDS = ["person", "workspace", "project", "topic", "goal", "commitment", "decision", "constraint", "preference", "artifact"];
+var CREDENTIAL_PATTERN = /(?:api[ _-]?key|password|passwd|secret|access[ _-]?token|refresh[ _-]?token|private[ _-]?key|密码|口令|密钥|令牌|sk-[a-z0-9_-]{8,})/iu;
 function record2(value, field = "payload") {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`${field} must be an object`);
   return value;
@@ -1896,6 +1897,12 @@ function listClaimsCommand(value) {
     limit: optionalNumber(input.limit, "limit")
   };
 }
+function assertNoCredentialContent(command) {
+  const content = [command.statement, command.objectValue, command.source.content].filter(Boolean).join("\n");
+  if (CREDENTIAL_PATTERN.test(content)) {
+    throw new TypeError("credentials and secrets cannot be stored in Telos continuity");
+  }
+}
 function success(value) {
   return { ok: true, value };
 }
@@ -1942,6 +1949,7 @@ var ContinuityGateway = class {
     };
   }
   remember(command) {
+    assertNoCredentialContent(command);
     const episode = this.store.createSourceEpisode(command.source);
     return this.store.remember({
       kind: command.kind,
@@ -1962,6 +1970,7 @@ var ContinuityGateway = class {
     });
   }
   correct(command) {
+    assertNoCredentialContent(command);
     const episode = this.store.createSourceEpisode(command.source);
     return this.store.correct({
       claimId: command.claimId,

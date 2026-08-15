@@ -24,6 +24,7 @@ const CLAIM_KINDS: readonly ClaimKind[] = ['semantic', 'episodic', 'procedural',
 const CLAIM_STATUSES: readonly ClaimStatus[] = ['candidate', 'confirmed', 'superseded', 'contradicted', 'revoked', 'expired']
 const SENSITIVITIES: readonly Sensitivity[] = ['personal', 'sensitive', 'secret']
 const ENTITY_KINDS: readonly EntityKind[] = ['person', 'workspace', 'project', 'topic', 'goal', 'commitment', 'decision', 'constraint', 'preference', 'artifact']
+const CREDENTIAL_PATTERN = /(?:api[ _-]?key|password|passwd|secret|access[ _-]?token|refresh[ _-]?token|private[ _-]?key|密码|口令|密钥|令牌|sk-[a-z0-9_-]{8,})/iu
 
 type RecordValue = Record<string, unknown>
 
@@ -171,6 +172,13 @@ function listClaimsCommand(value: unknown): ListClaimsCommand {
   }
 }
 
+function assertNoCredentialContent(command: RememberCommand): void {
+  const content = [command.statement, command.objectValue, command.source.content].filter(Boolean).join('\n')
+  if (CREDENTIAL_PATTERN.test(content)) {
+    throw new TypeError('credentials and secrets cannot be stored in Telos continuity')
+  }
+}
+
 function success<T>(value: T): ContinuityRpcResult<T> {
   return { ok: true, value }
 }
@@ -230,6 +238,7 @@ export class ContinuityGateway {
   }
 
   remember(command: RememberCommand) {
+    assertNoCredentialContent(command)
     const episode = this.store.createSourceEpisode(command.source)
     return this.store.remember({
       kind: command.kind,
@@ -251,6 +260,7 @@ export class ContinuityGateway {
   }
 
   correct(command: CorrectCommand) {
+    assertNoCredentialContent(command)
     const episode = this.store.createSourceEpisode(command.source)
     return this.store.correct({
       claimId: command.claimId,

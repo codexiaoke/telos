@@ -34,6 +34,7 @@ import yaml from 'shiki/langs/yaml.mjs'
 import darkPlus from 'shiki/themes/dark-plus.mjs'
 import lightPlus from 'shiki/themes/light-plus.mjs'
 import { languageForPath } from './editor-language'
+import './monaco-contributions'
 
 const EDITOR_LANGUAGES = [
   bash, cpp, csharp, css, diff, dockerfile, go, html, ini, java, javascript, json, jsonc, jsx,
@@ -103,6 +104,11 @@ export function MonacoCodeEditor({ content, onChange, onSave, openPaths, path }:
     if (!ready || hostRef.current === null || editorRef.current !== undefined) return
     const editor = monaco.editor.create(hostRef.current, {
       automaticLayout: true,
+      bracketPairColorization: { enabled: true, independentColorPoolPerBracketType: true },
+      cursorSmoothCaretAnimation: 'on',
+      find: { addExtraSpaceOnTop: false, autoFindInSelection: 'multiline', seedSearchStringFromSelection: 'always' },
+      folding: true,
+      foldingHighlight: true,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
       fontSize: 13,
       lineHeight: 21,
@@ -110,6 +116,7 @@ export function MonacoCodeEditor({ content, onChange, onSave, openPaths, path }:
       padding: { top: 12, bottom: 24 },
       renderWhitespace: 'selection',
       scrollBeyondLastLine: false,
+      showFoldingControls: 'mouseover',
       smoothScrolling: true,
       tabSize: 2,
       theme: isDarkTheme() ? 'dark-plus' : 'light-plus',

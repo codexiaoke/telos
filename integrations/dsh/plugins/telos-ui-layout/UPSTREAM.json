@@ -48,7 +48,7 @@
     }
   ],
   "generated": "integrations/dsh/plugins/telos-ui-layout/lib/client.js",
-  "generatedSha256": "f47dde569f3b64e9f1cd3dc3cf97cff210356953eda983595928ef5c3afeaf61",
+  "generatedSha256": "27ebbbd02ae7e0eb44aeccef279e69045450a2b543da1599a1372c0d7bbf3e08",
   "externalModules": [
     "react",
     "react/jsx-runtime",

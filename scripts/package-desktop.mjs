@@ -50,6 +50,9 @@ function assertRuntimeBuilt() {
     join(repositoryRoot, 'plugins/dsh-mcp-manager/lib/index.js'),
     join(repositoryRoot, 'plugins/dsh-mcp-manager/lib/client.js'),
     join(repositoryRoot, 'plugins/dsh-mcp-manager/lib/BUILD.json'),
+    join(repositoryRoot, 'plugins/dsh-multimodal/lib/index.js'),
+    join(repositoryRoot, 'plugins/dsh-multimodal/lib/client.js'),
+    join(repositoryRoot, 'plugins/dsh-multimodal/lib/BUILD.json'),
     join(repositoryRoot, 'plugins/dsh-workbench-files/lib/index.js'),
     join(repositoryRoot, 'plugins/dsh-workbench-files/lib/BUILD.json'),
   ]
@@ -139,6 +142,7 @@ async function smokePackagedDshWeb(resourcesDirectory, packagedDshRoot, packaged
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-ui-layout'), profileModules, '@deepseek-ai/dsh-client-ui-layout')
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-continuity'), profileModules, '@telos/dsh-continuity')
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager'), profileModules, '@telos/dsh-mcp-manager')
+    installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-multimodal'), profileModules, '@telos/dsh-multimodal')
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-workbench-files'), profileModules, '@telos/dsh-workbench-files')
     const output = { value: '' }
     child = spawn(packagedNode, [packagedCli, 'web', '--patch', patchPath, '--port', '0'], {
@@ -149,7 +153,7 @@ async function smokePackagedDshWeb(resourcesDirectory, packagedDshRoot, packaged
     const baseUrl = await waitForWebReady(child, output)
     const indexResponse = await fetch(baseUrl, { signal: AbortSignal.timeout(5_000) })
     const indexHtml = await indexResponse.text()
-    if (!indexResponse.ok || !indexHtml.includes('"@telos/dsh-continuity"') || !indexHtml.includes('"@telos/dsh-mcp-manager"')) {
+    if (!indexResponse.ok || !indexHtml.includes('"@telos/dsh-continuity"') || !indexHtml.includes('"@telos/dsh-mcp-manager"') || !indexHtml.includes('"@telos/dsh-multimodal"')) {
       throw new Error(`Packaged DSH Web omitted a Telos Client module (${String(indexResponse.status)})`)
     }
     const response = await fetch(`${baseUrl}/telos-continuity/health`, {
@@ -206,6 +210,8 @@ async function verifyPackagedRuntime(expectedManifest) {
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-continuity/lib/client.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager/lib/index.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager/lib/client.js'))
+  accessSync(join(resourcesDirectory, 'dsh-overlays/telos-multimodal/lib/index.js'))
+  accessSync(join(resourcesDirectory, 'dsh-overlays/telos-multimodal/lib/client.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-workbench-files/lib/index.js'))
   accessSync(packagedNode)
   accessSync(packagedCli)

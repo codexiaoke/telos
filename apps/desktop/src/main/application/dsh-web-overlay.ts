@@ -8,6 +8,7 @@ const DSH_LAYOUT_PACKAGE = '@deepseek-ai/dsh-client-ui-layout'
 const TELOS_SIDEBAR_PACKAGE = '@telos/dsh-client-ui-sidebar'
 const TELOS_CONTINUITY_PACKAGE = '@telos/dsh-continuity'
 const TELOS_MCP_MANAGER_PACKAGE = '@telos/dsh-mcp-manager'
+const TELOS_MULTIMODAL_PACKAGE = '@telos/dsh-multimodal'
 const TELOS_WORKBENCH_FILES_PACKAGE = '@telos/dsh-workbench-files'
 
 export interface TelosDshWebOverlaySources {
@@ -15,6 +16,7 @@ export interface TelosDshWebOverlaySources {
   layoutPackageRoot: string
   continuityPackageRoot: string
   mcpManagerPackageRoot: string
+  multimodalPackageRoot: string
   workbenchFilesPackageRoot: string
 }
 
@@ -86,11 +88,13 @@ export function prepareTelosDshWebPatch(
   removeLegacyFlatPackage(dshHome, DSH_LAYOUT_PACKAGE)
   removeLegacyFlatPackage(dshHome, TELOS_CONTINUITY_PACKAGE)
   removeLegacyFlatPackage(dshHome, TELOS_MCP_MANAGER_PACKAGE)
+  removeLegacyFlatPackage(dshHome, TELOS_MULTIMODAL_PACKAGE)
   removeLegacyFlatPackage(dshHome, TELOS_WORKBENCH_FILES_PACKAGE)
   installProfilePackage(dshHome, sources.sidebarPackageRoot, TELOS_SIDEBAR_PACKAGE, ['lib/client.js'])
   installProfilePackage(dshHome, sources.layoutPackageRoot, DSH_LAYOUT_PACKAGE, ['lib/client.js'])
   installProfilePackage(dshHome, sources.continuityPackageRoot, TELOS_CONTINUITY_PACKAGE, ['lib/index.js', 'lib/client.js'])
   installProfilePackage(dshHome, sources.mcpManagerPackageRoot, TELOS_MCP_MANAGER_PACKAGE, ['lib/index.js', 'lib/client.js'])
+  installProfilePackage(dshHome, sources.multimodalPackageRoot, TELOS_MULTIMODAL_PACKAGE, ['lib/index.js', 'lib/client.js'])
   installProfilePackage(dshHome, sources.workbenchFilesPackageRoot, TELOS_WORKBENCH_FILES_PACKAGE, ['lib/index.js'])
 
   mkdirSync(dshHome, { recursive: true })

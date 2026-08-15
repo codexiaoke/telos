@@ -46,6 +46,14 @@ const continuityBuild = spawnSync('corepack', ['pnpm', '--filter', '@telos/dsh-c
 if (continuityBuild.error) throw continuityBuild.error
 if (continuityBuild.status !== 0) process.exit(continuityBuild.status ?? 1)
 
+const multimodalBuild = spawnSync('corepack', ['pnpm', '--filter', '@telos/dsh-multimodal', 'build'], {
+  cwd: repositoryRoot,
+  env: process.env,
+  stdio: 'inherit',
+})
+if (multimodalBuild.error) throw multimodalBuild.error
+if (multimodalBuild.status !== 0) process.exit(multimodalBuild.status ?? 1)
+
 const workbenchBuild = spawnSync('corepack', ['pnpm', '--filter', '@telos/dsh-workbench-files', 'build'], {
   cwd: repositoryRoot,
   env: process.env,
@@ -66,6 +74,9 @@ accessSync(resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-layout/UPS
 accessSync(resolve(repositoryRoot, 'plugins/dsh-continuity/lib/index.js'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-continuity/lib/client.js'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-continuity/lib/BUILD.json'))
+accessSync(resolve(repositoryRoot, 'plugins/dsh-multimodal/lib/index.js'))
+accessSync(resolve(repositoryRoot, 'plugins/dsh-multimodal/lib/client.js'))
+accessSync(resolve(repositoryRoot, 'plugins/dsh-multimodal/lib/BUILD.json'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-workbench-files/lib/index.js'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-workbench-files/lib/BUILD.json'))
 process.stdout.write('DSH source runtime and complete Web application are built and ready.\n')

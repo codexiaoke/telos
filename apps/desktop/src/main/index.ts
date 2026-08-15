@@ -10,6 +10,7 @@ import {
   resolveDshSourceRoot,
   resolveTelosDshContinuityPackageRoot,
   resolveTelosDshMcpManagerPackageRoot,
+  resolveTelosDshMultimodalPackageRoot,
   resolveTelosDshWorkbenchFilesPackageRoot,
   resolveTelosDshLayoutPackageRoot,
   resolveTelosDshSidebarPackageRoot,
@@ -145,6 +146,7 @@ async function startApplication(): Promise<void> {
     layoutPackageRoot: resolveTelosDshLayoutPackageRoot(),
     continuityPackageRoot: resolveTelosDshContinuityPackageRoot(),
     mcpManagerPackageRoot: resolveTelosDshMcpManagerPackageRoot(),
+    multimodalPackageRoot: resolveTelosDshMultimodalPackageRoot(),
     workbenchFilesPackageRoot: resolveTelosDshWorkbenchFilesPackageRoot(),
   })
   dshWeb = new DshWebSupervisor({

@@ -12,6 +12,7 @@ const sidebarRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-s
 const layoutRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-layout')
 const continuityRoot = resolve(repositoryRoot, 'plugins/dsh-continuity')
 const mcpManagerRoot = resolve(repositoryRoot, 'plugins/dsh-mcp-manager')
+const multimodalRoot = resolve(repositoryRoot, 'plugins/dsh-multimodal')
 const workbenchFilesRoot = resolve(repositoryRoot, 'plugins/dsh-workbench-files')
 const patchPath = resolve(sidebarRoot, 'telos.web.patch.yml')
 const temporaryRoot = mkdtempSync(join(tmpdir(), 'telos-dsh-parity-'))
@@ -74,6 +75,10 @@ try {
     resolve(mcpManagerRoot, 'lib/index.js'),
     resolve(mcpManagerRoot, 'lib/client.js'),
     resolve(mcpManagerRoot, 'lib/BUILD.json'),
+    resolve(multimodalRoot, 'package.json'),
+    resolve(multimodalRoot, 'lib/index.js'),
+    resolve(multimodalRoot, 'lib/client.js'),
+    resolve(multimodalRoot, 'lib/BUILD.json'),
     resolve(workbenchFilesRoot, 'package.json'),
     resolve(workbenchFilesRoot, 'lib/index.js'),
     resolve(workbenchFilesRoot, 'lib/BUILD.json'),
@@ -108,12 +113,14 @@ try {
   const installedLayout = resolve(profileRoot, 'node_modules/@deepseek-ai/dsh-client-ui-layout')
   const installedContinuity = resolve(profileRoot, 'node_modules/@telos/dsh-continuity')
   const installedMcpManager = resolve(profileRoot, 'node_modules/@telos/dsh-mcp-manager')
+  const installedMultimodal = resolve(profileRoot, 'node_modules/@telos/dsh-multimodal')
   const installedWorkbenchFiles = resolve(profileRoot, 'node_modules/@telos/dsh-workbench-files')
   mkdirSync(resolve(profileRoot, 'node_modules/@deepseek-ai'), { recursive: true })
   mkdirSync(resolve(profileRoot, 'node_modules/@telos'), { recursive: true })
   cpSync(layoutRoot, installedLayout, { recursive: true })
   cpSync(continuityRoot, installedContinuity, { recursive: true })
   cpSync(mcpManagerRoot, installedMcpManager, { recursive: true })
+  cpSync(multimodalRoot, installedMultimodal, { recursive: true })
   cpSync(workbenchFilesRoot, installedWorkbenchFiles, { recursive: true })
   const profileAnchor = resolve(profileRoot, 'cordis.yml')
   writeFileSync(profileAnchor, '')
@@ -132,6 +139,11 @@ try {
   assert(
     realpathSync(resolvedMcpManagerManifest) === realpathSync(resolve(installedMcpManager, 'package.json')),
     `Profile-local MCP manager plugin does not win package resolution: ${resolvedMcpManagerManifest}`,
+  )
+  const resolvedMultimodalManifest = profileRequire.resolve('@telos/dsh-multimodal/package.json')
+  assert(
+    realpathSync(resolvedMultimodalManifest) === realpathSync(resolve(installedMultimodal, 'package.json')),
+    `Profile-local multimodal plugin does not win package resolution: ${resolvedMultimodalManifest}`,
   )
   const resolvedWorkbenchFilesManifest = profileRequire.resolve('@telos/dsh-workbench-files/package.json')
   assert(
@@ -186,7 +198,7 @@ try {
     .map((row) => row.id)
     .filter((id) => !defaultById.has(id))
   assert(
-    isDeepStrictEqual(addedIds, ['telos-ui-sidebar', 'telos-continuity', 'telos-mcp-manager', 'telos-workbench-files']),
+    isDeepStrictEqual(addedIds, ['telos-ui-sidebar', 'telos-continuity', 'telos-mcp-manager', 'telos-multimodal', 'telos-workbench-files']),
     `unexpected Telos-only rows: ${addedIds.join(', ')}`,
   )
   const telosSidebar = effectiveById.get('telos-ui-sidebar')
@@ -218,6 +230,15 @@ try {
     }),
     'Telos MCP manager storage configuration changed',
   )
+  const telosMultimodal = effectiveById.get('telos-multimodal')
+  assert(telosMultimodal?.name === '@telos/dsh-multimodal', 'Telos multimodal package name changed')
+  assert(telosMultimodal.disabled !== true, 'Telos multimodal plugin is disabled')
+  assert(
+    isDeepStrictEqual(telosMultimodal.config, {
+      storePath: { javascriptSource: "dshHomePath('telos', 'multimodal-settings.json')" },
+    }),
+    'Telos multimodal storage configuration changed',
+  )
   const telosWorkbenchFiles = effectiveById.get('telos-workbench-files')
   assert(telosWorkbenchFiles?.name === '@telos/dsh-workbench-files', 'Telos workbench files package name changed')
   assert(telosWorkbenchFiles.disabled !== true, 'Telos workbench files plugin is disabled')
@@ -243,9 +264,20 @@ try {
     ]),
     'MCP manager Client dependency edges changed',
   )
+  const multimodalManifest = JSON.parse(readFileSync(resolve(multimodalRoot, 'package.json'), 'utf8'))
+  assert(multimodalManifest.name === '@telos/dsh-multimodal', 'multimodal manifest identity changed')
+  assert(multimodalManifest.private === true, 'multimodal package must stay private')
   assert(
-    effectiveRows.length === defaultRows.length + 4,
-    `expected ${String(defaultRows.length + 4)} effective rows, found ${String(effectiveRows.length)}`,
+    isDeepStrictEqual(multimodalManifest.dsh?.client?.inject, [
+      '@deepseek-ai/dsh-client-connection',
+      '@deepseek-ai/dsh-client-runtime',
+      '@deepseek-ai/dsh-client-ui-settings',
+    ]),
+    'multimodal Client dependency edges changed',
+  )
+  assert(
+    effectiveRows.length === defaultRows.length + 5,
+    `expected ${String(defaultRows.length + 5)} effective rows, found ${String(effectiveRows.length)}`,
   )
 
   // Reading the tracked file here makes the same patch consumed by Electron
@@ -253,12 +285,13 @@ try {
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-ui-sidebar'), 'tracked patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-continuity'), 'tracked continuity patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-mcp-manager'), 'tracked MCP manager patch is incomplete')
+  assert(readFileSync(patchPath, 'utf8').includes('id: telos-multimodal'), 'tracked multimodal patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-workbench-files'), 'tracked workbench files patch is incomplete')
 
   process.stdout.write(`[PASS] DSH default Web rows: ${String(defaultRows.length)}\n`)
   process.stdout.write(`[PASS] Unchanged upstream rows: ${String(defaultRows.length - 1)}\n`)
   process.stdout.write('[PASS] Explained upstream delta: ui-sidebar disabled\n')
-  process.stdout.write('[PASS] Explained Telos additions: sidebar, continuity, MCP manager, and workbench files enabled\n')
+  process.stdout.write('[PASS] Explained Telos additions: sidebar, continuity, MCP manager, multimodal settings, and workbench files enabled\n')
   process.stdout.write('[PASS] Profile resolves the Telos Renderer derivative and all Telos Host plugins\n')
   process.stdout.write(`[PASS] Required functional surfaces: ${String(requiredSurfaceIds.length)}\n`)
   process.stdout.write('Telos effective DSH Web composition is structurally equivalent to the pinned default.\n')

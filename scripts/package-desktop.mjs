@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { spawn, spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { corepackInvocation } from './corepack-invocation.mjs'
+import { isStrictlyContained } from './path-containment.mjs'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
 const desktopRoot = join(repositoryRoot, 'apps/desktop')
@@ -67,7 +68,7 @@ function assertRuntimeBuilt() {
 
 function stageStandaloneNode() {
   const allowedRoot = join(repositoryRoot, '.local/desktop-runtime')
-  if (!stageRoot.startsWith(`${allowedRoot}/`) && stageRoot !== allowedRoot) {
+  if (!isStrictlyContained(allowedRoot, stageRoot)) {
     throw new Error(`Refusing to replace unexpected staging directory: ${stageRoot}`)
   }
 

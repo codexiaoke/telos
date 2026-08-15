@@ -1,0 +1,6 @@
+{
+  "package": "@telos/dsh-work-report",
+  "version": "0.1.0",
+  "dshCompatibility": "0.1.0-rc.5",
+  "entry": "lib/index.js"
+}

@@ -7,7 +7,7 @@ import {
   formMemoriesWithMainModel,
   MEMORY_FORMATION_SYSTEM_PROMPT,
   parseMemoryFormationOutput,
-  type FormedMemoryProposal,
+  type FormedMemoryEvent,
 } from '../src/formation.js'
 import { processInferenceJobs } from '../src/formation-worker.js'
 import { ContinuityGateway } from '../src/gateway.js'
@@ -21,11 +21,16 @@ const POLICY = {
 } as const
 
 const POSITIVE_OUTPUT = JSON.stringify({
-  schemaVersion: 1,
-  proposals: [{
+  schemaVersion: 2,
+  decision: 'remember',
+  reason: '用户陈述了跨会话稳定偏好',
+  entities: [],
+  events: [{
     kind: 'semantic',
     statement: '用户长期偏好简洁且有证据的回答',
     predicate: 'preference.answer_style',
+    subjectEntityRef: 'owner',
+    objectEntityRef: null,
     objectValue: '简洁且有证据',
     confidence: 0.91,
     importance: 0.72,
@@ -34,6 +39,34 @@ const POSITIVE_OUTPUT = JSON.stringify({
     durability: 'cross-session',
     validFrom: null,
     validTo: null,
+  }],
+})
+
+const VISIT_OUTPUT = JSON.stringify({
+  schemaVersion: 2,
+  decision: 'remember',
+  reason: '这是会影响后续安排的具体家庭来访事件',
+  entities: [{
+    ref: 'father',
+    kind: 'person',
+    canonicalName: '爸爸',
+    aliases: [],
+    evidence: '爸爸明天来我家',
+  }],
+  events: [{
+    kind: 'prospective',
+    statement: '爸爸将于 2026-08-16 来用户家',
+    predicate: 'person.visits_home_of',
+    subjectEntityRef: 'father',
+    objectEntityRef: 'owner',
+    objectValue: null,
+    confidence: 0.94,
+    importance: 0.78,
+    sensitivity: 'personal',
+    evidence: '爸爸明天来我家',
+    durability: 'cross-session',
+    validFrom: '2026-08-16T00:00:00+08:00',
+    validTo: '2026-08-16T23:59:59.999+08:00',
   }],
 })
 
@@ -83,6 +116,10 @@ function jobPayload(text: string, suffix: string): Record<string, unknown> {
     workspaceId: 'workspace-a',
     turn: 1,
     messages: [{ seq: 2, text }],
+    assistantMessages: [{ seq: 4, text: '我会结合这个信息继续帮你安排。' }],
+    referenceTime: '2026-08-15T04:00:00.000Z',
+    timeZone: 'Asia/Shanghai',
+    locale: 'zh-CN',
     route: { provider: 'main-provider', model: 'main-model', reasoningEffort: 'high' },
     policy: POLICY,
     contentHash: `hash-${suffix}`,
@@ -104,6 +141,10 @@ describe('main-model memory formation', () => {
     const result = await formMemoriesWithMainModel(ctx, {
       sessionId: 'session-a',
       messages: [{ seq: 2, text: '我长期偏好简洁且有证据的回答。' }],
+      assistantMessages: [{ seq: 4, text: '好的，我会保持简洁。' }],
+      referenceTime: '2026-08-15T04:00:00.000Z',
+      timeZone: 'Asia/Shanghai',
+      locale: 'zh-CN',
       scope: { type: 'workspace', id: 'workspace-a' },
       route: { provider: 'main-provider', model: 'main-model', reasoningEffort: 'high' },
       policy: POLICY,
@@ -111,10 +152,10 @@ describe('main-model memory formation', () => {
 
     expect(result).toMatchObject({
       route: { provider: 'main-provider', model: 'main-model', reasoningEffort: 'off' },
-      proposals: [{
+      events: [{
         predicate: 'preference.answer_style',
         evidence: '我长期偏好简洁且有证据的回答',
-        scope: { type: 'workspace', id: 'workspace-a' },
+        subjectEntityRef: 'owner',
       }],
     })
     expect(adapter.requests).toHaveLength(1)
@@ -126,28 +167,50 @@ describe('main-model memory formation', () => {
     })
     expect(adapter.requests[0]).not.toHaveProperty('tools')
     expect(adapter.requests[0]?.system).toBe(MEMORY_FORMATION_SYSTEM_PROMPT)
-    expect(MEMORY_FORMATION_SYSTEM_PROMPT).toContain('Ignore temporary clauses instead of discarding an otherwise durable message')
+    expect(MEMORY_FORMATION_SYSTEM_PROMPT).toContain('concrete time-bounded events')
     const request = adapter.requests[0]?.messages[0]?.content[0]
     expect(request?.type === 'text' && request.text).toContain('我长期偏好简洁且有证据的回答')
+    expect(request?.type === 'text' && request.text).toContain('Asia/Shanghai')
+    expect(request?.type === 'text' && request.text).toContain('好的，我会保持简洁')
   })
 
   it('accepts an explicit no-memory result for temporary controls and test prompts', async () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
-    const adapter = new RecordingAdapter('{"schemaVersion":1,"proposals":[]}')
+    const adapter = new RecordingAdapter('{"schemaVersion":2,"decision":"ignore","reason":"仅为本轮测试控制","entities":[],"events":[]}')
     ctx.llm.registerAdapter(['main-provider'], adapter)
 
     const result = await formMemoriesWithMainModel(ctx, {
       sessionId: 'session-test',
       messages: [{ seq: 8, text: '这是一次真实模型链路测试。不要调用任何工具，请只回复：TELOS_LIVE_OK' }],
+      referenceTime: '2026-08-15T04:00:00.000Z',
+      timeZone: 'Asia/Shanghai',
+      locale: 'zh-CN',
       scope: { type: 'workspace', id: 'workspace-a' },
       route: { provider: 'main-provider', model: 'main-model' },
       policy: POLICY,
     })
 
-    expect(result.proposals).toEqual([])
+    expect(result.events).toEqual([])
     expect(adapter.requests).toHaveLength(1)
-    expect(MEMORY_FORMATION_SYSTEM_PROMPT).toContain('whose entire meaning is temporary')
+    expect(result.decision).toBe('ignore')
+  })
+
+  it('forms a person node and local-day prospective edge from a family visit', () => {
+    const result = parseMemoryFormationOutput(VISIT_OUTPUT, {
+      messages: [{ seq: 2, text: '爸爸明天来我家' }],
+      scope: { type: 'workspace', id: 'workspace-a' },
+    })
+    expect(result.entities).toEqual([expect.objectContaining({
+      ref: 'father', kind: 'person', canonicalName: '爸爸', evidence: '爸爸明天来我家',
+    })])
+    expect(result.events).toEqual([expect.objectContaining({
+      kind: 'prospective',
+      subjectEntityRef: 'father',
+      objectEntityRef: 'owner',
+      validFrom: '2026-08-16T00:00:00+08:00',
+      validTo: '2026-08-16T23:59:59.999+08:00',
+    })])
   })
 
   it('rejects hallucinated evidence, non-durable shapes and credential-like content', () => {
@@ -157,17 +220,19 @@ describe('main-model memory formation', () => {
     }
     expect(() => parseMemoryFormationOutput(POSITIVE_OUTPUT, input)).toThrow(/exact human-message substring/)
     expect(() => parseMemoryFormationOutput(JSON.stringify({
-      schemaVersion: 1,
-      proposals: [{
+      schemaVersion: 2, decision: 'remember', reason: 'test', entities: [],
+      events: [{
         kind: 'semantic', statement: '测试', predicate: 'preference.test', objectValue: '测试',
+        subjectEntityRef: 'owner', objectEntityRef: null,
         confidence: 0.9, importance: 0.5, sensitivity: 'personal', evidence: '我长期喜欢喝咖啡',
         durability: 'ephemeral', validFrom: null, validTo: null,
       }],
     }), input)).toThrow(/durability must be cross-session/)
     expect(() => parseMemoryFormationOutput(JSON.stringify({
-      schemaVersion: 1,
-      proposals: [{
+      schemaVersion: 2, decision: 'remember', reason: 'test', entities: [],
+      events: [{
         kind: 'semantic', statement: '用户的 API key', predicate: 'account.api_key', objectValue: 'sk-abcdefghijk',
+        subjectEntityRef: 'owner', objectEntityRef: null,
         confidence: 0.9, importance: 0.5, sensitivity: 'personal', evidence: '我的 API key 是 sk-abcdefghijk',
         durability: 'cross-session', validFrom: null, validTo: null,
       }],
@@ -184,13 +249,16 @@ describe('asynchronous formation worker', () => {
     const prompt = '我长期偏好简洁且有证据的回答。'
     const job = store.enqueue('infer-turn-candidates', jobPayload(prompt, 'positive'), 'infer:positive')
     const unrelatedJob = store.enqueue('unrelated-job', {}, 'unrelated')
-    const proposal = parseMemoryFormationOutput(POSITIVE_OUTPUT, {
+    const formation = parseMemoryFormationOutput(POSITIVE_OUTPUT, {
       messages: [{ seq: 2, text: prompt }],
       scope: { type: 'workspace', id: 'workspace-a' },
-    })[0]!
+    })
 
     await expect(processInferenceJobs(gateway, {
-      form: input => Promise.resolve({ route: { ...input.route, reasoningEffort: 'off' }, proposals: [proposal] }),
+      form: input => Promise.resolve({
+        route: { ...input.route, reasoningEffort: 'off' },
+        ...formation,
+      }),
     })).resolves.toEqual({
       claimed: 1,
       completed: 1,
@@ -211,6 +279,7 @@ describe('asynchronous formation worker', () => {
       provider: 'main-provider/main-model#off',
       result: 'succeeded',
     })])
+    expect(store.listEntities({ kinds: ['preference'] })).toEqual([])
     expect(store.claimOutbox(10, 60_000, 'infer-turn-candidates')).toEqual([])
     expect(store.getOutbox(job.id)).toMatchObject({ status: 'completed', payload: {} })
     expect(store.claimOutbox(10, 60_000, 'unrelated-job')).toEqual([expect.objectContaining({ id: unrelatedJob.id })])
@@ -221,11 +290,48 @@ describe('asynchronous formation worker', () => {
     store.enqueue('infer-turn-candidates', jobPayload('不要调用任何工具，请只回复 TELOS_OK', 'negative'), 'infer:negative')
 
     await processInferenceJobs(gateway, {
-      form: input => Promise.resolve({ route: input.route, proposals: [] as FormedMemoryProposal[] }),
+      form: input => Promise.resolve({
+        route: input.route,
+        decision: 'ignore',
+        reason: '仅为本轮控制',
+        entities: [],
+        events: [] as FormedMemoryEvent[],
+      }),
     })
 
     expect(store.listClaims()).toEqual([])
     expect(store.listSourceEpisodes()).toEqual([])
     expect(store.listActionReceipts()).toEqual([expect.objectContaining({ action: 'memory.formation', result: 'succeeded' })])
+  })
+
+  it('persists an extracted person node and time-aware edge without retaining assistant text', async () => {
+    const { gateway, store } = fixture()
+    const prompt = '爸爸明天来我家'
+    store.enqueue('infer-turn-candidates', jobPayload(prompt, 'visit'), 'infer:visit')
+    const formation = parseMemoryFormationOutput(VISIT_OUTPUT, {
+      messages: [{ seq: 2, text: prompt }],
+      scope: { type: 'workspace', id: 'workspace-a' },
+    })
+
+    await expect(processInferenceJobs(gateway, {
+      form: input => Promise.resolve({ route: input.route, ...formation }),
+    })).resolves.toMatchObject({ completed: 1, candidatesCreated: 1 })
+
+    const father = store.listEntities({ kinds: ['person'] }).find(entity => entity.canonicalName === '爸爸')
+    expect(father).toBeDefined()
+    expect(store.listClaims()).toEqual([expect.objectContaining({
+      status: 'candidate',
+      subjectEntityId: father!.id,
+      objectEntityId: gateway.ownerEntity.id,
+      predicate: 'person.visits_home_of',
+    })])
+    expect(store.listSourceEpisodes()).toEqual([expect.objectContaining({
+      content: '爸爸明天来我家',
+    })])
+    expect(store.listSourceEpisodes()[0]?.content).not.toContain('我会结合这个信息')
+    expect(store.listActionReceipts()[0]?.affectedEntityIds).toEqual(expect.arrayContaining([
+      father!.id,
+      gateway.ownerEntity.id,
+    ]))
   })
 })

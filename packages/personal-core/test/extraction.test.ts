@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   PersonalContinuityStore,
   validateExtractionEnvelope,
+  validateGraphExtractionEnvelope,
   type ExtractionEnvelopeV1,
+  type GraphExtractionEnvelopeV2,
 } from '../src/index.js'
 
 const stores: PersonalContinuityStore[] = []
@@ -50,6 +52,27 @@ function envelope(sourceEpisodeId: string, objectValue = '简洁的回答'): Ext
   }
 }
 
+function graphEnvelope(sourceEpisodeId: string): GraphExtractionEnvelopeV2 {
+  return {
+    schemaVersion: 2,
+    sourceEpisodeId,
+    scope: { type: 'workspace', id: 'workspace-a' },
+    entities: [{ ref: 'father', kind: 'person', canonicalName: '爸爸', aliases: [] }],
+    events: [{
+      kind: 'prospective',
+      statement: '爸爸将于 2026-08-16 来用户家',
+      predicate: 'person.visits_home_of',
+      subjectEntityRef: 'father',
+      objectEntityRef: 'owner',
+      confidence: 0.94,
+      importance: 0.78,
+      sensitivity: 'personal',
+      validFrom: '2026-08-16T00:00:00+08:00',
+      validTo: '2026-08-16T23:59:59.999+08:00',
+    }],
+  }
+}
+
 afterEach(() => {
   for (const store of stores.splice(0)) store.close()
 })
@@ -69,9 +92,60 @@ describe('versioned extraction contract', () => {
     })).toThrow(/workspace or session/)
     expect(() => validateExtractionEnvelope({ ...valid, proposals: Array(7).fill(valid.proposals[0]) })).toThrow(/6 items/)
   })
+
+  it('accepts a grounded v2 entity-event graph and rejects unresolved or unused identity refs', () => {
+    const valid = graphEnvelope('source-1')
+    expect(validateGraphExtractionEnvelope(valid)).toEqual(valid)
+    expect(() => validateGraphExtractionEnvelope({
+      ...valid,
+      events: [{ ...valid.events[0], subjectEntityRef: 'unknown' }],
+    })).toThrow(/subjectEntityRef is unknown/)
+    expect(() => validateGraphExtractionEnvelope({
+      ...valid,
+      events: [{ ...valid.events[0], subjectEntityRef: 'owner' }],
+    })).toThrow(/not used/)
+    expect(() => validateGraphExtractionEnvelope({
+      ...valid,
+      events: [{ ...valid.events[0], objectValue: '用户家' }],
+    })).toThrow(/exactly one/)
+  })
 })
 
 describe('candidate reconciliation', () => {
+  it('atomically resolves a person node and records a time-aware candidate edge', () => {
+    const { store, owner, source } = fixture()
+    const first = store.applyGraphExtractionBatch(graphEnvelope(source.id), {
+      ownerEntityId: owner.id,
+      idempotencyKey: 'graph:turn-1',
+    })
+    expect(first.entities).toEqual([expect.objectContaining({ ref: 'father', decision: 'created' })])
+    expect(first.outcomes).toEqual([expect.objectContaining({ decision: 'created-candidate' })])
+    const father = store.getEntity(first.entities[0]!.entityId)
+    const claim = store.getClaim(first.outcomes[0]!.claimId)
+    expect(father).toMatchObject({ kind: 'person', canonicalName: '爸爸' })
+    expect(claim).toMatchObject({
+      kind: 'prospective',
+      subjectEntityId: father!.id,
+      objectEntityId: owner.id,
+      status: 'candidate',
+      validFrom: '2026-08-16T00:00:00+08:00',
+      validTo: '2026-08-16T23:59:59.999+08:00',
+    })
+    expect(store.listEvents(father!.id).map(event => event.eventType)).toEqual(['entity.created'])
+    expect(store.listEvents(claim!.id).map(event => event.eventType)).toEqual(['claim.observed'])
+    expect(store.recall('爸爸什么时候来', { workspaceId: 'workspace-a' }).selectedClaims).toEqual([])
+
+    const repeated = store.applyGraphExtractionBatch(graphEnvelope(source.id), {
+      ownerEntityId: owner.id,
+      idempotencyKey: 'graph:turn-2',
+    })
+    expect(repeated.entities).toEqual([expect.objectContaining({ entityId: father!.id, decision: 'reused' })])
+    expect(repeated.outcomes).toEqual([expect.objectContaining({
+      claimId: claim!.id,
+      decision: 'duplicate',
+    })])
+  })
+
   it('creates candidates, deduplicates exact facts and reports contradictory values without overwriting truth', () => {
     const { store, owner, source } = fixture()
     const first = store.applyExtractionBatch(envelope(source.id), {

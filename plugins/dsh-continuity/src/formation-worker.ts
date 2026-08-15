@@ -1,7 +1,8 @@
 import type { OutboxJob } from '@telos/personal-core'
 import type { ContinuityGateway } from './gateway.js'
 import type {
-  FormedMemoryProposal,
+  FormedMemoryEntity,
+  FormedMemoryEvent,
   MemoryFormationInput,
   MemoryFormationMessage,
   MemoryFormationPolicy,
@@ -50,13 +51,16 @@ function positiveInteger(value: unknown, field: string): number {
   return value
 }
 
-function messages(value: unknown): MemoryFormationMessage[] {
-  if (!Array.isArray(value) || value.length === 0) throw new TypeError('messages must be a non-empty array')
+function messages(value: unknown, field = 'messages', allowEmpty = false): MemoryFormationMessage[] {
+  if (allowEmpty && value === undefined) return []
+  if (!Array.isArray(value) || (!allowEmpty && value.length === 0)) {
+    throw new TypeError(`${field} must be ${allowEmpty ? 'an array' : 'a non-empty array'}`)
+  }
   return value.map((entry, index) => {
-    const message = record(entry, `messages[${String(index)}]`)
+    const message = record(entry, `${field}[${String(index)}]`)
     return {
-      seq: safeInteger(message.seq, `messages[${String(index)}].seq`),
-      text: requiredString(message.text, `messages[${String(index)}].text`),
+      seq: safeInteger(message.seq, `${field}[${String(index)}].seq`),
+      text: requiredString(message.text, `${field}[${String(index)}].text`),
     }
   })
 }
@@ -79,9 +83,14 @@ function policy(value: unknown): MemoryFormationPolicy {
   }
 }
 
-function withoutEvidence(proposal: FormedMemoryProposal): Omit<FormedMemoryProposal, 'evidence'> {
-  const { evidence: _evidence, ...claim } = proposal
-  return claim
+function entityWithoutEvidence(entity: FormedMemoryEntity): Omit<FormedMemoryEntity, 'evidence'> {
+  const { evidence: _evidence, ...identity } = entity
+  return identity
+}
+
+function eventWithoutEvidence(event: FormedMemoryEvent): Omit<FormedMemoryEvent, 'evidence'> {
+  const { evidence: _evidence, ...memoryEvent } = event
+  return memoryEvent
 }
 
 async function processJob(
@@ -93,24 +102,36 @@ async function processJob(
   const workspaceId = optionalString(job.payload.workspaceId, 'workspaceId')
   const turn = safeInteger(job.payload.turn, 'turn')
   const directMessages = messages(job.payload.messages)
+  const assistantMessages = messages(job.payload.assistantMessages, 'assistantMessages', true)
   const formationRoute = route(job.payload.route)
   const contentHash = requiredString(job.payload.contentHash, 'contentHash')
   const observedAt = requiredString(job.payload.observedAt, 'observedAt')
+  const referenceTime = optionalString(job.payload.referenceTime, 'referenceTime') ?? observedAt
+  const timeZone = optionalString(job.payload.timeZone, 'timeZone') ?? 'UTC'
+  const locale = optionalString(job.payload.locale, 'locale') ?? 'und'
   const scope = workspaceId === undefined
     ? { type: 'session' as const, id: sessionId }
     : { type: 'workspace' as const, id: workspaceId }
   const result = await form({
     sessionId,
     messages: directMessages,
+    assistantMessages,
+    referenceTime,
+    timeZone,
+    locale,
     scope,
     route: formationRoute,
     policy: policy(job.payload.policy),
   })
 
   let sourceEpisodeIds: string[] = []
+  let affectedEntityIds: string[] = []
   let candidatesCreated = 0
-  if (result.proposals.length > 0) {
-    const retainedEvidence = [...new Set(result.proposals.map(proposal => proposal.evidence))]
+  if (result.events.length > 0) {
+    const retainedEvidence = [...new Set([
+      ...result.entities.map(entity => entity.evidence),
+      ...result.events.map(event => event.evidence),
+    ])]
     const source = gateway.store.createSourceEpisode({
       sourceKind: 'dsh.llm-memory-formation',
       runtimeId: 'dsh',
@@ -124,15 +145,21 @@ async function processJob(
       sensitivity: 'personal',
     })
     sourceEpisodeIds = [source.id]
-    const reconciliation = gateway.store.applyExtractionBatch({
-      schemaVersion: 1,
+    const reconciliation = gateway.store.applyGraphExtractionBatch({
+      schemaVersion: 2,
       sourceEpisodeId: source.id,
-      proposals: result.proposals.map(withoutEvidence),
+      scope,
+      entities: result.entities.map(entityWithoutEvidence),
+      events: result.events.map(eventWithoutEvidence),
     }, {
-      subjectEntityId: gateway.ownerEntity.id,
+      ownerEntityId: gateway.ownerEntity.id,
       actor: 'agent',
       idempotencyKey: job.idempotencyKey,
     })
+    affectedEntityIds = [...new Set([
+      gateway.ownerEntity.id,
+      ...reconciliation.entities.map(entity => entity.entityId),
+    ])]
     candidatesCreated = reconciliation.outcomes
       .filter(outcome => outcome.decision === 'created-candidate').length
   }
@@ -147,7 +174,7 @@ async function processJob(
     result: 'succeeded',
     scope,
     sourceEpisodeIds,
-    affectedEntityIds: result.proposals.length === 0 ? [] : [gateway.ownerEntity.id],
+    affectedEntityIds,
     occurredAt: observedAt,
     idempotencyKey: `receipt:${job.idempotencyKey}`,
   })

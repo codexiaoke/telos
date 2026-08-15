@@ -228,9 +228,24 @@ import { DatabaseSync } from "node:sqlite";
 // ../../packages/personal-core/dist/extraction.js
 var CLAIM_KINDS = ["semantic", "episodic", "procedural", "prospective", "constraint"];
 var MAX_PROPOSALS = 6;
+var MAX_ENTITIES = 12;
+var MAX_ALIASES = 6;
 var MAX_TEXT_LENGTH = 240;
 var PREDICATE_PATTERN = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
+var ENTITY_REF_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
 var SECRET_PATTERN = /(?:api[ _-]?key|password|passwd|secret|access[ _-]?token|refresh[ _-]?token|private[ _-]?key|密码|口令|密钥|令牌|sk-[a-z0-9_-]{8,})/iu;
+var ENTITY_KINDS = [
+  "person",
+  "workspace",
+  "project",
+  "topic",
+  "goal",
+  "commitment",
+  "decision",
+  "constraint",
+  "preference",
+  "artifact"
+];
 function containsCredentialLikeContent(value) {
   return SECRET_PATTERN.test(value);
 }
@@ -259,6 +274,12 @@ function optionalIso(value, field) {
   const result = text(value, field, 64);
   if (!Number.isFinite(Date.parse(result)))
     throw new TypeError(`${field} must be an ISO-8601 timestamp`);
+  return result;
+}
+function entityRef(value, field) {
+  const result = text(value, field, 64).toLocaleLowerCase();
+  if (!ENTITY_REF_PATTERN.test(result))
+    throw new TypeError(`${field} is invalid`);
   return result;
 }
 function boundedScope(value, field) {
@@ -316,6 +337,98 @@ function validateExtractionEnvelope(value) {
     sourceEpisodeId,
     proposals: input.proposals.map((entry, index) => proposal(entry, index))
   };
+}
+function graphEntity(value, index) {
+  const input = record(value, `entities[${String(index)}]`);
+  const ref = entityRef(input.ref, `entities[${String(index)}].ref`);
+  if (ref === "owner")
+    throw new TypeError(`entities[${String(index)}].ref owner is reserved`);
+  if (typeof input.kind !== "string" || !ENTITY_KINDS.includes(input.kind)) {
+    throw new TypeError(`entities[${String(index)}].kind is invalid`);
+  }
+  const canonicalName = text(input.canonicalName, `entities[${String(index)}].canonicalName`, 120);
+  if (!Array.isArray(input.aliases) || input.aliases.length > MAX_ALIASES) {
+    throw new TypeError(`entities[${String(index)}].aliases must contain at most ${String(MAX_ALIASES)} items`);
+  }
+  const aliases = [...new Set(input.aliases.map((alias, aliasIndex) => text(alias, `entities[${String(index)}].aliases[${String(aliasIndex)}]`, 120)))].filter((alias) => alias !== canonicalName);
+  if (containsCredentialLikeContent([canonicalName, ...aliases].join("\n"))) {
+    throw new TypeError(`entities[${String(index)}] contains credential-like content`);
+  }
+  return { ref, kind: input.kind, canonicalName, aliases };
+}
+function graphEvent(value, index, refs) {
+  const input = record(value, `events[${String(index)}]`);
+  if (typeof input.kind !== "string" || !CLAIM_KINDS.includes(input.kind)) {
+    throw new TypeError(`events[${String(index)}].kind is invalid`);
+  }
+  const subjectEntityRef = entityRef(input.subjectEntityRef, `events[${String(index)}].subjectEntityRef`);
+  if (subjectEntityRef !== "owner" && !refs.has(subjectEntityRef)) {
+    throw new TypeError(`events[${String(index)}].subjectEntityRef is unknown`);
+  }
+  const objectEntityRef = input.objectEntityRef === void 0 ? void 0 : entityRef(input.objectEntityRef, `events[${String(index)}].objectEntityRef`);
+  if (objectEntityRef !== void 0 && objectEntityRef !== "owner" && !refs.has(objectEntityRef)) {
+    throw new TypeError(`events[${String(index)}].objectEntityRef is unknown`);
+  }
+  const objectValue = input.objectValue === void 0 ? void 0 : text(input.objectValue, `events[${String(index)}].objectValue`);
+  if (objectEntityRef === void 0 && objectValue === void 0 || objectEntityRef !== void 0 && objectValue !== void 0) {
+    throw new TypeError(`events[${String(index)}] requires exactly one objectEntityRef or objectValue`);
+  }
+  const statement = text(input.statement, `events[${String(index)}].statement`);
+  if (containsCredentialLikeContent(`${statement}
+${objectValue ?? ""}`)) {
+    throw new TypeError(`events[${String(index)}] contains credential-like content`);
+  }
+  const predicate = text(input.predicate, `events[${String(index)}].predicate`, 80).toLocaleLowerCase();
+  if (!PREDICATE_PATTERN.test(predicate))
+    throw new TypeError(`events[${String(index)}].predicate is invalid`);
+  const validFrom = optionalIso(input.validFrom, `events[${String(index)}].validFrom`);
+  const validTo = optionalIso(input.validTo, `events[${String(index)}].validTo`);
+  if (validFrom !== void 0 && validTo !== void 0 && validTo < validFrom) {
+    throw new RangeError(`events[${String(index)}].validTo precedes validFrom`);
+  }
+  if (input.sensitivity !== "personal") {
+    throw new TypeError(`events[${String(index)}].sensitivity must be personal`);
+  }
+  return {
+    kind: input.kind,
+    statement,
+    predicate,
+    subjectEntityRef,
+    ...objectEntityRef === void 0 ? {} : { objectEntityRef },
+    ...objectValue === void 0 ? {} : { objectValue },
+    confidence: unit(input.confidence, `events[${String(index)}].confidence`),
+    importance: unit(input.importance, `events[${String(index)}].importance`),
+    sensitivity: "personal",
+    ...validFrom === void 0 ? {} : { validFrom },
+    ...validTo === void 0 ? {} : { validTo }
+  };
+}
+function validateGraphExtractionEnvelope(value) {
+  const input = record(value, "graph extraction envelope");
+  if (input.schemaVersion !== 2)
+    throw new TypeError("graph extraction envelope schemaVersion must be 2");
+  const sourceEpisodeId = text(input.sourceEpisodeId, "sourceEpisodeId", 160);
+  const scope2 = boundedScope(input.scope, "scope");
+  if (!Array.isArray(input.entities) || input.entities.length > MAX_ENTITIES) {
+    throw new RangeError(`entities must contain at most ${String(MAX_ENTITIES)} items`);
+  }
+  const entities = input.entities.map((entry, index) => graphEntity(entry, index));
+  const refs = /* @__PURE__ */ new Set();
+  for (const entity of entities) {
+    if (refs.has(entity.ref))
+      throw new TypeError(`duplicate entity ref ${entity.ref}`);
+    refs.add(entity.ref);
+  }
+  if (!Array.isArray(input.events) || input.events.length > MAX_PROPOSALS) {
+    throw new RangeError(`events must contain at most ${String(MAX_PROPOSALS)} items`);
+  }
+  const events = input.events.map((entry, index) => graphEvent(entry, index, refs));
+  const usedRefs = new Set(events.flatMap((event) => [event.subjectEntityRef, event.objectEntityRef].filter((ref) => ref !== void 0 && ref !== "owner")));
+  for (const entity of entities) {
+    if (!usedRefs.has(entity.ref))
+      throw new TypeError(`entity ref ${entity.ref} is not used by an event`);
+  }
+  return { schemaVersion: 2, sourceEpisodeId, scope: scope2, entities, events };
 }
 
 // ../../packages/personal-core/dist/store.js
@@ -682,6 +795,96 @@ var PersonalContinuityStore = class {
       }
     });
     return { schemaVersion: 1, sourceEpisodeId: envelope.sourceEpisodeId, outcomes };
+  }
+  /**
+   * Atomically resolves evidence-grounded identity handles and writes their
+   * time-aware relations as reviewable candidates. The reserved `owner` ref
+   * is supplied by the product boundary, never by the model.
+   */
+  applyGraphExtractionBatch(value, input) {
+    this.assertOpen();
+    const envelope = validateGraphExtractionEnvelope(value);
+    this.requireEntity(input.ownerEntityId);
+    const source2 = this.requireSourceEpisode(envelope.sourceEpisodeId);
+    const entityIds = /* @__PURE__ */ new Map([["owner", input.ownerEntityId]]);
+    const entities = [];
+    const outcomes = [];
+    const batchKey = assertNonEmpty(input.idempotencyKey, "idempotencyKey");
+    this.transaction(() => {
+      for (const entity of envelope.entities) {
+        const existing = this.findExtractionEntity(entity.kind, entity.canonicalName, entity.aliases, envelope.scope);
+        const resolved = existing ?? this.createEntity({
+          kind: entity.kind,
+          canonicalName: entity.canonicalName,
+          scope: envelope.scope,
+          sourceEpisodeIds: [envelope.sourceEpisodeId],
+          actor: input.actor ?? "agent",
+          occurredAt: source2.observedAt,
+          idempotencyKey: `${batchKey}:entity:${entity.ref}`
+        });
+        entityIds.set(entity.ref, resolved.id);
+        entities.push({
+          ref: entity.ref,
+          entityId: resolved.id,
+          decision: existing === void 0 ? "created" : "reused"
+        });
+        const knownAliases = new Set(this.listAliases(resolved.id).map((alias) => alias.normalizedAlias));
+        for (const [aliasIndex, alias] of entity.aliases.entries()) {
+          if (knownAliases.has(normalizedText(alias)))
+            continue;
+          this.addAlias({
+            entityId: resolved.id,
+            alias,
+            scope: envelope.scope,
+            sourceEpisodeId: envelope.sourceEpisodeId,
+            actor: input.actor ?? "agent",
+            occurredAt: source2.observedAt,
+            idempotencyKey: `${batchKey}:entity:${entity.ref}:alias:${String(aliasIndex)}`
+          });
+          knownAliases.add(normalizedText(alias));
+        }
+      }
+      for (const [eventIndex, event] of envelope.events.entries()) {
+        const subjectEntityId = entityIds.get(event.subjectEntityRef);
+        const objectEntityId = event.objectEntityRef === void 0 ? void 0 : entityIds.get(event.objectEntityRef);
+        if (subjectEntityId === void 0 || event.objectEntityRef !== void 0 && objectEntityId === void 0) {
+          throw new Error(`graph extraction event ${String(eventIndex)} contains an unresolved entity ref`);
+        }
+        const { scopeType, scopeId } = scopeColumns(envelope.scope);
+        const rows = this.db.prepare(`
+          SELECT * FROM memory_claim
+          WHERE subject_entity_id = ? AND status IN ('candidate', 'confirmed')
+            AND scope_type = ? AND ifnull(scope_id, '') = ifnull(?, '')
+        `).all(subjectEntityId, scopeType, scopeId);
+        const related = rows.map((row) => this.claimFromRow(row)).filter((claim2) => normalizedText(claim2.predicate) === normalizedText(event.predicate));
+        const duplicate = related.find((claim2) => claim2.objectEntityId === objectEntityId && normalizedText(claim2.objectValue ?? "") === normalizedText(event.objectValue ?? "") && claim2.validFrom === event.validFrom && claim2.validTo === event.validTo);
+        const conflictingClaimIds = event.kind === "episodic" || event.kind === "prospective" ? [] : related.filter((claim2) => claim2.id !== duplicate?.id && (claim2.objectEntityId !== objectEntityId || normalizedText(claim2.objectValue ?? "") !== normalizedText(event.objectValue ?? ""))).map((claim2) => claim2.id).sort();
+        if (duplicate !== void 0) {
+          outcomes.push({ eventIndex, decision: "duplicate", claimId: duplicate.id, conflictingClaimIds });
+          continue;
+        }
+        const claim = this.remember({
+          kind: event.kind,
+          statement: event.statement,
+          predicate: event.predicate,
+          subjectEntityId,
+          ...objectEntityId === void 0 ? { objectValue: event.objectValue } : { objectEntityId },
+          status: "candidate",
+          confidence: event.confidence,
+          importance: event.importance,
+          sensitivity: event.sensitivity,
+          scope: envelope.scope,
+          validFrom: event.validFrom,
+          validTo: event.validTo,
+          observedAt: source2.observedAt,
+          sourceEpisodeIds: [envelope.sourceEpisodeId],
+          actor: input.actor ?? "agent",
+          idempotencyKey: `${batchKey}:event:${String(eventIndex)}`
+        });
+        outcomes.push({ eventIndex, decision: "created-candidate", claimId: claim.id, conflictingClaimIds });
+      }
+    });
+    return { schemaVersion: 2, sourceEpisodeId: envelope.sourceEpisodeId, entities, outcomes };
   }
   getClaim(id) {
     this.assertOpen();
@@ -1169,6 +1372,23 @@ var PersonalContinuityStore = class {
     this.db.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
     if (this.databasePath !== ":memory:")
       this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
+  }
+  findExtractionEntity(kind, canonicalName, aliases, scope2) {
+    const names = [...new Set([canonicalName, ...aliases].map(normalizedText))];
+    const { scopeType, scopeId } = scopeColumns(scope2);
+    const placeholders = names.map(() => "?").join(",");
+    const rows = this.db.prepare(`
+      SELECT DISTINCT e.*
+      FROM entity e
+      LEFT JOIN entity_alias a ON a.entity_id = e.id
+      WHERE e.status <> 'deleted' AND e.kind = ?
+        AND e.scope_type = ? AND ifnull(e.scope_id, '') = ifnull(?, '')
+        AND (lower(trim(e.canonical_name)) IN (${placeholders}) OR a.normalized_alias IN (${placeholders}))
+      ORDER BY e.id
+    `).all(kind, scopeType, scopeId, ...names, ...names);
+    if (rows.length > 1)
+      throw new Error(`ambiguous extracted entity ${canonicalName}`);
+    return rows[0] === void 0 ? void 0 : this.entityFromRow(rows[0]);
   }
   migrate() {
     this.db.exec("CREATE TABLE IF NOT EXISTS schema_migration (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL) STRICT;");
@@ -1677,13 +1897,18 @@ import {
   ReasoningEffortId
 } from "@deepseek-ai/dsh-llm";
 import { SessionId } from "@deepseek-ai/dsh-session";
-var MAX_PROPOSALS2 = 6;
+var MAX_EVENTS = 6;
+var MAX_ENTITIES2 = 12;
+var MAX_ALIASES2 = 6;
 var MAX_EVIDENCE_LENGTH = 500;
-var RESPONSE_KEYS = /* @__PURE__ */ new Set(["schemaVersion", "proposals"]);
-var PROPOSAL_KEYS = /* @__PURE__ */ new Set([
+var RESPONSE_KEYS = /* @__PURE__ */ new Set(["schemaVersion", "decision", "reason", "entities", "events"]);
+var ENTITY_KEYS = /* @__PURE__ */ new Set(["ref", "kind", "canonicalName", "aliases", "evidence"]);
+var EVENT_KEYS = /* @__PURE__ */ new Set([
   "kind",
   "statement",
   "predicate",
+  "subjectEntityRef",
+  "objectEntityRef",
   "objectValue",
   "confidence",
   "importance",
@@ -1695,18 +1920,22 @@ var PROPOSAL_KEYS = /* @__PURE__ */ new Set([
 ]);
 var MEMORY_FORMATION_SYSTEM_PROMPT = [
   "You are the memory-formation stage for a local-first personal AI.",
-  "Decide whether the direct human messages contain durable personal information that will remain useful in a future conversation.",
+  "Convert direct human messages into evidence-grounded personal entities and time-aware memory events that will be useful beyond the current turn.",
+  "Direct human messages are the only authoritative evidence. Assistant messages are non-authoritative context: they may help resolve wording or a typo, but can never introduce a fact or be copied as evidence.",
   "Do not extract ordinary one-turn instructions, response-format requests, tool-use controls, test/debug prompts, questions, brainstorming, quoted text, or facts stated only by the assistant.",
-  'Ignore temporary clauses instead of discarding an otherwise durable message. If a message combines a stable cross-session fact or constraint with a one-turn control such as "do not call tools", extract only the durable part.',
-  'A message whose entire meaning is temporary, such as "Do not call tools; reply only with X" or "summarize this file", MUST produce an empty proposals array.',
-  "Eligible memories include stable preferences, durable goals, decisions, commitments, procedures, and constraints whose meaning extends beyond the current turn.",
+  "Ignore temporary control clauses instead of discarding an otherwise useful memory event.",
+  "Eligible memories include stable preferences, goals, decisions, commitments, procedures and constraints, plus concrete time-bounded events that matter across turns, such as a family visit, appointment, deadline, trip or promised follow-up.",
+  'A concrete event may qualify even when stated only once. For example, "\u7238\u7238\u660E\u5929\u6765\u6211\u5BB6" is a prospective event about a person entity, not a disposable chat detail.',
+  "Resolve relative time such as today or tomorrow from referenceTime in the supplied timeZone. Use ISO-8601 offsets; for an all-day event use the local day start and end.",
+  "Use owner for the user. Create another entity only when its canonicalName is explicitly present in a direct human message. Aliases must also be explicitly present; do not invent synonyms.",
+  "Represent relationships as edges: subjectEntityRef + predicate + exactly one of objectEntityRef or objectValue. Prefer an entity edge when both endpoints are known.",
   "Never extract credentials, secrets, inferred sensitive attributes, or unsupported conclusions.",
-  "Every proposal must contain an evidence field copied verbatim from exactly one supplied human message.",
+  "Every entity and event must contain one evidence field copied verbatim from exactly one supplied direct human message.",
   "Use concise normalized statements and stable lowercase dotted predicates.",
   "Return exactly one JSON object and no Markdown or commentary.",
   "The required shape is:",
-  '{"schemaVersion":1,"proposals":[{"kind":"semantic|episodic|procedural|prospective|constraint","statement":"...","predicate":"lowercase.dotted_name","objectValue":"...","confidence":0.0,"importance":0.0,"sensitivity":"personal","evidence":"exact human substring","durability":"cross-session","validFrom":null,"validTo":null}]}',
-  `Return at most ${String(MAX_PROPOSALS2)} proposals. When nothing qualifies, return {"schemaVersion":1,"proposals" : []}.`
+  '{"schemaVersion":2,"decision":"remember|ignore","reason":"short reason","entities":[{"ref":"local_ref","kind":"person|workspace|project|topic|goal|commitment|decision|constraint|preference|artifact","canonicalName":"exactly observed name","aliases":[],"evidence":"exact human substring"}],"events":[{"kind":"semantic|episodic|procedural|prospective|constraint","statement":"...","predicate":"lowercase.dotted_name","subjectEntityRef":"owner|local_ref","objectEntityRef":"owner|local_ref|null","objectValue":"literal|null","confidence":0.0,"importance":0.0,"sensitivity":"personal","evidence":"exact human substring","durability":"cross-session","validFrom":null,"validTo":null}]}',
+  `Return at most ${String(MAX_ENTITIES2)} entities and ${String(MAX_EVENTS)} events. When nothing qualifies, decision must be ignore and both arrays must be empty.`
 ].join("\n");
 function record2(value, field) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -1733,6 +1962,15 @@ function optionalIso2(value, field) {
   if (!Number.isFinite(Date.parse(result))) throw new TypeError(`${field} must be an ISO-8601 timestamp or null`);
   return result;
 }
+function optionalText(value, field, maximum) {
+  return value === void 0 || value === null ? void 0 : text2(value, field, maximum);
+}
+function unit2(value, field) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
+    throw new RangeError(`${field} must be between 0 and 1`);
+  }
+  return value;
+}
 function unwrapJson(textValue) {
   const trimmed = textValue.trim();
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/iu.exec(trimmed);
@@ -1740,9 +1978,16 @@ function unwrapJson(textValue) {
 }
 function frameMessages(input) {
   return [
-    "Evaluate this JSON array of direct human messages for durable personal memory.",
+    "Evaluate this turn for evidence-grounded personal entities and memory events.",
     "The host will enforce the supplied local scope; do not invent another scope.",
-    JSON.stringify({ scope: input.scope, messages: input.messages })
+    JSON.stringify({
+      scope: input.scope,
+      referenceTime: input.referenceTime,
+      timeZone: input.timeZone,
+      locale: input.locale,
+      directHumanMessages: input.messages,
+      assistantContext: input.assistantMessages ?? []
+    })
   ].join("\n");
 }
 function finishError(finish) {
@@ -1772,50 +2017,93 @@ function parseMemoryFormationOutput(output, input) {
   }
   const envelope = record2(decoded, "memory formation response");
   assertKnownKeys(envelope, RESPONSE_KEYS, "memory formation response");
-  if (envelope.schemaVersion !== 1) throw new TypeError("memory formation response schemaVersion must be 1");
-  if (!Array.isArray(envelope.proposals)) throw new TypeError("memory formation response proposals must be an array");
-  if (envelope.proposals.length > MAX_PROPOSALS2) {
-    throw new RangeError(`memory formation response exceeds ${String(MAX_PROPOSALS2)} proposals`);
+  if (envelope.schemaVersion !== 2) throw new TypeError("memory formation response schemaVersion must be 2");
+  if (envelope.decision !== "remember" && envelope.decision !== "ignore") {
+    throw new TypeError("memory formation response decision must be remember or ignore");
+  }
+  const reason = text2(envelope.reason, "memory formation response reason", 500);
+  if (!Array.isArray(envelope.entities)) throw new TypeError("memory formation response entities must be an array");
+  if (!Array.isArray(envelope.events)) throw new TypeError("memory formation response events must be an array");
+  if (envelope.entities.length > MAX_ENTITIES2) throw new RangeError(`memory formation response exceeds ${String(MAX_ENTITIES2)} entities`);
+  if (envelope.events.length > MAX_EVENTS) throw new RangeError(`memory formation response exceeds ${String(MAX_EVENTS)} events`);
+  if (envelope.decision === "ignore" && (envelope.entities.length > 0 || envelope.events.length > 0)) {
+    throw new TypeError("ignored memory formation response must have empty entities and events");
+  }
+  if (envelope.decision === "remember" && envelope.events.length === 0) {
+    throw new TypeError("remembered memory formation response must contain at least one event");
   }
   const normalizedMessages = input.messages.map((message) => message.text.normalize("NFKC"));
-  const evidence = [];
-  const proposals = envelope.proposals.map((value, index) => {
-    const proposal2 = record2(value, `proposals[${String(index)}]`);
-    assertKnownKeys(proposal2, PROPOSAL_KEYS, `proposals[${String(index)}]`);
-    if (proposal2.durability !== "cross-session") {
-      throw new TypeError(`proposals[${String(index)}].durability must be cross-session`);
-    }
-    const excerpt = text2(proposal2.evidence, `proposals[${String(index)}].evidence`, MAX_EVIDENCE_LENGTH);
+  const exactHumanExcerpt = (value, field) => {
+    const excerpt = text2(value, field, MAX_EVIDENCE_LENGTH);
     if (!normalizedMessages.some((message) => message.includes(excerpt))) {
-      throw new TypeError(`proposals[${String(index)}].evidence is not an exact human-message substring`);
+      throw new TypeError(`${field} is not an exact human-message substring`);
     }
-    if (containsCredentialLikeContent(excerpt)) {
-      throw new TypeError(`proposals[${String(index)}].evidence contains credential-like content`);
+    if (containsCredentialLikeContent(excerpt)) throw new TypeError(`${field} contains credential-like content`);
+    return excerpt;
+  };
+  const entityEvidence = [];
+  const rawEntities = envelope.entities.map((value, index) => {
+    const entity = record2(value, `entities[${String(index)}]`);
+    assertKnownKeys(entity, ENTITY_KEYS, `entities[${String(index)}]`);
+    const canonicalName = text2(entity.canonicalName, `entities[${String(index)}].canonicalName`, 120);
+    const excerpt = exactHumanExcerpt(entity.evidence, `entities[${String(index)}].evidence`);
+    if (!excerpt.includes(canonicalName)) {
+      throw new TypeError(`entities[${String(index)}].canonicalName is not present in its human evidence`);
     }
-    evidence.push(excerpt);
+    if (!Array.isArray(entity.aliases) || entity.aliases.length > MAX_ALIASES2) {
+      throw new TypeError(`entities[${String(index)}].aliases must contain at most ${String(MAX_ALIASES2)} items`);
+    }
+    const aliases = entity.aliases.map((alias, aliasIndex) => {
+      const result = text2(alias, `entities[${String(index)}].aliases[${String(aliasIndex)}]`, 120);
+      if (!normalizedMessages.some((message) => message.includes(result))) {
+        throw new TypeError(`entities[${String(index)}].aliases[${String(aliasIndex)}] is not an exact human-message substring`);
+      }
+      return result;
+    });
+    entityEvidence.push(excerpt);
     return {
-      kind: proposal2.kind,
-      statement: proposal2.statement,
-      predicate: proposal2.predicate,
-      objectValue: proposal2.objectValue,
-      confidence: proposal2.confidence,
-      importance: proposal2.importance,
-      sensitivity: proposal2.sensitivity,
-      scope: input.scope,
-      validFrom: optionalIso2(proposal2.validFrom, `proposals[${String(index)}].validFrom`),
-      validTo: optionalIso2(proposal2.validTo, `proposals[${String(index)}].validTo`)
+      ref: entity.ref,
+      kind: entity.kind,
+      canonicalName,
+      aliases
     };
   });
-  const validated = validateExtractionEnvelope({
-    schemaVersion: 1,
-    sourceEpisodeId: "model-formation-validation",
-    proposals
+  const eventEvidence = [];
+  const rawEvents = envelope.events.map((value, index) => {
+    const event = record2(value, `events[${String(index)}]`);
+    assertKnownKeys(event, EVENT_KEYS, `events[${String(index)}]`);
+    if (event.durability !== "cross-session") {
+      throw new TypeError(`events[${String(index)}].durability must be cross-session`);
+    }
+    const excerpt = exactHumanExcerpt(event.evidence, `events[${String(index)}].evidence`);
+    eventEvidence.push(excerpt);
+    return {
+      kind: event.kind,
+      statement: event.statement,
+      predicate: event.predicate,
+      subjectEntityRef: event.subjectEntityRef,
+      objectEntityRef: optionalText(event.objectEntityRef, `events[${String(index)}].objectEntityRef`, 64),
+      objectValue: optionalText(event.objectValue, `events[${String(index)}].objectValue`, 240),
+      confidence: unit2(event.confidence, `events[${String(index)}].confidence`),
+      importance: unit2(event.importance, `events[${String(index)}].importance`),
+      sensitivity: event.sensitivity,
+      validFrom: optionalIso2(event.validFrom, `events[${String(index)}].validFrom`),
+      validTo: optionalIso2(event.validTo, `events[${String(index)}].validTo`)
+    };
   });
-  return validated.proposals.map((proposal2, index) => ({
-    ...proposal2,
-    // The one-to-one map above and bounded validator preserve index identity.
-    evidence: evidence[index]
-  }));
+  const validated = validateGraphExtractionEnvelope({
+    schemaVersion: 2,
+    sourceEpisodeId: "model-formation-validation",
+    scope: input.scope,
+    entities: rawEntities,
+    events: rawEvents
+  });
+  return {
+    decision: envelope.decision,
+    reason,
+    entities: validated.entities.map((entity, index) => ({ ...entity, evidence: entityEvidence[index] })),
+    events: validated.events.map((event, index) => ({ ...event, evidence: eventEvidence[index] }))
+  };
 }
 async function formMemoriesWithMainModel(ctx, input) {
   if (input.messages.length === 0) throw new TypeError("memory formation requires at least one human message");
@@ -1875,7 +2163,7 @@ async function formMemoriesWithMainModel(ctx, input) {
   if (output.trim().length === 0) throw new Error("memory formation model produced no JSON output");
   return {
     route: formationRoute,
-    proposals: parseMemoryFormationOutput(output, input)
+    ...parseMemoryFormationOutput(output, input)
   };
 }
 
@@ -1905,13 +2193,16 @@ function positiveInteger(value, field) {
   }
   return value;
 }
-function messages(value) {
-  if (!Array.isArray(value) || value.length === 0) throw new TypeError("messages must be a non-empty array");
+function messages(value, field = "messages", allowEmpty = false) {
+  if (allowEmpty && value === void 0) return [];
+  if (!Array.isArray(value) || !allowEmpty && value.length === 0) {
+    throw new TypeError(`${field} must be ${allowEmpty ? "an array" : "a non-empty array"}`);
+  }
   return value.map((entry, index) => {
-    const message = record3(entry, `messages[${String(index)}]`);
+    const message = record3(entry, `${field}[${String(index)}]`);
     return {
-      seq: safeInteger(message.seq, `messages[${String(index)}].seq`),
-      text: requiredString(message.text, `messages[${String(index)}].text`)
+      seq: safeInteger(message.seq, `${field}[${String(index)}].seq`),
+      text: requiredString(message.text, `${field}[${String(index)}].text`)
     };
   });
 }
@@ -1931,30 +2222,46 @@ function policy(value) {
     timeoutMs: positiveInteger(input.timeoutMs, "policy.timeoutMs")
   };
 }
-function withoutEvidence(proposal2) {
-  const { evidence: _evidence, ...claim } = proposal2;
-  return claim;
+function entityWithoutEvidence(entity) {
+  const { evidence: _evidence, ...identity } = entity;
+  return identity;
+}
+function eventWithoutEvidence(event) {
+  const { evidence: _evidence, ...memoryEvent } = event;
+  return memoryEvent;
 }
 async function processJob(gateway, job, form) {
   const sessionId = requiredString(job.payload.sessionId, "sessionId");
   const workspaceId = optionalString(job.payload.workspaceId, "workspaceId");
   const turn = safeInteger(job.payload.turn, "turn");
   const directMessages = messages(job.payload.messages);
+  const assistantMessages = messages(job.payload.assistantMessages, "assistantMessages", true);
   const formationRoute = route(job.payload.route);
   const contentHash = requiredString(job.payload.contentHash, "contentHash");
   const observedAt = requiredString(job.payload.observedAt, "observedAt");
+  const referenceTime = optionalString(job.payload.referenceTime, "referenceTime") ?? observedAt;
+  const timeZone = optionalString(job.payload.timeZone, "timeZone") ?? "UTC";
+  const locale = optionalString(job.payload.locale, "locale") ?? "und";
   const scope2 = workspaceId === void 0 ? { type: "session", id: sessionId } : { type: "workspace", id: workspaceId };
   const result = await form({
     sessionId,
     messages: directMessages,
+    assistantMessages,
+    referenceTime,
+    timeZone,
+    locale,
     scope: scope2,
     route: formationRoute,
     policy: policy(job.payload.policy)
   });
   let sourceEpisodeIds = [];
+  let affectedEntityIds = [];
   let candidatesCreated = 0;
-  if (result.proposals.length > 0) {
-    const retainedEvidence = [...new Set(result.proposals.map((proposal2) => proposal2.evidence))];
+  if (result.events.length > 0) {
+    const retainedEvidence = [.../* @__PURE__ */ new Set([
+      ...result.entities.map((entity) => entity.evidence),
+      ...result.events.map((event) => event.evidence)
+    ])];
     const source2 = gateway.store.createSourceEpisode({
       sourceKind: "dsh.llm-memory-formation",
       runtimeId: "dsh",
@@ -1968,15 +2275,21 @@ async function processJob(gateway, job, form) {
       sensitivity: "personal"
     });
     sourceEpisodeIds = [source2.id];
-    const reconciliation = gateway.store.applyExtractionBatch({
-      schemaVersion: 1,
+    const reconciliation = gateway.store.applyGraphExtractionBatch({
+      schemaVersion: 2,
       sourceEpisodeId: source2.id,
-      proposals: result.proposals.map(withoutEvidence)
+      scope: scope2,
+      entities: result.entities.map(entityWithoutEvidence),
+      events: result.events.map(eventWithoutEvidence)
     }, {
-      subjectEntityId: gateway.ownerEntity.id,
+      ownerEntityId: gateway.ownerEntity.id,
       actor: "agent",
       idempotencyKey: job.idempotencyKey
     });
+    affectedEntityIds = [.../* @__PURE__ */ new Set([
+      gateway.ownerEntity.id,
+      ...reconciliation.entities.map((entity) => entity.entityId)
+    ])];
     candidatesCreated = reconciliation.outcomes.filter((outcome) => outcome.decision === "created-candidate").length;
   }
   gateway.store.recordActionReceipt({
@@ -1987,7 +2300,7 @@ async function processJob(gateway, job, form) {
     result: "succeeded",
     scope: scope2,
     sourceEpisodeIds,
-    affectedEntityIds: result.proposals.length === 0 ? [] : [gateway.ownerEntity.id],
+    affectedEntityIds,
     occurredAt: observedAt,
     idempotencyKey: `receipt:${job.idempotencyKey}`
   });
@@ -2027,7 +2340,7 @@ var OWNER_ENTITY_ID = "telos:owner";
 var CLAIM_KINDS2 = ["semantic", "episodic", "procedural", "prospective", "constraint"];
 var CLAIM_STATUSES = ["candidate", "confirmed", "superseded", "contradicted", "revoked", "expired"];
 var SENSITIVITIES = ["personal", "sensitive", "secret"];
-var ENTITY_KINDS = ["person", "workspace", "project", "topic", "goal", "commitment", "decision", "constraint", "preference", "artifact"];
+var ENTITY_KINDS2 = ["person", "workspace", "project", "topic", "goal", "commitment", "decision", "constraint", "preference", "artifact"];
 function record4(value, field = "payload") {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`${field} must be an object`);
   return value;
@@ -2323,7 +2636,7 @@ var ContinuityGateway = class {
           const input = payload === void 0 ? {} : record4(payload);
           return success(this.store.listEntities({
             scope: optionalScope(input.scope),
-            kinds: stringArray(input.kinds, ENTITY_KINDS, "kinds"),
+            kinds: stringArray(input.kinds, ENTITY_KINDS2, "kinds"),
             limit: optionalNumber(input.limit, "limit")
           }));
         }
@@ -2655,6 +2968,7 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError, sch
           startSeq: event.seq,
           digest,
           directMessages: [],
+          assistantMessages: [],
           continuityMutationCompleted: false
         });
       } else {
@@ -2705,6 +3019,15 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError, sch
           if (text3.length > 0) trace.directMessages.push({ seq: event.seq, time: event.time, text: text3 });
         }
       }
+      if (event.type === "assistant/message" && config.queueInference) {
+        const trace = turns.get(session);
+        if (trace !== void 0) {
+          const text3 = textOf(event.data.message.content);
+          if (text3.length > 0 && !containsCredentialLikeContent(text3)) {
+            trace.assistantMessages.push({ seq: event.seq, text: text3 });
+          }
+        }
+      }
       if (event.type === "user/message" && event.data.source.kind === "plugin" && event.data.source.plugin === "telos-continuity" && event.data.source.form === "recall") {
         const text3 = textOf(event.data.content);
         const recallId = /<telos_continuity recall_id="([^"]+)">/.exec(text3)?.[1];
@@ -2746,6 +3069,10 @@ function installSessionObserver(ctx, gateway, config, reportBackgroundError, sch
           workspaceId: workspace === void 0 ? void 0 : String(workspace.id),
           turn: trace.turn,
           messages: trace.directMessages.map((message) => ({ seq: message.seq, text: message.text })),
+          assistantMessages: trace.assistantMessages,
+          referenceTime: new Date(trace.directMessages.at(-1).time).toISOString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+          locale: Intl.DateTimeFormat().resolvedOptions().locale || "und",
           route: {
             provider: route2.provider,
             model: route2.model,

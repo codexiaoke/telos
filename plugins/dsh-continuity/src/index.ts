@@ -62,6 +62,7 @@ interface TurnTrace {
   startSeq: number
   digest: ReturnType<typeof createHash>
   directMessages: { seq: number; time: number; text: string }[]
+  assistantMessages: { seq: number; text: string }[]
   continuityMutationCompleted: boolean
 }
 
@@ -408,6 +409,7 @@ function installSessionObserver(
           startSeq: event.seq,
           digest,
           directMessages: [],
+          assistantMessages: [],
           continuityMutationCompleted: false,
         })
       } else {
@@ -464,6 +466,16 @@ function installSessionObserver(
         }
       }
 
+      if (event.type === 'assistant/message' && config.queueInference) {
+        const trace = turns.get(session)
+        if (trace !== undefined) {
+          const text = textOf(event.data.message.content)
+          if (text.length > 0 && !containsCredentialLikeContent(text)) {
+            trace.assistantMessages.push({ seq: event.seq, text })
+          }
+        }
+      }
+
       if (event.type === 'user/message' && event.data.source.kind === 'plugin'
         && event.data.source.plugin === 'telos-continuity' && event.data.source.form === 'recall') {
         const text = textOf(event.data.content)
@@ -510,6 +522,10 @@ function installSessionObserver(
           workspaceId: workspace === undefined ? undefined : String(workspace.id),
           turn: trace.turn,
           messages: trace.directMessages.map(message => ({ seq: message.seq, text: message.text })),
+          assistantMessages: trace.assistantMessages,
+          referenceTime: new Date(trace.directMessages.at(-1)!.time).toISOString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+          locale: Intl.DateTimeFormat().resolvedOptions().locale || 'und',
           route: {
             provider: route.provider,
             model: route.model,

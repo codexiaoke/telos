@@ -9,20 +9,26 @@ import type { FinishReason, GenerateOptions } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import {
   containsCredentialLikeContent,
-  validateExtractionEnvelope,
+  validateGraphExtractionEnvelope,
 } from '@telos/personal-core'
 import type {
   ContinuityScope,
-  ExtractionProposal,
+  GraphExtractionEntityProposal,
+  GraphExtractionEventProposal,
 } from '@telos/personal-core'
 
-const MAX_PROPOSALS = 6
+const MAX_EVENTS = 6
+const MAX_ENTITIES = 12
+const MAX_ALIASES = 6
 const MAX_EVIDENCE_LENGTH = 500
-const RESPONSE_KEYS = new Set(['schemaVersion', 'proposals'])
-const PROPOSAL_KEYS = new Set([
+const RESPONSE_KEYS = new Set(['schemaVersion', 'decision', 'reason', 'entities', 'events'])
+const ENTITY_KEYS = new Set(['ref', 'kind', 'canonicalName', 'aliases', 'evidence'])
+const EVENT_KEYS = new Set([
   'kind',
   'statement',
   'predicate',
+  'subjectEntityRef',
+  'objectEntityRef',
   'objectValue',
   'confidence',
   'importance',
@@ -55,20 +61,32 @@ export interface MemoryFormationPolicy {
 export interface MemoryFormationInput {
   sessionId: string
   messages: readonly MemoryFormationMessage[]
+  assistantMessages?: readonly MemoryFormationMessage[]
+  referenceTime: string
+  timeZone: string
+  locale: string
   scope: Exclude<ContinuityScope, { type: 'global' }>
   route: MemoryFormationRoute
   policy: MemoryFormationPolicy
   signal?: AbortSignal
 }
 
-export interface FormedMemoryProposal extends ExtractionProposal {
+export interface FormedMemoryEntity extends GraphExtractionEntityProposal {
+  /** Exact direct-human substring retained as provenance after validation. */
+  evidence: string
+}
+
+export interface FormedMemoryEvent extends GraphExtractionEventProposal {
   /** Exact direct-human substring retained as provenance after validation. */
   evidence: string
 }
 
 export interface MemoryFormationResult {
   route: MemoryFormationRoute
-  proposals: readonly FormedMemoryProposal[]
+  decision: 'remember' | 'ignore'
+  reason: string
+  entities: readonly FormedMemoryEntity[]
+  events: readonly FormedMemoryEvent[]
 }
 
 /**
@@ -77,18 +95,22 @@ export interface MemoryFormationResult {
  */
 export const MEMORY_FORMATION_SYSTEM_PROMPT = [
   'You are the memory-formation stage for a local-first personal AI.',
-  'Decide whether the direct human messages contain durable personal information that will remain useful in a future conversation.',
+  'Convert direct human messages into evidence-grounded personal entities and time-aware memory events that will be useful beyond the current turn.',
+  'Direct human messages are the only authoritative evidence. Assistant messages are non-authoritative context: they may help resolve wording or a typo, but can never introduce a fact or be copied as evidence.',
   'Do not extract ordinary one-turn instructions, response-format requests, tool-use controls, test/debug prompts, questions, brainstorming, quoted text, or facts stated only by the assistant.',
-  'Ignore temporary clauses instead of discarding an otherwise durable message. If a message combines a stable cross-session fact or constraint with a one-turn control such as "do not call tools", extract only the durable part.',
-  'A message whose entire meaning is temporary, such as "Do not call tools; reply only with X" or "summarize this file", MUST produce an empty proposals array.',
-  'Eligible memories include stable preferences, durable goals, decisions, commitments, procedures, and constraints whose meaning extends beyond the current turn.',
+  'Ignore temporary control clauses instead of discarding an otherwise useful memory event.',
+  'Eligible memories include stable preferences, goals, decisions, commitments, procedures and constraints, plus concrete time-bounded events that matter across turns, such as a family visit, appointment, deadline, trip or promised follow-up.',
+  'A concrete event may qualify even when stated only once. For example, "爸爸明天来我家" is a prospective event about a person entity, not a disposable chat detail.',
+  'Resolve relative time such as today or tomorrow from referenceTime in the supplied timeZone. Use ISO-8601 offsets; for an all-day event use the local day start and end.',
+  'Use owner for the user. Create another entity only when its canonicalName is explicitly present in a direct human message. Aliases must also be explicitly present; do not invent synonyms.',
+  'Represent relationships as edges: subjectEntityRef + predicate + exactly one of objectEntityRef or objectValue. Prefer an entity edge when both endpoints are known.',
   'Never extract credentials, secrets, inferred sensitive attributes, or unsupported conclusions.',
-  'Every proposal must contain an evidence field copied verbatim from exactly one supplied human message.',
+  'Every entity and event must contain one evidence field copied verbatim from exactly one supplied direct human message.',
   'Use concise normalized statements and stable lowercase dotted predicates.',
   'Return exactly one JSON object and no Markdown or commentary.',
   'The required shape is:',
-  '{"schemaVersion":1,"proposals":[{"kind":"semantic|episodic|procedural|prospective|constraint","statement":"...","predicate":"lowercase.dotted_name","objectValue":"...","confidence":0.0,"importance":0.0,"sensitivity":"personal","evidence":"exact human substring","durability":"cross-session","validFrom":null,"validTo":null}]}',
-  `Return at most ${String(MAX_PROPOSALS)} proposals. When nothing qualifies, return {"schemaVersion":1,"proposals" : []}.`,
+  '{"schemaVersion":2,"decision":"remember|ignore","reason":"short reason","entities":[{"ref":"local_ref","kind":"person|workspace|project|topic|goal|commitment|decision|constraint|preference|artifact","canonicalName":"exactly observed name","aliases":[],"evidence":"exact human substring"}],"events":[{"kind":"semantic|episodic|procedural|prospective|constraint","statement":"...","predicate":"lowercase.dotted_name","subjectEntityRef":"owner|local_ref","objectEntityRef":"owner|local_ref|null","objectValue":"literal|null","confidence":0.0,"importance":0.0,"sensitivity":"personal","evidence":"exact human substring","durability":"cross-session","validFrom":null,"validTo":null}]}',
+  `Return at most ${String(MAX_ENTITIES)} entities and ${String(MAX_EVENTS)} events. When nothing qualifies, decision must be ignore and both arrays must be empty.`,
 ].join('\n')
 
 function record(value: unknown, field: string): UnknownRecord {
@@ -120,6 +142,17 @@ function optionalIso(value: unknown, field: string): string | undefined {
   return result
 }
 
+function optionalText(value: unknown, field: string, maximum: number): string | undefined {
+  return value === undefined || value === null ? undefined : text(value, field, maximum)
+}
+
+function unit(value: unknown, field: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
+    throw new RangeError(`${field} must be between 0 and 1`)
+  }
+  return value
+}
+
 function unwrapJson(textValue: string): string {
   const trimmed = textValue.trim()
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/iu.exec(trimmed)
@@ -128,9 +161,16 @@ function unwrapJson(textValue: string): string {
 
 function frameMessages(input: MemoryFormationInput): string {
   return [
-    'Evaluate this JSON array of direct human messages for durable personal memory.',
+    'Evaluate this turn for evidence-grounded personal entities and memory events.',
     'The host will enforce the supplied local scope; do not invent another scope.',
-    JSON.stringify({ scope: input.scope, messages: input.messages }),
+    JSON.stringify({
+      scope: input.scope,
+      referenceTime: input.referenceTime,
+      timeZone: input.timeZone,
+      locale: input.locale,
+      directHumanMessages: input.messages,
+      assistantContext: input.assistantMessages ?? [],
+    }),
   ].join('\n')
 }
 
@@ -153,7 +193,7 @@ function finishError(finish: FinishReason): Error | undefined {
 export function parseMemoryFormationOutput(
   output: string,
   input: Pick<MemoryFormationInput, 'messages' | 'scope'>,
-): FormedMemoryProposal[] {
+): Pick<MemoryFormationResult, 'decision' | 'reason' | 'entities' | 'events'> {
   let decoded: unknown
   try {
     decoded = JSON.parse(unwrapJson(output))
@@ -162,51 +202,94 @@ export function parseMemoryFormationOutput(
   }
   const envelope = record(decoded, 'memory formation response')
   assertKnownKeys(envelope, RESPONSE_KEYS, 'memory formation response')
-  if (envelope.schemaVersion !== 1) throw new TypeError('memory formation response schemaVersion must be 1')
-  if (!Array.isArray(envelope.proposals)) throw new TypeError('memory formation response proposals must be an array')
-  if (envelope.proposals.length > MAX_PROPOSALS) {
-    throw new RangeError(`memory formation response exceeds ${String(MAX_PROPOSALS)} proposals`)
+  if (envelope.schemaVersion !== 2) throw new TypeError('memory formation response schemaVersion must be 2')
+  if (envelope.decision !== 'remember' && envelope.decision !== 'ignore') {
+    throw new TypeError('memory formation response decision must be remember or ignore')
+  }
+  const reason = text(envelope.reason, 'memory formation response reason', 500)
+  if (!Array.isArray(envelope.entities)) throw new TypeError('memory formation response entities must be an array')
+  if (!Array.isArray(envelope.events)) throw new TypeError('memory formation response events must be an array')
+  if (envelope.entities.length > MAX_ENTITIES) throw new RangeError(`memory formation response exceeds ${String(MAX_ENTITIES)} entities`)
+  if (envelope.events.length > MAX_EVENTS) throw new RangeError(`memory formation response exceeds ${String(MAX_EVENTS)} events`)
+  if (envelope.decision === 'ignore' && (envelope.entities.length > 0 || envelope.events.length > 0)) {
+    throw new TypeError('ignored memory formation response must have empty entities and events')
+  }
+  if (envelope.decision === 'remember' && envelope.events.length === 0) {
+    throw new TypeError('remembered memory formation response must contain at least one event')
   }
 
   const normalizedMessages = input.messages.map(message => message.text.normalize('NFKC'))
-  const evidence: string[] = []
-  const proposals = envelope.proposals.map((value, index) => {
-    const proposal = record(value, `proposals[${String(index)}]`)
-    assertKnownKeys(proposal, PROPOSAL_KEYS, `proposals[${String(index)}]`)
-    if (proposal.durability !== 'cross-session') {
-      throw new TypeError(`proposals[${String(index)}].durability must be cross-session`)
-    }
-    const excerpt = text(proposal.evidence, `proposals[${String(index)}].evidence`, MAX_EVIDENCE_LENGTH)
+  const exactHumanExcerpt = (value: unknown, field: string): string => {
+    const excerpt = text(value, field, MAX_EVIDENCE_LENGTH)
     if (!normalizedMessages.some(message => message.includes(excerpt))) {
-      throw new TypeError(`proposals[${String(index)}].evidence is not an exact human-message substring`)
+      throw new TypeError(`${field} is not an exact human-message substring`)
     }
-    if (containsCredentialLikeContent(excerpt)) {
-      throw new TypeError(`proposals[${String(index)}].evidence contains credential-like content`)
+    if (containsCredentialLikeContent(excerpt)) throw new TypeError(`${field} contains credential-like content`)
+    return excerpt
+  }
+  const entityEvidence: string[] = []
+  const rawEntities = envelope.entities.map((value, index) => {
+    const entity = record(value, `entities[${String(index)}]`)
+    assertKnownKeys(entity, ENTITY_KEYS, `entities[${String(index)}]`)
+    const canonicalName = text(entity.canonicalName, `entities[${String(index)}].canonicalName`, 120)
+    const excerpt = exactHumanExcerpt(entity.evidence, `entities[${String(index)}].evidence`)
+    if (!excerpt.includes(canonicalName)) {
+      throw new TypeError(`entities[${String(index)}].canonicalName is not present in its human evidence`)
     }
-    evidence.push(excerpt)
+    if (!Array.isArray(entity.aliases) || entity.aliases.length > MAX_ALIASES) {
+      throw new TypeError(`entities[${String(index)}].aliases must contain at most ${String(MAX_ALIASES)} items`)
+    }
+    const aliases = entity.aliases.map((alias, aliasIndex) => {
+      const result = text(alias, `entities[${String(index)}].aliases[${String(aliasIndex)}]`, 120)
+      if (!normalizedMessages.some(message => message.includes(result))) {
+        throw new TypeError(`entities[${String(index)}].aliases[${String(aliasIndex)}] is not an exact human-message substring`)
+      }
+      return result
+    })
+    entityEvidence.push(excerpt)
     return {
-      kind: proposal.kind,
-      statement: proposal.statement,
-      predicate: proposal.predicate,
-      objectValue: proposal.objectValue,
-      confidence: proposal.confidence,
-      importance: proposal.importance,
-      sensitivity: proposal.sensitivity,
-      scope: input.scope,
-      validFrom: optionalIso(proposal.validFrom, `proposals[${String(index)}].validFrom`),
-      validTo: optionalIso(proposal.validTo, `proposals[${String(index)}].validTo`),
+      ref: entity.ref,
+      kind: entity.kind,
+      canonicalName,
+      aliases,
     }
   })
-  const validated = validateExtractionEnvelope({
-    schemaVersion: 1,
-    sourceEpisodeId: 'model-formation-validation',
-    proposals,
+  const eventEvidence: string[] = []
+  const rawEvents = envelope.events.map((value, index) => {
+    const event = record(value, `events[${String(index)}]`)
+    assertKnownKeys(event, EVENT_KEYS, `events[${String(index)}]`)
+    if (event.durability !== 'cross-session') {
+      throw new TypeError(`events[${String(index)}].durability must be cross-session`)
+    }
+    const excerpt = exactHumanExcerpt(event.evidence, `events[${String(index)}].evidence`)
+    eventEvidence.push(excerpt)
+    return {
+      kind: event.kind,
+      statement: event.statement,
+      predicate: event.predicate,
+      subjectEntityRef: event.subjectEntityRef,
+      objectEntityRef: optionalText(event.objectEntityRef, `events[${String(index)}].objectEntityRef`, 64),
+      objectValue: optionalText(event.objectValue, `events[${String(index)}].objectValue`, 240),
+      confidence: unit(event.confidence, `events[${String(index)}].confidence`),
+      importance: unit(event.importance, `events[${String(index)}].importance`),
+      sensitivity: event.sensitivity,
+      validFrom: optionalIso(event.validFrom, `events[${String(index)}].validFrom`),
+      validTo: optionalIso(event.validTo, `events[${String(index)}].validTo`),
+    }
   })
-  return validated.proposals.map((proposal, index) => ({
-    ...proposal,
-    // The one-to-one map above and bounded validator preserve index identity.
-    evidence: evidence[index]!,
-  }))
+  const validated = validateGraphExtractionEnvelope({
+    schemaVersion: 2,
+    sourceEpisodeId: 'model-formation-validation',
+    scope: input.scope,
+    entities: rawEntities,
+    events: rawEvents,
+  })
+  return {
+    decision: envelope.decision,
+    reason,
+    entities: validated.entities.map((entity, index) => ({ ...entity, evidence: entityEvidence[index]! })),
+    events: validated.events.map((event, index) => ({ ...event, evidence: eventEvidence[index]! })),
+  }
 }
 
 /** Run one tool-free auxiliary call through the exact main-model route. */
@@ -279,6 +362,6 @@ export async function formMemoriesWithMainModel(
   if (output.trim().length === 0) throw new Error('memory formation model produced no JSON output')
   return {
     route: formationRoute,
-    proposals: parseMemoryFormationOutput(output, input),
+    ...parseMemoryFormationOutput(output, input),
   }
 }

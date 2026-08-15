@@ -227,6 +227,57 @@ export interface ExtractionReconciliation {
   outcomes: readonly ExtractionOutcome[]
 }
 
+/** A model-local identity handle grounded in the same source episode. */
+export interface GraphExtractionEntityProposal {
+  ref: string
+  kind: EntityKind
+  canonicalName: string
+  aliases: readonly string[]
+}
+
+/** A time-aware candidate edge between extracted entities or the owner. */
+export interface GraphExtractionEventProposal {
+  kind: ClaimKind
+  statement: string
+  predicate: string
+  subjectEntityRef: string
+  objectEntityRef?: string
+  objectValue?: string
+  confidence: number
+  importance: number
+  sensitivity: Extract<Sensitivity, 'personal'>
+  validFrom?: string
+  validTo?: string
+}
+
+export interface GraphExtractionEnvelopeV2 {
+  schemaVersion: 2
+  sourceEpisodeId: string
+  scope: Exclude<ContinuityScope, { type: 'global' }>
+  entities: readonly GraphExtractionEntityProposal[]
+  events: readonly GraphExtractionEventProposal[]
+}
+
+export interface GraphExtractionEntityResolution {
+  ref: string
+  entityId: string
+  decision: 'created' | 'reused'
+}
+
+export interface GraphExtractionOutcome {
+  eventIndex: number
+  decision: 'created-candidate' | 'duplicate'
+  claimId: string
+  conflictingClaimIds: readonly string[]
+}
+
+export interface GraphExtractionReconciliation {
+  schemaVersion: 2
+  sourceEpisodeId: string
+  entities: readonly GraphExtractionEntityResolution[]
+  outcomes: readonly GraphExtractionOutcome[]
+}
+
 export interface RecallContext {
   workspaceId?: string
   sessionId?: string

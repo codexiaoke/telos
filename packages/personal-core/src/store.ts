@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { chmodSync, mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { validateExtractionEnvelope } from './extraction.js'
+import { validateExtractionEnvelope, validateGraphExtractionEnvelope } from './extraction.js'
 import { MIGRATION_1, PERSONAL_CORE_SCHEMA_VERSION } from './schema.js'
 import type {
   ActionReceipt,
@@ -24,6 +24,8 @@ import type {
   EntityEventType,
   ExtractionReconciliation,
   ForgetReport,
+  GraphExtractionEntityResolution,
+  GraphExtractionReconciliation,
   MemoryClaim,
   OutboxJob,
   PersonalCoreOptions,
@@ -445,6 +447,113 @@ export class PersonalContinuityStore {
       }
     })
     return { schemaVersion: 1, sourceEpisodeId: envelope.sourceEpisodeId, outcomes }
+  }
+
+  /**
+   * Atomically resolves evidence-grounded identity handles and writes their
+   * time-aware relations as reviewable candidates. The reserved `owner` ref
+   * is supplied by the product boundary, never by the model.
+   */
+  applyGraphExtractionBatch(
+    value: unknown,
+    input: { ownerEntityId: string; idempotencyKey: string; actor?: ActorKind },
+  ): GraphExtractionReconciliation {
+    this.assertOpen()
+    const envelope = validateGraphExtractionEnvelope(value)
+    this.requireEntity(input.ownerEntityId)
+    const source = this.requireSourceEpisode(envelope.sourceEpisodeId)
+    const entityIds = new Map<string, string>([['owner', input.ownerEntityId]])
+    const entities: GraphExtractionEntityResolution[] = []
+    const outcomes: GraphExtractionReconciliation['outcomes'][number][] = []
+    const batchKey = assertNonEmpty(input.idempotencyKey, 'idempotencyKey')
+    this.transaction(() => {
+      for (const entity of envelope.entities) {
+        const existing = this.findExtractionEntity(entity.kind, entity.canonicalName, entity.aliases, envelope.scope)
+        const resolved = existing ?? this.createEntity({
+          kind: entity.kind,
+          canonicalName: entity.canonicalName,
+          scope: envelope.scope,
+          sourceEpisodeIds: [envelope.sourceEpisodeId],
+          actor: input.actor ?? 'agent',
+          occurredAt: source.observedAt,
+          idempotencyKey: `${batchKey}:entity:${entity.ref}`,
+        })
+        entityIds.set(entity.ref, resolved.id)
+        entities.push({
+          ref: entity.ref,
+          entityId: resolved.id,
+          decision: existing === undefined ? 'created' : 'reused',
+        })
+        const knownAliases = new Set(this.listAliases(resolved.id).map(alias => alias.normalizedAlias))
+        for (const [aliasIndex, alias] of entity.aliases.entries()) {
+          if (knownAliases.has(normalizedText(alias))) continue
+          this.addAlias({
+            entityId: resolved.id,
+            alias,
+            scope: envelope.scope,
+            sourceEpisodeId: envelope.sourceEpisodeId,
+            actor: input.actor ?? 'agent',
+            occurredAt: source.observedAt,
+            idempotencyKey: `${batchKey}:entity:${entity.ref}:alias:${String(aliasIndex)}`,
+          })
+          knownAliases.add(normalizedText(alias))
+        }
+      }
+
+      for (const [eventIndex, event] of envelope.events.entries()) {
+        const subjectEntityId = entityIds.get(event.subjectEntityRef)
+        const objectEntityId = event.objectEntityRef === undefined
+          ? undefined
+          : entityIds.get(event.objectEntityRef)
+        if (subjectEntityId === undefined || (event.objectEntityRef !== undefined && objectEntityId === undefined)) {
+          throw new Error(`graph extraction event ${String(eventIndex)} contains an unresolved entity ref`)
+        }
+        const { scopeType, scopeId } = scopeColumns(envelope.scope)
+        const rows = this.db.prepare(`
+          SELECT * FROM memory_claim
+          WHERE subject_entity_id = ? AND status IN ('candidate', 'confirmed')
+            AND scope_type = ? AND ifnull(scope_id, '') = ifnull(?, '')
+        `).all(subjectEntityId, scopeType, scopeId) as Row[]
+        const related = rows.map(row => this.claimFromRow(row))
+          .filter(claim => normalizedText(claim.predicate) === normalizedText(event.predicate))
+        const duplicate = related.find(claim =>
+          claim.objectEntityId === objectEntityId
+          && normalizedText(claim.objectValue ?? '') === normalizedText(event.objectValue ?? '')
+          && claim.validFrom === event.validFrom
+          && claim.validTo === event.validTo)
+        const conflictingClaimIds = event.kind === 'episodic' || event.kind === 'prospective'
+          ? []
+          : related.filter(claim => claim.id !== duplicate?.id
+            && (claim.objectEntityId !== objectEntityId
+              || normalizedText(claim.objectValue ?? '') !== normalizedText(event.objectValue ?? '')))
+            .map(claim => claim.id)
+            .sort()
+        if (duplicate !== undefined) {
+          outcomes.push({ eventIndex, decision: 'duplicate', claimId: duplicate.id, conflictingClaimIds })
+          continue
+        }
+        const claim = this.remember({
+          kind: event.kind,
+          statement: event.statement,
+          predicate: event.predicate,
+          subjectEntityId,
+          ...(objectEntityId === undefined ? { objectValue: event.objectValue! } : { objectEntityId }),
+          status: 'candidate',
+          confidence: event.confidence,
+          importance: event.importance,
+          sensitivity: event.sensitivity,
+          scope: envelope.scope,
+          validFrom: event.validFrom,
+          validTo: event.validTo,
+          observedAt: source.observedAt,
+          sourceEpisodeIds: [envelope.sourceEpisodeId],
+          actor: input.actor ?? 'agent',
+          idempotencyKey: `${batchKey}:event:${String(eventIndex)}`,
+        })
+        outcomes.push({ eventIndex, decision: 'created-candidate', claimId: claim.id, conflictingClaimIds })
+      }
+    })
+    return { schemaVersion: 2, sourceEpisodeId: envelope.sourceEpisodeId, entities, outcomes }
   }
 
   getClaim(id: string): MemoryClaim | undefined {
@@ -997,6 +1106,28 @@ export class PersonalContinuityStore {
   private configure(): void {
     this.db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;')
     if (this.databasePath !== ':memory:') this.db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;')
+  }
+
+  private findExtractionEntity(
+    kind: Entity['kind'],
+    canonicalName: string,
+    aliases: readonly string[],
+    scope: ContinuityScope,
+  ): Entity | undefined {
+    const names = [...new Set([canonicalName, ...aliases].map(normalizedText))]
+    const { scopeType, scopeId } = scopeColumns(scope)
+    const placeholders = names.map(() => '?').join(',')
+    const rows = this.db.prepare(`
+      SELECT DISTINCT e.*
+      FROM entity e
+      LEFT JOIN entity_alias a ON a.entity_id = e.id
+      WHERE e.status <> 'deleted' AND e.kind = ?
+        AND e.scope_type = ? AND ifnull(e.scope_id, '') = ifnull(?, '')
+        AND (lower(trim(e.canonical_name)) IN (${placeholders}) OR a.normalized_alias IN (${placeholders}))
+      ORDER BY e.id
+    `).all(kind, scopeType, scopeId, ...names, ...names) as Row[]
+    if (rows.length > 1) throw new Error(`ambiguous extracted entity ${canonicalName}`)
+    return rows[0] === undefined ? undefined : this.entityFromRow(rows[0])
   }
 
   private migrate(): void {

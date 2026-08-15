@@ -62,4 +62,30 @@ describe('WorkspaceFileService', () => {
     const { service } = await fixture()
     await expect(service.list({ sessionId: 'missing', path: '' })).rejects.toMatchObject({ code: 'workspace-unavailable' })
   })
+
+  it('stages the unsaved editor buffer and selection for the matching session', async () => {
+    const { service } = await fixture()
+    await expect(service.stageContext({
+      sessionId: 'session',
+      path: 'src/index.ts',
+      content: '',
+      revision: 'editor-revision-1',
+      selection: { startLine: 2, endLine: 3, content: 'selected buffer' },
+    })).resolves.toMatchObject({
+      sessionId: 'session',
+      path: 'src/index.ts',
+      content: '',
+      revision: 'editor-revision-1',
+      selection: { startLine: 2, endLine: 3, content: 'selected buffer' },
+    })
+    expect(service.editorContext('session', 'src/index.ts')).toMatchObject({ revision: 'editor-revision-1' })
+    expect(service.editorContext('another-session', 'src/index.ts')).toBeUndefined()
+  })
+
+  it('refuses to stage editor context outside the registered workspace', async () => {
+    const { service } = await fixture()
+    await expect(service.stageContext({
+      sessionId: 'session', path: '../secret.txt', content: 'secret', revision: 'revision-1',
+    })).rejects.toMatchObject({ code: 'path-forbidden' })
+  })
 })

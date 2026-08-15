@@ -1,7 +1,7 @@
 import { copyFile, readFile, readdir, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
-import type { WorkbenchDirectoryView, WorkbenchTextFile } from './contracts.js'
+import type { WorkbenchDirectoryView, WorkbenchEditorContext, WorkbenchEditorSelection, WorkbenchTextFile } from './contracts.js'
 
 export interface WorkspaceFileServiceOptions {
   rootForSession: (sessionId: string) => string | undefined
@@ -39,6 +39,7 @@ function errorCode(error: unknown): string | undefined {
 export class WorkspaceFileService {
   private readonly maxEntries: number
   private readonly maxFileBytes: number
+  private readonly editorContexts = new Map<string, WorkbenchEditorContext>()
 
   constructor(private readonly options: WorkspaceFileServiceOptions) {
     this.maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES
@@ -129,12 +130,61 @@ export class WorkspaceFileService {
     return this.read({ sessionId, path })
   }
 
+  async stageContext(payload: unknown): Promise<WorkbenchEditorContext> {
+    if (typeof payload !== 'object' || payload === null) throw new TypeError('payload must be an object')
+    const input = payload as Record<string, unknown>
+    const sessionId = requiredString(input.sessionId, 'sessionId')
+    const path = requiredString(input.path, 'path')
+    if (typeof input.content !== 'string') throw new TypeError('content must be a string')
+    const content = input.content
+    const revision = requiredString(input.revision, 'revision')
+    if (Buffer.byteLength(content) > this.maxFileBytes) throw Object.assign(new Error('editor context exceeds the workbench limit'), { code: 'file-too-large' })
+    const { root, target } = await this.resolveExisting(sessionId, path)
+    const canonicalPath = toWorkspacePath(root, target)
+    const selection = this.parseSelection(input.selection)
+    const context: WorkbenchEditorContext = {
+      sessionId,
+      path: canonicalPath,
+      content,
+      revision,
+      ...(selection === undefined ? {} : { selection }),
+    }
+    const key = this.contextKey(sessionId, canonicalPath)
+    this.editorContexts.delete(key)
+    this.editorContexts.set(key, context)
+    while (this.editorContexts.size > 64) {
+      const oldestKey = this.editorContexts.keys().next().value
+      if (oldestKey === undefined) break
+      this.editorContexts.delete(oldestKey)
+    }
+    return context
+  }
+
+  editorContext(sessionId: string, path: string): WorkbenchEditorContext | undefined {
+    return this.editorContexts.get(this.contextKey(sessionId, path))
+  }
+
   private parsePathRequest(payload: unknown): { sessionId: string; path: string } {
     if (typeof payload !== 'object' || payload === null) throw new TypeError('payload must be an object')
     const input = payload as Record<string, unknown>
     const sessionId = requiredString(input.sessionId, 'sessionId')
     const path = input.path === undefined ? '' : typeof input.path === 'string' ? input.path : requiredString(input.path, 'path')
     return { sessionId, path }
+  }
+
+  private parseSelection(value: unknown): WorkbenchEditorSelection | undefined {
+    if (value === undefined) return undefined
+    if (typeof value !== 'object' || value === null) throw new TypeError('selection must be an object')
+    const input = value as Record<string, unknown>
+    if (!Number.isSafeInteger(input.startLine) || (input.startLine as number) < 1) throw new TypeError('selection.startLine must be a positive integer')
+    if (!Number.isSafeInteger(input.endLine) || (input.endLine as number) < (input.startLine as number)) throw new TypeError('selection.endLine must not precede startLine')
+    const content = requiredString(input.content, 'selection.content')
+    if (Buffer.byteLength(content) > this.maxFileBytes) throw Object.assign(new Error('editor selection exceeds the workbench limit'), { code: 'file-too-large' })
+    return { startLine: input.startLine as number, endLine: input.endLine as number, content }
+  }
+
+  private contextKey(sessionId: string, path: string): string {
+    return `${sessionId}\u001f${path}`
   }
 
   private async resolveExisting(sessionId: string, workspacePath: string): Promise<{ root: string; target: string }> {

@@ -21,6 +21,20 @@ export interface WorkbenchTextFile {
   size: number
 }
 
+export interface WorkbenchEditorSelection {
+  startLine: number
+  endLine: number
+  content: string
+}
+
+export interface WorkbenchEditorContext {
+  sessionId: string
+  path: string
+  content: string
+  revision: string
+  selection?: WorkbenchEditorSelection
+}
+
 export type WorkbenchFilesRpcResult<T> =
   | { ok: true; value: T }
   | {

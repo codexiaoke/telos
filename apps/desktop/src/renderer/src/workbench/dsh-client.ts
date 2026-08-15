@@ -8,7 +8,7 @@ import {
   editorContextClipboardText,
   editorContextRef,
   editorContextStore,
-  serializeEditorContext,
+  resolveEditorContext,
 } from './files/editor-context'
 import { configureWorkbenchFilesClient, WorkbenchFilesClient, type WorkbenchFilesRpc } from './files/WorkbenchFiles'
 import { TelosAppFrame } from './shell/TelosAppFrame'
@@ -51,7 +51,11 @@ export function apply(ctx: ClientContext): void {
     },
     codec: {
       clipboardText: editorContextClipboardText,
-      serialize: ref => Promise.resolve(serializeEditorContext(ref)),
+      serialize: async (ref, signal) => {
+        const context = resolveEditorContext(ref)
+        await workbenchFiles.stageContext(context, signal)
+        return editorContextClipboardText(ref)
+      },
     },
   }
   ctx.effect(() => inputTriggers.registerSource(source), 'telos-ui-layout: editor context reference')

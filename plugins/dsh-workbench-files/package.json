@@ -13,7 +13,10 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../third_party/deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-agent": "link:../../third_party/deepseek-harness/packages/core/agent",
     "@deepseek-ai/dsh-client-connection": "link:../../third_party/deepseek-harness/packages/client/connection",
+    "@deepseek-ai/dsh-llm": "link:../../third_party/deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-session": "link:../../third_party/deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-workspace": "link:../../third_party/deepseek-harness/packages/workspace/workspace",
     "@types/node": "26.2.0",
     "typescript": "7.0.2"

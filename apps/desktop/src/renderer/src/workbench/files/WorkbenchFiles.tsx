@@ -27,6 +27,14 @@ interface WorkbenchTextFile {
   size: number
 }
 
+interface WorkbenchEditorContext {
+  sessionId: string
+  path: string
+  content: string
+  revision: string
+  selection?: { startLine: number; endLine: number; content: string }
+}
+
 export interface WorkbenchFilesRpc {
   call(channel: string, endpoint: string, payload: unknown, signal?: AbortSignal): Promise<
     | { ok: true; value: unknown }
@@ -52,6 +60,10 @@ export class WorkbenchFilesClient {
       content: file.content,
       expectedRevision: file.revision,
     })
+  }
+
+  stageContext(context: WorkbenchEditorContext, signal?: AbortSignal): Promise<WorkbenchEditorContext> {
+    return this.call('stage-context', context, signal)
   }
 
   private async call<T>(endpoint: string, payload: unknown, signal?: AbortSignal): Promise<T> {

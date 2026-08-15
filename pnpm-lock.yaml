@@ -214,9 +214,18 @@ importers:
       '@deepseek-ai/cordis':
         specifier: link:../../third_party/deepseek-harness/vendor/cordis
         version: link:../../third_party/deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../third_party/deepseek-harness/packages/core/agent
+        version: link:../../third_party/deepseek-harness/packages/core/agent
       '@deepseek-ai/dsh-client-connection':
         specifier: link:../../third_party/deepseek-harness/packages/client/connection
         version: link:../../third_party/deepseek-harness/packages/client/connection
+      '@deepseek-ai/dsh-llm':
+        specifier: link:../../third_party/deepseek-harness/packages/llm/llm
+        version: link:../../third_party/deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../third_party/deepseek-harness/packages/core/session
+        version: link:../../third_party/deepseek-harness/packages/core/session
       '@deepseek-ai/dsh-workspace':
         specifier: link:../../third_party/deepseek-harness/packages/workspace/workspace
         version: link:../../third_party/deepseek-harness/packages/workspace/workspace

@@ -340,6 +340,14 @@ export interface ActionReceipt extends Omit<ActionReceiptInput, 'id' | 'occurred
   idempotencyKey: string
 }
 
+export interface ActionConstraintConflict {
+  claimId: string
+  reason: 'forbidden-action-match' | 'confirmation-required'
+  matchedTerm: string
+  statement: string
+  scope: ContinuityScope
+}
+
 export interface OutboxJob {
   id: string
   jobType: string

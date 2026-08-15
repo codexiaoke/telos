@@ -7,6 +7,7 @@ import { MIGRATION_1, PERSONAL_CORE_SCHEMA_VERSION } from './schema.js'
 import type {
   ActionReceipt,
   ActionReceiptInput,
+  ActionConstraintConflict,
   ActorKind,
   AddAliasInput,
   ClaimKind,
@@ -843,6 +844,34 @@ export class PersonalContinuityStore {
       SELECT * FROM action_receipt ${where}
       ORDER BY recorded_at DESC, id DESC LIMIT ?
     `).all(...params) as Row[]).map(row => this.actionReceiptFromRow(row))
+  }
+
+  evaluateActionConstraints(action: string, context: RecallContext = {}): ActionConstraintConflict[] {
+    this.assertOpen()
+    const normalizedAction = normalizedText(assertNonEmpty(action, 'action'))
+    const at = assertIso(context.at ?? this.isoNow(), 'context.at')
+    const allowedSensitivities = context.allowedSensitivities ?? DEFAULT_ALLOWED_SENSITIVITIES
+    const rows = this.db.prepare(`
+      SELECT * FROM memory_claim
+      WHERE kind = 'constraint' AND status = 'confirmed'
+        AND predicate IN ('constraint.forbids', 'constraint.requires_confirmation')
+      ORDER BY importance DESC, recorded_at DESC, id
+    `).all() as Row[]
+    const conflicts: ActionConstraintConflict[] = []
+    for (const row of rows) {
+      const claim = this.claimFromRow(row)
+      if (this.recallDenialReason(claim, context, at, allowedSensitivities) !== undefined) continue
+      const matchedTerm = normalizedText(claim.objectValue ?? '')
+      if (matchedTerm.length === 0 || !normalizedAction.includes(matchedTerm)) continue
+      conflicts.push({
+        claimId: claim.id,
+        reason: claim.predicate === 'constraint.forbids' ? 'forbidden-action-match' : 'confirmation-required',
+        matchedTerm: claim.objectValue!,
+        statement: claim.statement,
+        scope: claim.scope,
+      })
+    }
+    return conflicts
   }
 
   enqueue(jobType: string, payload: Readonly<Record<string, unknown>>, idempotencyKey: string, availableAt = this.isoNow()): OutboxJob {

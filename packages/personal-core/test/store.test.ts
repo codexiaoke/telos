@@ -491,6 +491,40 @@ describe('privacy, receipts and recovery', () => {
     expect(f.store.listSourceEpisodes({ sessionId: 'session-receipt' }).map(item => item.id)).toEqual([episodeId])
   })
 
+  it('detects applicable action constraints without leaking constraints across scopes', () => {
+    const f = fixture()
+    const episodeId = source(f, 'action-constraint')
+    const personId = entity(f, 'user')
+    const blocked = remember(f, {
+      suffix: 'forbid-publish',
+      subjectEntityId: personId,
+      sourceEpisodeId: episodeId,
+      statement: '未经确认不要发布到生产环境',
+      predicate: 'constraint.forbids',
+      objectValue: '发布到生产环境',
+      kind: 'constraint',
+      scope: { type: 'workspace', id: 'workspace-a' },
+    })
+    const sessionOnly = remember(f, {
+      suffix: 'confirm-email',
+      subjectEntityId: personId,
+      sourceEpisodeId: episodeId,
+      statement: '发送客户邮件前需要确认',
+      predicate: 'constraint.requires_confirmation',
+      objectValue: '发送客户邮件',
+      kind: 'constraint',
+      scope: { type: 'session', id: 'session-a' },
+    })
+
+    expect(f.store.evaluateActionConstraints('准备发布到生产环境', { workspaceId: 'workspace-a' })).toEqual([
+      expect.objectContaining({ claimId: blocked.id, reason: 'forbidden-action-match' }),
+    ])
+    expect(f.store.evaluateActionConstraints('现在发送客户邮件', { workspaceId: 'workspace-a', sessionId: 'session-a' })).toEqual([
+      expect.objectContaining({ claimId: sessionOnly.id, reason: 'confirmation-required' }),
+    ])
+    expect(f.store.evaluateActionConstraints('准备发布到生产环境', { workspaceId: 'workspace-b' })).toEqual([])
+  })
+
   it('reclaims expired leases, retries failed jobs and marks exhausted jobs dead', () => {
     const f = fixture()
     const enqueued = f.store.enqueue('extract-memory', { sessionId: 'session-a' }, 'job:extract:a')

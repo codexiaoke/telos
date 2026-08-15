@@ -540,7 +540,7 @@ export const TELOS_LAYOUT_CSS = `
   display: flex;
   min-height: var(--telos-titlebar-height, 52px);
   padding: 0 12px 0 1px;
-  align-items: flex-end;
+  align-items: stretch;
   overflow-x: auto;
   overflow-y: hidden;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
@@ -558,7 +558,7 @@ export const TELOS_LAYOUT_CSS = `
   display: flex;
   min-width: 112px;
   max-width: 190px;
-  height: 35px;
+  height: auto;
   align-items: center;
   border-right: 1px solid var(--dsw-alias-border-l1);
   color: var(--dsw-alias-label-tertiary);

@@ -4,9 +4,16 @@ import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/ds
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import { WorkbenchFiles, workbenchFilesClient } from '../files/WorkbenchFiles'
 import {
+  clampWidth,
+  computeEditorWorkbenchColumns,
   computeWorkbenchColumns,
   DETAILS_MAX,
   DETAILS_MIN,
+  EDITOR_CONVERSATION_MAX,
+  EDITOR_CONVERSATION_MIN,
+  EDITOR_FILES_MAX,
+  EDITOR_FILES_MIN,
+  parseEditorPanelPreferences,
   SIDEBAR_AUTO_COLLAPSE,
   SIDEBAR_DEFAULT,
   SIDEBAR_MAX,
@@ -26,6 +33,7 @@ export type TelosAppFrameProps =
 type TelosViewMode = 'chat' | 'editor'
 
 const VIEW_MODE_STORAGE_PREFIX = 'telos:view-mode:'
+const EDITOR_PANELS_STORAGE_PREFIX = 'telos:editor-panels:'
 
 function CenterColumn({ children }: { children?: ReactNode }) {
   return <div className="telos-workbench-center">{children}</div>
@@ -61,7 +69,7 @@ function workspaceLabel(cwd: string | undefined): string | undefined {
 }
 
 interface ResizerProps {
-  side: 'sidebar' | 'details'
+  side: 'sidebar' | 'details' | 'editor-files' | 'editor-conversation'
   left: number
   value: number
   onStart: () => void
@@ -115,10 +123,25 @@ function Resizer({ side, left, value, onStart, onDrag, onEnd }: ResizerProps) {
 
   return (
     <div
-      aria-label={side === 'sidebar' ? '调整会话栏宽度' : '调整活动面板宽度'}
+      aria-label={{
+        sidebar: '调整会话栏宽度',
+        details: '调整活动面板宽度',
+        'editor-files': '调整文件面板宽度',
+        'editor-conversation': '调整聊天面板宽度',
+      }[side]}
       aria-orientation="vertical"
-      aria-valuemax={side === 'sidebar' ? SIDEBAR_MAX : DETAILS_MAX}
-      aria-valuemin={side === 'sidebar' ? SIDEBAR_MIN : DETAILS_MIN}
+      aria-valuemax={{
+        sidebar: SIDEBAR_MAX,
+        details: DETAILS_MAX,
+        'editor-files': EDITOR_FILES_MAX,
+        'editor-conversation': EDITOR_CONVERSATION_MAX,
+      }[side]}
+      aria-valuemin={{
+        sidebar: SIDEBAR_MIN,
+        details: DETAILS_MIN,
+        'editor-files': EDITOR_FILES_MIN,
+        'editor-conversation': EDITOR_CONVERSATION_MIN,
+      }[side]}
       aria-valuenow={Math.round(value)}
       className="telos-workbench-resizer"
       data-dragging={dragging || undefined}
@@ -153,12 +176,40 @@ export function TelosAppFrame({
   const searchDialogClick = useRef(false)
   const [viewport, setViewport] = useState(() => window.innerWidth)
   const viewModeStorageKey = `${VIEW_MODE_STORAGE_PREFIX}${currentSession?.cwd ?? 'global'}`
+  const editorPanelsStorageKey = `${EDITOR_PANELS_STORAGE_PREFIX}${currentSession?.cwd ?? 'global'}`
   const [viewMode, setViewMode] = useState<TelosViewMode>('chat')
+  const [editorPanels, setEditorPanels] = useState(() => (
+    parseEditorPanelPreferences(window.localStorage.getItem(editorPanelsStorageKey))
+  ))
+  const editorPanelsRef = useRef(editorPanels)
 
   useEffect(() => {
     const stored = window.localStorage.getItem(viewModeStorageKey)
     setViewMode(stored === 'editor' ? 'editor' : 'chat')
   }, [viewModeStorageKey])
+
+  useEffect(() => {
+    let cancelled = false
+    const fallback = (): void => {
+      const panels = parseEditorPanelPreferences(window.localStorage.getItem(editorPanelsStorageKey))
+      editorPanelsRef.current = panels
+      setEditorPanels(panels)
+    }
+    const preferences = window.telos?.workbench
+    if (preferences === undefined) {
+      fallback()
+      return
+    }
+    void preferences.getEditorPanels(editorPanelsStorageKey).then((panels) => {
+      if (cancelled) return
+      if (panels === undefined) fallback()
+      else {
+        editorPanelsRef.current = panels
+        setEditorPanels(panels)
+      }
+    }, fallback)
+    return () => { cancelled = true }
+  }, [editorPanelsStorageKey])
 
   const toggleViewMode = useCallback(() => {
     setViewMode((current) => {
@@ -258,11 +309,30 @@ export function TelosAppFrame({
   )
   const columnsRef = useRef(columns)
   columnsRef.current = columns
+  const editorColumns = computeEditorWorkbenchColumns(
+    viewport,
+    editorPanels.files,
+    editorPanels.conversation,
+  )
+  const editorColumnsRef = useRef(editorColumns)
+  editorColumnsRef.current = editorColumns
 
   const sidebarBase = useRef(0)
   const detailsBase = useRef(0)
+  const editorFilesBase = useRef(0)
+  const editorConversationBase = useRef(0)
   const [dragging, setDragging] = useState(false)
   const endDrag = useCallback(() => setDragging(false), [])
+  const endEditorDrag = useCallback(() => {
+    setDragging(false)
+    const panels = editorPanelsRef.current
+    const fallback = (): void => {
+      window.localStorage.setItem(editorPanelsStorageKey, JSON.stringify(panels))
+    }
+    const write = window.telos?.workbench?.setEditorPanels(editorPanelsStorageKey, panels)
+    if (write === undefined) fallback()
+    else void write.catch(fallback)
+  }, [editorPanelsStorageKey])
   const startSidebarDrag = useCallback(() => {
     sidebarBase.current = columnsRef.current.sidebar
     setDragging(true)
@@ -277,6 +347,34 @@ export function TelosAppFrame({
   const dragDetails = useCallback((dx: number) => {
     actions.setDetails(detailsBase.current - dx)
   }, [actions])
+  const startEditorFilesDrag = useCallback(() => {
+    editorFilesBase.current = editorColumnsRef.current.files
+    setDragging(true)
+  }, [])
+  const startEditorConversationDrag = useCallback(() => {
+    editorConversationBase.current = editorColumnsRef.current.conversation
+    setDragging(true)
+  }, [])
+  const dragEditorFiles = useCallback((dx: number) => {
+    const next = {
+      ...editorPanelsRef.current,
+      files: clampWidth(editorFilesBase.current + dx, EDITOR_FILES_MIN, EDITOR_FILES_MAX),
+    }
+    editorPanelsRef.current = next
+    setEditorPanels(next)
+  }, [])
+  const dragEditorConversation = useCallback((dx: number) => {
+    const next = {
+      ...editorPanelsRef.current,
+      conversation: clampWidth(
+        editorConversationBase.current - dx,
+        EDITOR_CONVERSATION_MIN,
+        EDITOR_CONVERSATION_MAX,
+      ),
+    }
+    editorPanelsRef.current = next
+    setEditorPanels(next)
+  }, [])
 
   const handleWorkbenchClickCapture = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     searchDialogClick.current = false
@@ -317,9 +415,9 @@ export function TelosAppFrame({
       onClick={handleWorkbenchClick}
       onClickCapture={handleWorkbenchClickCapture}
       ref={frameRef}
-      style={viewMode === 'chat'
-        ? { gridTemplateColumns: `${columns.sidebar}px minmax(0, 1fr) ${columns.details}px` }
-        : undefined}
+      style={{ gridTemplateColumns: viewMode === 'chat'
+        ? `${columns.sidebar}px minmax(0, 1fr) ${columns.details}px`
+        : `${editorColumns.files}px minmax(0, 1fr) ${editorColumns.conversation}px` }}
     >
       <div className="telos-editor-files-seat">
         <WorkbenchFiles
@@ -384,6 +482,26 @@ export function TelosAppFrame({
           side="details"
           value={columns.details}
         />
+      )}
+      {viewMode === 'editor' && (
+        <>
+          <Resizer
+            left={editorColumns.files}
+            onDrag={dragEditorFiles}
+            onEnd={endEditorDrag}
+            onStart={startEditorFilesDrag}
+            side="editor-files"
+            value={editorColumns.files}
+          />
+          <Resizer
+            left={viewport - editorColumns.conversation}
+            onDrag={dragEditorConversation}
+            onEnd={endEditorDrag}
+            onStart={startEditorConversationDrag}
+            side="editor-conversation"
+            value={editorColumns.conversation}
+          />
+        </>
       )}
     </div>
   )

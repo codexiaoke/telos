@@ -14,19 +14,19 @@
       "upstream": "packages/client/ui-layout/src/client/AppFrame.tsx",
       "telos": "apps/desktop/src/renderer/src/workbench/shell/TelosAppFrame.tsx",
       "upstreamSha256": "53649b22b357e458b4b2ab5c2894f5048464697d5b163448f0a55901d2b3ca75",
-      "telosSha256": "3cbaabe3085e9ce7f6ca84681783eb7a27bf46d12a8ba05ced59ac68fdd0fda2"
+      "telosSha256": "170009c60dec85042926892a66585be23ceddc3a740a18a5ba9e3bc6dc0eb03d"
     },
     {
       "upstream": "packages/client/ui-layout/src/client/AppFrame.module.css",
       "telos": "apps/desktop/src/renderer/src/workbench/shell/layout-styles.ts",
       "upstreamSha256": "329ad2e094a26fb4ffe3a33eb2d4bdf21262af37ec01da386bd14ef10ba64670",
-      "telosSha256": "1390ea548d48bc988e4574c0076c86109b0ff423fd73579f3c94402d9ef2f902"
+      "telosSha256": "217ff1f4c1011062ad51a0b752b88ffc8533057c54b888a674e480d8b435d9f9"
     },
     {
       "upstream": "packages/client/ui-layout/src/client/columns.ts",
       "telos": "apps/desktop/src/renderer/src/workbench/shell/layout-model.ts",
       "upstreamSha256": "c2f002126fc671aeaad058eae310d265f7b1f9b77223686c0fe4619cda4e71e2",
-      "telosSha256": "4ac6e6043b98049aa935e5dff6d23ade3316c5b131142c39608cdf8681660307"
+      "telosSha256": "57507a812c9f3437496498c34f86ef43636536863c47ac2da91be8d1e2ecb9e3"
     },
     {
       "upstream": "packages/client/ui-layout/src/client/stores.ts",
@@ -48,7 +48,7 @@
     }
   ],
   "generated": "integrations/dsh/plugins/telos-ui-layout/lib/client.js",
-  "generatedSha256": "292728b557c539ae5e4d8c1b8da2719a442baf762c57c878460ee4f106758337",
+  "generatedSha256": "2d28b5e7f768c0d99e792b2914aea6b6941c1b5d1f093f3537384c9b649d4d6f",
   "externalModules": [
     "react",
     "react/jsx-runtime",

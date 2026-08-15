@@ -295,6 +295,26 @@ function WorkbenchFiles({ active, client, sessionId, workspaceLabel: workspaceLa
 // apps/desktop/src/renderer/src/workbench/shell/TelosAppFrame.tsx
 var import_react2 = require("react");
 
+// apps/desktop/src/shared/workbench-preferences.ts
+var EDITOR_FILES_MIN = 180;
+var EDITOR_FILES_MAX = 520;
+var EDITOR_FILES_DEFAULT = 260;
+var EDITOR_CONVERSATION_MIN = 300;
+var EDITOR_CONVERSATION_MAX = 720;
+var EDITOR_CONVERSATION_DEFAULT = 380;
+function validateEditorPanelPreferences(value) {
+  if (typeof value !== "object" || value === null) return void 0;
+  const candidate = value;
+  if (typeof candidate.files !== "number" || !Number.isFinite(candidate.files) || typeof candidate.conversation !== "number" || !Number.isFinite(candidate.conversation)) return void 0;
+  return {
+    files: Math.min(EDITOR_FILES_MAX, Math.max(EDITOR_FILES_MIN, Math.round(candidate.files))),
+    conversation: Math.min(
+      EDITOR_CONVERSATION_MAX,
+      Math.max(EDITOR_CONVERSATION_MIN, Math.round(candidate.conversation))
+    )
+  };
+}
+
 // apps/desktop/src/renderer/src/workbench/shell/layout-model.ts
 var CENTER_MIN = 620;
 var SIDEBAR_MIN = 264;
@@ -305,6 +325,7 @@ var SIDEBAR_AUTO_COLLAPSE = 1060;
 var DETAILS_MIN = 300;
 var DETAILS_MAX = 520;
 var DETAILS_DEFAULT = 380;
+var EDITOR_CENTER_MIN = 340;
 function clampWidth(px, min, max) {
   return Math.min(max, Math.max(min, Math.round(px)));
 }
@@ -332,12 +353,53 @@ function computeWorkbenchColumns(viewport, sidebar, details) {
     details: 0
   };
 }
+function defaultEditorPanelPreferences() {
+  return {
+    files: EDITOR_FILES_DEFAULT,
+    conversation: EDITOR_CONVERSATION_DEFAULT
+  };
+}
+function parseEditorPanelPreferences(serialized) {
+  if (serialized === null) return defaultEditorPanelPreferences();
+  try {
+    return validateEditorPanelPreferences(JSON.parse(serialized)) ?? defaultEditorPanelPreferences();
+  } catch {
+    return defaultEditorPanelPreferences();
+  }
+}
+function computeEditorWorkbenchColumns(viewport, files, conversation) {
+  let resolvedFiles = clampWidth(files, EDITOR_FILES_MIN, EDITOR_FILES_MAX);
+  let resolvedConversation = clampWidth(
+    conversation,
+    EDITOR_CONVERSATION_MIN,
+    EDITOR_CONVERSATION_MAX
+  );
+  let overage = resolvedFiles + resolvedConversation + EDITOR_CENTER_MIN - viewport;
+  if (overage > 0) {
+    const conversationConcession = Math.min(
+      overage,
+      resolvedConversation - EDITOR_CONVERSATION_MIN
+    );
+    resolvedConversation -= conversationConcession;
+    overage -= conversationConcession;
+  }
+  if (overage > 0) {
+    const filesConcession = Math.min(overage, resolvedFiles - EDITOR_FILES_MIN);
+    resolvedFiles -= filesConcession;
+  }
+  return {
+    files: resolvedFiles,
+    editor: Math.max(0, viewport - resolvedFiles - resolvedConversation),
+    conversation: resolvedConversation
+  };
+}
 
 // apps/desktop/src/renderer/src/workbench/shell/TelosAppFrame.tsx
 var import_jsx_runtime2 = require("react/jsx-runtime");
 var OPEN_SEARCH_DIALOG_SELECTOR = ".telos-workbench-sidebar [data-slot='sidebar.workspaces'] > div:has(> div:first-child > div:first-of-type button[aria-expanded='true'])";
 var SEARCH_SIDEBAR_SNAPSHOT_SELECTOR = "[data-telos-search-sidebar-snapshot]";
 var VIEW_MODE_STORAGE_PREFIX = "telos:view-mode:";
+var EDITOR_PANELS_STORAGE_PREFIX = "telos:editor-panels:";
 function CenterColumn({ children }) {
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "telos-workbench-center", children });
 }
@@ -404,10 +466,25 @@ function Resizer({ side, left, value, onStart, onDrag, onEnd }) {
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
     "div",
     {
-      "aria-label": side === "sidebar" ? "\u8C03\u6574\u4F1A\u8BDD\u680F\u5BBD\u5EA6" : "\u8C03\u6574\u6D3B\u52A8\u9762\u677F\u5BBD\u5EA6",
+      "aria-label": {
+        sidebar: "\u8C03\u6574\u4F1A\u8BDD\u680F\u5BBD\u5EA6",
+        details: "\u8C03\u6574\u6D3B\u52A8\u9762\u677F\u5BBD\u5EA6",
+        "editor-files": "\u8C03\u6574\u6587\u4EF6\u9762\u677F\u5BBD\u5EA6",
+        "editor-conversation": "\u8C03\u6574\u804A\u5929\u9762\u677F\u5BBD\u5EA6"
+      }[side],
       "aria-orientation": "vertical",
-      "aria-valuemax": side === "sidebar" ? SIDEBAR_MAX : DETAILS_MAX,
-      "aria-valuemin": side === "sidebar" ? SIDEBAR_MIN : DETAILS_MIN,
+      "aria-valuemax": {
+        sidebar: SIDEBAR_MAX,
+        details: DETAILS_MAX,
+        "editor-files": EDITOR_FILES_MAX,
+        "editor-conversation": EDITOR_CONVERSATION_MAX
+      }[side],
+      "aria-valuemin": {
+        sidebar: SIDEBAR_MIN,
+        details: DETAILS_MIN,
+        "editor-files": EDITOR_FILES_MIN,
+        "editor-conversation": EDITOR_CONVERSATION_MIN
+      }[side],
       "aria-valuenow": Math.round(value),
       className: "telos-workbench-resizer",
       "data-dragging": dragging || void 0,
@@ -441,11 +518,38 @@ function TelosAppFrame({
   const searchDialogClick = (0, import_react2.useRef)(false);
   const [viewport, setViewport] = (0, import_react2.useState)(() => window.innerWidth);
   const viewModeStorageKey = `${VIEW_MODE_STORAGE_PREFIX}${currentSession?.cwd ?? "global"}`;
+  const editorPanelsStorageKey = `${EDITOR_PANELS_STORAGE_PREFIX}${currentSession?.cwd ?? "global"}`;
   const [viewMode, setViewMode] = (0, import_react2.useState)("chat");
+  const [editorPanels, setEditorPanels] = (0, import_react2.useState)(() => parseEditorPanelPreferences(window.localStorage.getItem(editorPanelsStorageKey)));
+  const editorPanelsRef = (0, import_react2.useRef)(editorPanels);
   (0, import_react2.useEffect)(() => {
     const stored = window.localStorage.getItem(viewModeStorageKey);
     setViewMode(stored === "editor" ? "editor" : "chat");
   }, [viewModeStorageKey]);
+  (0, import_react2.useEffect)(() => {
+    let cancelled = false;
+    const fallback = () => {
+      const panels2 = parseEditorPanelPreferences(window.localStorage.getItem(editorPanelsStorageKey));
+      editorPanelsRef.current = panels2;
+      setEditorPanels(panels2);
+    };
+    const preferences = window.telos?.workbench;
+    if (preferences === void 0) {
+      fallback();
+      return;
+    }
+    void preferences.getEditorPanels(editorPanelsStorageKey).then((panels2) => {
+      if (cancelled) return;
+      if (panels2 === void 0) fallback();
+      else {
+        editorPanelsRef.current = panels2;
+        setEditorPanels(panels2);
+      }
+    }, fallback);
+    return () => {
+      cancelled = true;
+    };
+  }, [editorPanelsStorageKey]);
   const toggleViewMode = (0, import_react2.useCallback)(() => {
     setViewMode((current) => {
       const next = current === "chat" ? "editor" : "chat";
@@ -535,10 +639,29 @@ function TelosAppFrame({
   );
   const columnsRef = (0, import_react2.useRef)(columns);
   columnsRef.current = columns;
+  const editorColumns = computeEditorWorkbenchColumns(
+    viewport,
+    editorPanels.files,
+    editorPanels.conversation
+  );
+  const editorColumnsRef = (0, import_react2.useRef)(editorColumns);
+  editorColumnsRef.current = editorColumns;
   const sidebarBase = (0, import_react2.useRef)(0);
   const detailsBase = (0, import_react2.useRef)(0);
+  const editorFilesBase = (0, import_react2.useRef)(0);
+  const editorConversationBase = (0, import_react2.useRef)(0);
   const [dragging, setDragging] = (0, import_react2.useState)(false);
   const endDrag = (0, import_react2.useCallback)(() => setDragging(false), []);
+  const endEditorDrag = (0, import_react2.useCallback)(() => {
+    setDragging(false);
+    const panels2 = editorPanelsRef.current;
+    const fallback = () => {
+      window.localStorage.setItem(editorPanelsStorageKey, JSON.stringify(panels2));
+    };
+    const write = window.telos?.workbench?.setEditorPanels(editorPanelsStorageKey, panels2);
+    if (write === void 0) fallback();
+    else void write.catch(fallback);
+  }, [editorPanelsStorageKey]);
   const startSidebarDrag = (0, import_react2.useCallback)(() => {
     sidebarBase.current = columnsRef.current.sidebar;
     setDragging(true);
@@ -553,6 +676,34 @@ function TelosAppFrame({
   const dragDetails = (0, import_react2.useCallback)((dx) => {
     actions.setDetails(detailsBase.current - dx);
   }, [actions]);
+  const startEditorFilesDrag = (0, import_react2.useCallback)(() => {
+    editorFilesBase.current = editorColumnsRef.current.files;
+    setDragging(true);
+  }, []);
+  const startEditorConversationDrag = (0, import_react2.useCallback)(() => {
+    editorConversationBase.current = editorColumnsRef.current.conversation;
+    setDragging(true);
+  }, []);
+  const dragEditorFiles = (0, import_react2.useCallback)((dx) => {
+    const next = {
+      ...editorPanelsRef.current,
+      files: clampWidth(editorFilesBase.current + dx, EDITOR_FILES_MIN, EDITOR_FILES_MAX)
+    };
+    editorPanelsRef.current = next;
+    setEditorPanels(next);
+  }, []);
+  const dragEditorConversation = (0, import_react2.useCallback)((dx) => {
+    const next = {
+      ...editorPanelsRef.current,
+      conversation: clampWidth(
+        editorConversationBase.current - dx,
+        EDITOR_CONVERSATION_MIN,
+        EDITOR_CONVERSATION_MAX
+      )
+    };
+    editorPanelsRef.current = next;
+    setEditorPanels(next);
+  }, []);
   const handleWorkbenchClickCapture = (0, import_react2.useCallback)((event) => {
     searchDialogClick.current = false;
     if (!(event.target instanceof Element)) return;
@@ -589,7 +740,7 @@ function TelosAppFrame({
       onClick: handleWorkbenchClick,
       onClickCapture: handleWorkbenchClickCapture,
       ref: frameRef,
-      style: viewMode === "chat" ? { gridTemplateColumns: `${columns.sidebar}px minmax(0, 1fr) ${columns.details}px` } : void 0,
+      style: { gridTemplateColumns: viewMode === "chat" ? `${columns.sidebar}px minmax(0, 1fr) ${columns.details}px` : `${editorColumns.files}px minmax(0, 1fr) ${editorColumns.conversation}px` },
       children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "telos-editor-files-seat", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
           WorkbenchFiles,
@@ -651,7 +802,31 @@ function TelosAppFrame({
             side: "details",
             value: columns.details
           }
-        )
+        ),
+        viewMode === "editor" && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+            Resizer,
+            {
+              left: editorColumns.files,
+              onDrag: dragEditorFiles,
+              onEnd: endEditorDrag,
+              onStart: startEditorFilesDrag,
+              side: "editor-files",
+              value: editorColumns.files
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+            Resizer,
+            {
+              left: viewport - editorColumns.conversation,
+              onDrag: dragEditorConversation,
+              onEnd: endEditorDrag,
+              onStart: startEditorConversationDrag,
+              side: "editor-conversation",
+              value: editorColumns.conversation
+            }
+          )
+        ] })
       ]
     }
   );
@@ -739,7 +914,6 @@ var TELOS_LAYOUT_CSS = `
 }
 
 .telos-workbench-frame[data-view-mode='editor'] {
-  grid-template-columns: 260px minmax(420px, 1fr) minmax(360px, 34vw);
   background: var(--dsw-alias-bg-base);
 }
 
@@ -1444,12 +1618,6 @@ var TELOS_LAYOUT_CSS = `
 .telos-editor-conversation [data-slot='conversation.session.header'] > header [role='button'] {
   -webkit-app-region: no-drag;
   user-select: auto;
-}
-
-@media (max-width: 1180px) {
-  .telos-workbench-frame[data-view-mode='editor'] {
-    grid-template-columns: 220px minmax(340px, 1fr) minmax(340px, 38vw);
-  }
 }
 
 .telos-sidebar-reopen {

@@ -6,6 +6,7 @@ import type {
   RuntimeStatus,
 } from '@telos/runtime-contracts'
 import type { DshWebSnapshot } from '../shared/dsh-web.js'
+import type { EditorPanelPreferences } from '../shared/workbench-preferences.js'
 
 const CHANNELS = {
   appInfo: 'telos:system:get-app-info',
@@ -15,6 +16,8 @@ const CHANNELS = {
   runtimeStatus: 'telos:runtime:get-status',
   runtimeRun: 'telos:runtime:run',
   runtimeEvent: 'telos:runtime:event',
+  workbenchEditorPanelsGet: 'telos:workbench:get-editor-panels',
+  workbenchEditorPanelsSet: 'telos:workbench:set-editor-panels',
 } as const
 
 export interface AppInfo {
@@ -44,6 +47,14 @@ const api = {
       ipcRenderer.on(CHANNELS.runtimeEvent, listener)
       return () => ipcRenderer.removeListener(CHANNELS.runtimeEvent, listener)
     },
+  },
+  workbench: {
+    getEditorPanels: (workspace: string): Promise<EditorPanelPreferences | undefined> => (
+      ipcRenderer.invoke(CHANNELS.workbenchEditorPanelsGet, workspace)
+    ),
+    setEditorPanels: (workspace: string, value: EditorPanelPreferences): Promise<void> => (
+      ipcRenderer.invoke(CHANNELS.workbenchEditorPanelsSet, workspace, value)
+    ),
   },
 }
 

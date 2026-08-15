@@ -43,8 +43,9 @@ describe('TELOS_LAYOUT_CSS', () => {
 
   it('provides the editor mode three-column shell and titlebar toggle', () => {
     expect(TELOS_LAYOUT_CSS).toContain("[data-view-mode='editor']")
-    expect(TELOS_LAYOUT_CSS).toContain('grid-template-columns: 260px minmax(420px, 1fr) minmax(360px, 34vw);')
+    expect(TELOS_LAYOUT_CSS).not.toContain('grid-template-columns: 260px minmax(420px, 1fr) minmax(360px, 34vw);')
     expect(TELOS_LAYOUT_CSS).toContain('.telos-view-mode-toggle')
+    expect(TELOS_LAYOUT_CSS).toContain('.telos-workbench-resizer')
     expect(TELOS_LAYOUT_CSS).toContain('.telos-editor-explorer')
     expect(TELOS_LAYOUT_CSS).toContain('.telos-editor-surface')
     expect(TELOS_LAYOUT_CSS).toContain('.telos-editor-conversation')

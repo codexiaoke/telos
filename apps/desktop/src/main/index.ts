@@ -19,7 +19,9 @@ import { IPC_CHANNELS } from './ipc/channels.js'
 import { registerDshWebHandlers } from './ipc/register-dsh-web-handlers.js'
 import { registerRuntimeHandlers } from './ipc/register-runtime-handlers.js'
 import { registerSystemHandlers } from './ipc/register-system-handlers.js'
+import { registerWorkbenchPreferencesHandlers } from './ipc/register-workbench-preferences-handlers.js'
 import { configureApplicationLogger } from './logging/application-logger.js'
+import { WorkbenchPreferencesStore } from './preferences/workbench-preferences-store.js'
 import { installApplicationIcon } from './shell/application-icon.js'
 import { createApplicationTray, type ApplicationTrayHandle } from './shell/application-tray.js'
 import { installApplicationMenu } from './shell/application-menu.js'
@@ -125,6 +127,17 @@ async function startApplication(): Promise<void> {
   })
   registerSystemHandlers()
   registerRuntimeHandlers(createRuntimeGateway())
+  const workbenchPreferences = new WorkbenchPreferencesStore(
+    join(app.getPath('userData'), 'settings/workbench-preferences.json'),
+  )
+  registerWorkbenchPreferencesHandlers({
+    store: workbenchPreferences,
+    isTrustedSender: sender => (
+      mainWindow !== undefined
+      && !mainWindow.isDestroyed()
+      && sender.id === mainWindow.webContents.id
+    ),
+  })
 
   const dshHome = join(app.getPath('userData'), 'runtime/dsh/web-home')
   const telosPatch = prepareTelosDshWebPatch(dshHome, {

@@ -1,3 +1,14 @@
+import {
+  EDITOR_CONVERSATION_DEFAULT,
+  EDITOR_CONVERSATION_MAX,
+  EDITOR_CONVERSATION_MIN,
+  EDITOR_FILES_DEFAULT,
+  EDITOR_FILES_MAX,
+  EDITOR_FILES_MIN,
+  validateEditorPanelPreferences,
+  type EditorPanelPreferences,
+} from '../../../../shared/workbench-preferences'
+
 /**
  * Telos three-column geometry. The concession order remains compatible with
  * DSH ui-layout: preserve the sidebar, shrink details, close details, then let
@@ -9,6 +20,22 @@ export interface WorkbenchColumns {
   center: number
   details: number
 }
+
+export interface EditorWorkbenchColumns {
+  files: number
+  editor: number
+  conversation: number
+}
+
+export type { EditorPanelPreferences }
+export {
+  EDITOR_CONVERSATION_DEFAULT,
+  EDITOR_CONVERSATION_MAX,
+  EDITOR_CONVERSATION_MIN,
+  EDITOR_FILES_DEFAULT,
+  EDITOR_FILES_MAX,
+  EDITOR_FILES_MIN,
+} from '../../../../shared/workbench-preferences'
 
 export const CENTER_MIN = 620
 export const SIDEBAR_MIN = 264
@@ -22,6 +49,7 @@ export const SIDEBAR_AUTO_COLLAPSE = 1_060
 export const DETAILS_MIN = 300
 export const DETAILS_MAX = 520
 export const DETAILS_DEFAULT = 380
+export const EDITOR_CENTER_MIN = 340
 
 export function clampWidth(px: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.round(px)))
@@ -62,5 +90,62 @@ export function computeWorkbenchColumns(
     sidebar: resolvedSidebar,
     center: Math.max(0, viewport - resolvedSidebar),
     details: 0,
+  }
+}
+
+export function defaultEditorPanelPreferences(): EditorPanelPreferences {
+  return {
+    files: EDITOR_FILES_DEFAULT,
+    conversation: EDITOR_CONVERSATION_DEFAULT,
+  }
+}
+
+export function parseEditorPanelPreferences(serialized: string | null): EditorPanelPreferences {
+  if (serialized === null) return defaultEditorPanelPreferences()
+
+  try {
+    return validateEditorPanelPreferences(JSON.parse(serialized)) ?? defaultEditorPanelPreferences()
+  }
+  catch {
+    return defaultEditorPanelPreferences()
+  }
+}
+
+/**
+ * Resolve the editor workbench without letting either side panel consume the
+ * editing surface. Preferences are reduced right-to-left when the window is
+ * narrow, while the stored values remain untouched for a later wider window.
+ */
+export function computeEditorWorkbenchColumns(
+  viewport: number,
+  files: number,
+  conversation: number,
+): EditorWorkbenchColumns {
+  let resolvedFiles = clampWidth(files, EDITOR_FILES_MIN, EDITOR_FILES_MAX)
+  let resolvedConversation = clampWidth(
+    conversation,
+    EDITOR_CONVERSATION_MIN,
+    EDITOR_CONVERSATION_MAX,
+  )
+  let overage = resolvedFiles + resolvedConversation + EDITOR_CENTER_MIN - viewport
+
+  if (overage > 0) {
+    const conversationConcession = Math.min(
+      overage,
+      resolvedConversation - EDITOR_CONVERSATION_MIN,
+    )
+    resolvedConversation -= conversationConcession
+    overage -= conversationConcession
+  }
+
+  if (overage > 0) {
+    const filesConcession = Math.min(overage, resolvedFiles - EDITOR_FILES_MIN)
+    resolvedFiles -= filesConcession
+  }
+
+  return {
+    files: resolvedFiles,
+    editor: Math.max(0, viewport - resolvedFiles - resolvedConversation),
+    conversation: resolvedConversation,
   }
 }

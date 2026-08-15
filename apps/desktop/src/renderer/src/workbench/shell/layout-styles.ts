@@ -21,7 +21,6 @@ export const TELOS_LAYOUT_CSS = `
 }
 
 .telos-workbench-frame[data-view-mode='editor'] {
-  grid-template-columns: 260px minmax(420px, 1fr) minmax(360px, 34vw);
   background: var(--dsw-alias-bg-base);
 }
 
@@ -726,12 +725,6 @@ export const TELOS_LAYOUT_CSS = `
 .telos-editor-conversation [data-slot='conversation.session.header'] > header [role='button'] {
   -webkit-app-region: no-drag;
   user-select: auto;
-}
-
-@media (max-width: 1180px) {
-  .telos-workbench-frame[data-view-mode='editor'] {
-    grid-template-columns: 220px minmax(340px, 1fr) minmax(340px, 38vw);
-  }
 }
 
 .telos-sidebar-reopen {

@@ -7,6 +7,7 @@ import type {
   RuntimeStatus,
 } from '@telos/runtime-contracts'
 import type { DshWebSnapshot } from '../../shared/dsh-web'
+import type { EditorPanelPreferences } from '../../shared/workbench-preferences'
 
 interface TelosAppInfo {
   name: string
@@ -29,6 +30,10 @@ declare global {
         getStatus: () => Promise<RuntimeStatus>
         run: (request: RuntimePromptRequest) => Promise<RuntimeRunResult>
         onEvent: (observer: (event: RuntimeEvent) => void) => () => void
+      }
+      workbench: {
+        getEditorPanels: (workspace: string) => Promise<EditorPanelPreferences | undefined>
+        setEditorPanels: (workspace: string, value: EditorPanelPreferences) => Promise<void>
       }
     }
   }

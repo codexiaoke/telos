@@ -6,4 +6,6 @@ export const IPC_CHANNELS = {
   runtimeStatus: 'telos:runtime:get-status',
   runtimeRun: 'telos:runtime:run',
   runtimeEvent: 'telos:runtime:event',
+  workbenchEditorPanelsGet: 'telos:workbench:get-editor-panels',
+  workbenchEditorPanelsSet: 'telos:workbench:set-editor-panels',
 } as const

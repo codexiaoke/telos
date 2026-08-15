@@ -444,6 +444,9 @@ describe('privacy, receipts and recovery', () => {
     })
     expect(f.store.getClaim(claim.id)).toBeUndefined()
     expect(f.store.getSourceEpisode(episodeId)).toMatchObject({ content: undefined, deletionState: 'purged' })
+    expect(f.store.explainRecall(decision.id)).toBeUndefined()
+    expect(f.store.listRecallDecisions({ claimId: claim.id })).toEqual([])
+    expect(f.store.listMaterializations({ claimId: claim.id })).toEqual([])
     expect(f.store.recall('private forget needle', {}, { minScore: 0 }).selectedClaims).toHaveLength(0)
     expect(f.store.forget(claim.id, {
       physical: true,

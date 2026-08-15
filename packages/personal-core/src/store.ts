@@ -761,7 +761,20 @@ export class PersonalContinuityStore {
           sourceStates.push({ sourceEpisodeId, state: 'retained-reference' })
         }
       }
-      if (options.physical === true) this.db.prepare('DELETE FROM memory_claim WHERE id = ?').run(claimId)
+      if (options.physical === true) {
+        this.db.prepare(`
+          DELETE FROM recall_run WHERE id IN (
+            SELECT rr.id
+            FROM recall_run rr, json_each(rr.selected_claim_ids_json) selected
+            WHERE selected.value = ?
+            UNION
+            SELECT recall_id FROM recall_candidate WHERE claim_id = ?
+            UNION
+            SELECT recall_id FROM recall_materialization WHERE claim_id = ?
+          )
+        `).run(claimId, claimId, claimId)
+        this.db.prepare('DELETE FROM memory_claim WHERE id = ?').run(claimId)
+      }
       this.db.prepare(`
         INSERT INTO deletion_receipt (id, claim_id, report_json, idempotency_key, created_at)
         VALUES (?, ?, ?, ?, ?)

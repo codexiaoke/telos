@@ -25,17 +25,19 @@ publish:
 
 mac:
   category: public.app-category.productivity
-  # Free open-source distribution: the first launch is approved by the user in
-  # macOS Privacy & Security instead of relying on a paid Developer ID.
-  identity: null
-  hardenedRuntime: false
+  # Release builds are signed with the Developer ID certificate injected by CI
+  # and notarized before electron-builder creates downloadable artifacts.
+  hardenedRuntime: true
   gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: true
   target:
     - dmg
     - zip
 
 dmg:
-  sign: false
+  sign: true
 
 win:
   # The packaged DSH closure is production-only and symlink-free, so standard

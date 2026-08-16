@@ -92,10 +92,6 @@ jobs:
           - runner: windows-2025
             artifact: windows-x64
     runs-on: ${{ matrix.runner }}
-    env:
-      # Telos is distributed as a free open-source build. Do not discover or
-      # import paid Apple/Windows identities on GitHub-hosted runners.
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -109,9 +105,72 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build complete DSH runtime
         run: pnpm dsh:build
-      - name: Package desktop
+      - name: Require macOS signing and notarization credentials
+        if: runner.os == 'macOS'
         shell: bash
-        run: pnpm package:desktop -- --config.extraMetadata.version=${{ needs.metadata.outputs.version }}
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=()
+          for name in MAC_CSC_LINK MAC_CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name}" ]]; then missing+=("$name"); fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "Missing required macOS release secrets: ${missing[*]}" >&2
+            echo "Unsigned or unnotarized macOS artifacts will not be published." >&2
+            exit 1
+          fi
+      - name: Package signed and notarized macOS desktop
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'true'
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node scripts/package-desktop.mjs --config.extraMetadata.version=${{ needs.metadata.outputs.version }}
+      - name: Verify macOS signature, notarization ticket, and Gatekeeper acceptance
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          app_path="$(find dist -maxdepth 2 -type d -name 'Telos.app' -print -quit)"
+          if [[ -z "$app_path" ]]; then
+            echo "Packaged Telos.app was not found." >&2
+            exit 1
+          fi
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          signature="$(codesign --display --verbose=4 "$app_path" 2>&1)"
+          if [[ "$signature" != *"Authority=Developer ID Application:"* ]]; then
+            echo "Telos.app is not signed with a Developer ID Application identity." >&2
+            echo "$signature" >&2
+            exit 1
+          fi
+          xcrun stapler validate "$app_path"
+          xattr -w com.apple.quarantine "0081;$(printf '%x' "$(date +%s)");GitHub Actions;" "$app_path"
+          spctl --assess --type execute --verbose=4 "$app_path"
+          xattr -d com.apple.quarantine "$app_path"
+
+          shopt -s nullglob
+          dmgs=(dist/*.dmg)
+          if (( ${#dmgs[@]} == 0 )); then
+            echo "Signed macOS DMG was not found." >&2
+            exit 1
+          fi
+          for dmg in "${dmgs[@]}"; do
+            codesign --verify --strict --verbose=2 "$dmg"
+          done
+      - name: Package Windows desktop
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: node scripts/package-desktop.mjs --config.extraMetadata.version=${{ needs.metadata.outputs.version }}
       - uses: actions/upload-artifact@v4
         with:
           name: Telos-${{ needs.metadata.outputs.version }}-${{ matrix.artifact }}

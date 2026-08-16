@@ -29,8 +29,10 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../third_party/deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-attachment": "link:../../third_party/deepseek-harness/packages/attachment/attachment",
     "@deepseek-ai/dsh-llm": "link:../../third_party/deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-settings": "link:../../third_party/deepseek-harness/packages/settings/settings",
+    "@deepseek-ai/dsh-tools": "link:../../third_party/deepseek-harness/packages/core/tools",
     "@deepseek-ai/dsh-client-ui-conversation": "link:../../third_party/deepseek-harness/packages/client/ui-conversation",
     "@deepseek-ai/dsh-client-ui-model-selection": "link:../../third_party/deepseek-harness/packages/client/ui-model-selection",
     "@types/node": "26.2.0",

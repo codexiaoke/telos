@@ -6,9 +6,10 @@ import { TelosMultimodalAdapter } from './adapter.js'
 import { MULTIMODAL_RPC_CHANNEL, TELOS_MULTIMODAL_PROVIDER, type MultimodalRpcResult } from './contracts.js'
 import { MultimodalRouteUnavailableError, MultimodalSettingsService } from './service.js'
 import { MultimodalSettingsStore } from './store.js'
+import { applyVisionTool } from './vision.js'
 
 export const name = 'telos-multimodal'
-export const inject = ['connection', 'llm', 'settings']
+export const inject = ['connection', 'llm', 'settings', 'attachments', 'tools']
 export { MULTIMODAL_RPC_CHANNEL } from './contracts.js'
 export type * from './contracts.js'
 export { TelosMultimodalAdapter } from './adapter.js'
@@ -39,6 +40,7 @@ export function apply(ctx: Context, config: Config): void {
   const store = new MultimodalSettingsStore(config.storePath)
   const service = new MultimodalSettingsService(ctx, store)
   ctx.llm.registerAdapter([TELOS_MULTIMODAL_PROVIDER], new TelosMultimodalAdapter(ctx, () => store.load()))
+  applyVisionTool(ctx, store)
   ctx.connection.rpc.handle(
     MULTIMODAL_RPC_CHANNEL,
     (endpoint, payload) => result(() => service.handle(endpoint, payload)),

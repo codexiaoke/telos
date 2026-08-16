@@ -43,3 +43,14 @@
       name: '@telos/dsh-work-report'
       config:
         rootPath: !!js dshHomePath('telos', 'work-report')
+    - id: telos-computer-use
+      name: '@telos/dsh-computer-use'
+      config:
+        observationTtlMs: 0
+        allowAllApps: true
+        interaction:
+          focusPolicy: activate
+          keyboardPolicy: activate
+          pointerInputPolicy: targeted
+          cursorVisualization: hidden
+          cursorAutoHideMs: 0

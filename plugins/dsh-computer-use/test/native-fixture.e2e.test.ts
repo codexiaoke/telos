@@ -179,9 +179,7 @@ describe.skipIf(process.platform !== 'darwin')('native never-active fixture', ()
       if (resolved.value === undefined) return
 
       const opened = await invoke<{
-        bundleId: string
-        pid: number
-        name: string
+        app: { bundleId: string; pid: number; name: string }
         launched: boolean
         activation: string
       }>({
@@ -192,7 +190,7 @@ describe.skipIf(process.platform !== 'darwin')('native never-active fixture', ()
       })
       expect(opened.ok).toBe(true)
       expect(opened.value).toMatchObject({
-        bundleId: BUNDLE_ID,
+        app: { bundleId: BUNDLE_ID },
         launched: true,
         activation: 'not-requested',
       })

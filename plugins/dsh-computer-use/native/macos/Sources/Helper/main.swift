@@ -328,11 +328,9 @@ private func openApplication(_ target: [String: Any], activateRequested: Bool, t
     } else {
         activation = "not-requested"
     }
-    var result = try appJSON(app)
-    result["launched"] = launched
-    result["activation"] = activation
-    if result["name"] as? String == bundleId { result["name"] = expectedName }
-    return result
+    var appValue = try appJSON(app)
+    if appValue["name"] as? String == bundleId { appValue["name"] = expectedName }
+    return ["app": appValue, "launched": launched, "activation": activation]
 }
 
 private func axCopy(_ element: AXUIElement, _ attribute: CFString) -> Any? {
@@ -675,11 +673,16 @@ private func observationJSON(_ snapshot: ObservationSnapshot, screenshot: [Strin
 }
 
 private func activate(_ app: NSRunningApplication, timeoutMs: Int) throws {
-    _ = app.activate(options: [.activateAllWindows])
-    let deadline = DispatchTime.now().uptimeNanoseconds + UInt64(timeoutMs) * 1_000_000
+    if app.isHidden { _ = app.unhide() }
+    let accepted = app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+    guard accepted else {
+        throw fail("COMPUTER_ACTION_BLOCKED", "macOS rejected foreground activation for the selected application")
+    }
+    let boundedTimeoutMs = min(timeoutMs, 5_000)
+    let deadline = DispatchTime.now().uptimeNanoseconds + UInt64(boundedTimeoutMs) * 1_000_000
     while !app.isActive {
         if DispatchTime.now().uptimeNanoseconds >= deadline {
-            throw fail("COMPUTER_ACTION_BLOCKED", "the selected application did not become frontmost before the action timeout")
+            throw fail("COMPUTER_ACTION_BLOCKED", "the selected application did not become frontmost within the bounded 5 second activation window")
         }
         usleep(10_000)
     }

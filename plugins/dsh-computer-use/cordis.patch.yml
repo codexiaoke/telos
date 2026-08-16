@@ -1,0 +1,12 @@
+# One aggregate row initializes the macOS Service provider and its model-facing tools.
+- insert:
+    - id: telos-computer-use
+      name: '@telos/dsh-computer-use'
+      config:
+        observationTtlMs: 0
+        interaction:
+          focusPolicy: preserve
+          keyboardPolicy: activate
+          pointerInputPolicy: targeted
+          cursorVisualization: hidden
+          cursorAutoHideMs: 0

@@ -152,7 +152,7 @@ window.__ModuleLoader__.load({
 						className: SidebarRoot_module_css_default.logoRow,
 						children: [wide && (0, react_jsx_runtime.jsx)("div", {
 							className: clsx(SidebarRoot_module_css_default.brand, SidebarRoot_module_css_default.wide),
-							"aria-label": "Telos v0.1.3",
+							"aria-label": "Telos v0.1.4",
 							children: (0, react_jsx_runtime.jsxs)("span", {
 								style: { display: "inline-flex", alignItems: "baseline", gap: "6px" },
 								children: [(0, react_jsx_runtime.jsx)("span", {
@@ -160,7 +160,7 @@ window.__ModuleLoader__.load({
 									children: "Telos"
 								}), (0, react_jsx_runtime.jsx)("span", {
 									style: { fontSize: "13px", lineHeight: "18px", fontWeight: 450 },
-									children: "v0.1.3"
+									children: "v0.1.4"
 								})]
 							})
 						}), (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {

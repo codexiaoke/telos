@@ -11,6 +11,8 @@ const MAX_DIAGNOSTIC_LINES = 80
 export interface DshWebSupervisorOptions {
   sourceRoot: string
   dshHome: string
+  /** Packaged builds use the deployed DSH layout and must never instruct users to run developer commands. */
+  packaged?: boolean
   /** Standalone Node.js executable; Electron's embedded Node is not a supported DSH host. */
   executablePath: string
   patchPaths?: readonly string[]
@@ -24,6 +26,29 @@ export interface DshWebSupervisorOptions {
 type ManagedChild = ChildProcess & {
   stdout: Readable
   stderr: Readable
+}
+
+export interface DshWebArtifacts {
+  layout: 'source' | 'deployed'
+  cliPath: string
+  webIndex: string
+}
+
+/** Resolve both the source checkout used by development and the self-contained deployed runtime. */
+export function resolveDshWebArtifacts(root: string): DshWebArtifacts | undefined {
+  const candidates: readonly DshWebArtifacts[] = [
+    {
+      layout: 'source',
+      cliPath: join(root, 'apps/cli/lib/bin.js'),
+      webIndex: join(root, 'apps/web/dist/index.html'),
+    },
+    {
+      layout: 'deployed',
+      cliPath: join(root, 'lib/bin.js'),
+      webIndex: join(root, 'node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html'),
+    },
+  ]
+  return candidates.find(candidate => existsSync(candidate.cliPath) && existsSync(candidate.webIndex))
 }
 
 function safeLine(line: string): string {
@@ -144,10 +169,11 @@ export class DshWebSupervisor {
   }
 
   private async launch(): Promise<string> {
-    const cliPath = join(this.options.sourceRoot, 'apps/cli/lib/bin.js')
-    const webIndex = join(this.options.sourceRoot, 'apps/web/dist/index.html')
-    if (!existsSync(cliPath) || !existsSync(webIndex)) {
-      this.fail('Complete DSH Web artifacts are missing; run pnpm dsh:build')
+    const artifacts = resolveDshWebArtifacts(this.options.sourceRoot)
+    if (artifacts === undefined) {
+      this.fail(this.options.packaged === true
+        ? 'The built-in DSH Runtime is incomplete or incompatible. Reinstall Telos or install a newer release.'
+        : 'Complete DSH Web artifacts are missing; run pnpm dsh:build')
       throw new Error(this.detail)
     }
 
@@ -161,7 +187,7 @@ export class DshWebSupervisor {
     const child = spawn(
       this.options.executablePath,
       [
-        cliPath,
+        artifacts.cliPath,
         'web',
         ...(this.options.patchPaths ?? []).flatMap(path => ['--patch', path]),
         '--port',

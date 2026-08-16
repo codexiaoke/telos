@@ -148,6 +148,7 @@ async function startApplication(): Promise<void> {
   dshWeb = new DshWebSupervisor({
     sourceRoot: resolveDshSourceRoot(),
     dshHome,
+    packaged: app.isPackaged,
     executablePath: resolveDshNodeExecutable(),
     patchPaths: [telosPatch],
   })

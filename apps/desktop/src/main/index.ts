@@ -16,6 +16,7 @@ import {
   resolveTelosDshMultiRootWorkspacePackageRoot,
   resolveTelosDshWorkbenchFilesPackageRoot,
   resolveTelosDshWorkReportPackageRoot,
+  resolveTelosDshComputerUsePackageRoot,
   resolveTelosDshLayoutPackageRoot,
   resolveTelosDshSidebarPackageRoot,
 } from './application/dsh-runtime-paths.js'
@@ -163,6 +164,7 @@ async function startApplication(): Promise<void> {
     multiRootWorkspacePackageRoot: resolveTelosDshMultiRootWorkspacePackageRoot(),
     workbenchFilesPackageRoot: resolveTelosDshWorkbenchFilesPackageRoot(),
     workReportPackageRoot: resolveTelosDshWorkReportPackageRoot(),
+    computerUsePackageRoot: resolveTelosDshComputerUsePackageRoot(),
   })
   dshWeb = new DshWebSupervisor({
     sourceRoot: resolveDshSourceRoot(),

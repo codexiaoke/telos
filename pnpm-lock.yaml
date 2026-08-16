@@ -153,6 +153,45 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  plugins/dsh-computer-use:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../third_party/deepseek-harness/vendor/cordis
+        version: link:../../third_party/deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../third_party/deepseek-harness/packages/core/agent
+        version: link:../../third_party/deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-brand':
+        specifier: link:../../third_party/deepseek-harness/packages/util/brand
+        version: link:../../third_party/deepseek-harness/packages/util/brand
+      '@deepseek-ai/dsh-llm':
+        specifier: link:../../third_party/deepseek-harness/packages/llm/llm
+        version: link:../../third_party/deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../third_party/deepseek-harness/packages/core/session
+        version: link:../../third_party/deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-storage-domain':
+        specifier: link:../../third_party/deepseek-harness/packages/storage/storage-domain
+        version: link:../../third_party/deepseek-harness/packages/storage/storage-domain
+      '@deepseek-ai/dsh-subprocess':
+        specifier: link:../../third_party/deepseek-harness/packages/subprocess/subprocess
+        version: link:../../third_party/deepseek-harness/packages/subprocess/subprocess
+      '@deepseek-ai/dsh-tools':
+        specifier: link:../../third_party/deepseek-harness/packages/core/tools
+        version: link:../../third_party/deepseek-harness/packages/core/tools
+      '@deepseek-ai/dsh-user-approval':
+        specifier: link:../../third_party/deepseek-harness/packages/interaction/user-approval
+        version: link:../../third_party/deepseek-harness/packages/interaction/user-approval
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   plugins/dsh-continuity:
     dependencies:
       '@telos/personal-core':
@@ -258,6 +297,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: link:../../third_party/deepseek-harness/vendor/cordis
         version: link:../../third_party/deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-attachment':
+        specifier: link:../../third_party/deepseek-harness/packages/attachment/attachment
+        version: link:../../third_party/deepseek-harness/packages/attachment/attachment
       '@deepseek-ai/dsh-client-ui-conversation':
         specifier: link:../../third_party/deepseek-harness/packages/client/ui-conversation
         version: link:../../third_party/deepseek-harness/packages/client/ui-conversation
@@ -270,6 +312,9 @@ importers:
       '@deepseek-ai/dsh-settings':
         specifier: link:../../third_party/deepseek-harness/packages/settings/settings
         version: link:../../third_party/deepseek-harness/packages/settings/settings
+      '@deepseek-ai/dsh-tools':
+        specifier: link:../../third_party/deepseek-harness/packages/core/tools
+        version: link:../../third_party/deepseek-harness/packages/core/tools
       '@types/node':
         specifier: 26.2.0
         version: 26.2.0
@@ -2941,6 +2986,9 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
@@ -5407,5 +5455,7 @@ snapshots:
       yargs-parser: 21.1.1
 
   yocto-queue@0.1.0: {}
+
+  zod@4.4.3: {}
 
   zwitch@2.0.4: {}

@@ -13,6 +13,7 @@ const TELOS_PERSONALIZATION_PACKAGE = '@telos/dsh-personalization'
 const TELOS_MULTI_ROOT_WORKSPACE_PACKAGE = '@telos/dsh-multi-root-workspace'
 const TELOS_WORKBENCH_FILES_PACKAGE = '@telos/dsh-workbench-files'
 const TELOS_WORK_REPORT_PACKAGE = '@telos/dsh-work-report'
+const TELOS_COMPUTER_USE_PACKAGE = '@telos/dsh-computer-use'
 
 export interface TelosDshWebOverlaySources {
   sidebarPackageRoot: string
@@ -24,6 +25,7 @@ export interface TelosDshWebOverlaySources {
   multiRootWorkspacePackageRoot: string
   workbenchFilesPackageRoot: string
   workReportPackageRoot: string
+  computerUsePackageRoot: string
 }
 
 /** Read the tracked DSH patch that defines Telos's complete allowed roster delta. */
@@ -99,6 +101,7 @@ export function prepareTelosDshWebPatch(
   removeLegacyFlatPackage(dshHome, TELOS_MULTI_ROOT_WORKSPACE_PACKAGE)
   removeLegacyFlatPackage(dshHome, TELOS_WORKBENCH_FILES_PACKAGE)
   removeLegacyFlatPackage(dshHome, TELOS_WORK_REPORT_PACKAGE)
+  removeLegacyFlatPackage(dshHome, TELOS_COMPUTER_USE_PACKAGE)
   installProfilePackage(dshHome, sources.sidebarPackageRoot, TELOS_SIDEBAR_PACKAGE, ['lib/client.js'])
   installProfilePackage(dshHome, sources.layoutPackageRoot, DSH_LAYOUT_PACKAGE, ['lib/client.js'])
   installProfilePackage(dshHome, sources.continuityPackageRoot, TELOS_CONTINUITY_PACKAGE, ['lib/index.js', 'lib/client.js'])
@@ -108,6 +111,7 @@ export function prepareTelosDshWebPatch(
   installProfilePackage(dshHome, sources.multiRootWorkspacePackageRoot, TELOS_MULTI_ROOT_WORKSPACE_PACKAGE, ['lib/index.js', 'lib/client.js'])
   installProfilePackage(dshHome, sources.workbenchFilesPackageRoot, TELOS_WORKBENCH_FILES_PACKAGE, ['lib/index.js'])
   installProfilePackage(dshHome, sources.workReportPackageRoot, TELOS_WORK_REPORT_PACKAGE, ['lib/index.js', 'lib/client.js'])
+  installProfilePackage(dshHome, sources.computerUsePackageRoot, TELOS_COMPUTER_USE_PACKAGE, ['lib/index.js'])
 
   mkdirSync(dshHome, { recursive: true })
   const path = join(dshHome, PATCH_FILENAME)

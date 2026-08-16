@@ -35,6 +35,7 @@ describe('prepareTelosDshWebPatch', () => {
       multiRootWorkspacePackageRoot: '',
       workbenchFilesPackageRoot: '',
       workReportPackageRoot: '',
+      computerUsePackageRoot: '',
     })
     expect(patch).toContain('- id: ui-sidebar\n  disabled: true')
     expect(patch).toContain('id: telos-ui-sidebar')
@@ -54,6 +55,7 @@ describe('prepareTelosDshWebPatch', () => {
     const multiRootWorkspace = join(root, 'multi-root-workspace')
     const workbenchFiles = join(root, 'workbench-files')
     const workReport = join(root, 'work-report')
+    const computerUse = join(root, 'computer-use')
     mkdirSync(join(sidebar, 'lib'), { recursive: true })
     mkdirSync(join(layout, 'lib'), { recursive: true })
     mkdirSync(join(continuity, 'lib'), { recursive: true })
@@ -63,6 +65,7 @@ describe('prepareTelosDshWebPatch', () => {
     mkdirSync(join(multiRootWorkspace, 'lib'), { recursive: true })
     mkdirSync(join(workbenchFiles, 'lib'), { recursive: true })
     mkdirSync(join(workReport, 'lib'), { recursive: true })
+    mkdirSync(join(computerUse, 'lib'), { recursive: true })
     writeFileSync(join(sidebar, 'package.json'), JSON.stringify({
       name: '@telos/dsh-client-ui-sidebar',
       private: true,
@@ -122,6 +125,11 @@ describe('prepareTelosDshWebPatch', () => {
     }))
     writeFileSync(join(workReport, 'lib/index.js'), 'export const name = "telos-work-report"')
     writeFileSync(join(workReport, 'lib/client.js'), 'window.__TELOS_WORK_REPORT_TEST__ = true')
+    writeFileSync(join(computerUse, 'package.json'), JSON.stringify({
+      name: '@telos/dsh-computer-use',
+      private: true,
+    }))
+    writeFileSync(join(computerUse, 'lib/index.js'), 'export const name = "telos-computer-use"')
 
     const path = prepareTelosDshWebPatch(join(root, 'home'), {
       sidebarPackageRoot: sidebar,
@@ -133,6 +141,7 @@ describe('prepareTelosDshWebPatch', () => {
       multiRootWorkspacePackageRoot: multiRootWorkspace,
       workbenchFilesPackageRoot: workbenchFiles,
       workReportPackageRoot: workReport,
+      computerUsePackageRoot: computerUse,
     })
 
     expect(readFileSync(path, 'utf8')).toContain('"@telos/dsh-client-ui-sidebar"')
@@ -165,6 +174,8 @@ describe('prepareTelosDshWebPatch', () => {
     expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-work-report/lib/index.js')))
       .toBe(true)
     expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-work-report/lib/client.js')))
+      .toBe(true)
+    expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-computer-use/lib/index.js')))
       .toBe(true)
   })
 })

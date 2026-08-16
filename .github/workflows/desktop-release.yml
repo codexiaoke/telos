@@ -127,7 +127,7 @@ jobs:
             dist/latest*.yml
             dist/*.blockmap
 
-  draft-release:
+  release:
     if: needs.metadata.outputs.publish == 'true'
     needs: [metadata, package]
     runs-on: ubuntu-24.04
@@ -150,7 +150,7 @@ jobs:
       - name: Generate release checksums
         working-directory: release-artifacts
         run: find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
-      - name: Create draft GitHub Release
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
@@ -162,6 +162,7 @@ jobs:
           fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" --clobber "${files[@]}"
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --title "Telos $RELEASE_TAG"
           else
-            gh release create "$RELEASE_TAG" --draft --generate-notes --title "Telos $RELEASE_TAG" "${files[@]}"
+            gh release create "$RELEASE_TAG" --generate-notes --title "Telos $RELEASE_TAG" "${files[@]}"
           fi

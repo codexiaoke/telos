@@ -21,7 +21,7 @@ publish:
   provider: github
   owner: codexiaoke
   repo: telos
-  releaseType: draft
+  releaseType: release
 
 mac:
   category: public.app-category.productivity

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, dialog, shell } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -30,6 +30,7 @@ import { installApplicationIcon } from './shell/application-icon.js'
 import { createApplicationTray, type ApplicationTrayHandle } from './shell/application-tray.js'
 import { installApplicationMenu } from './shell/application-menu.js'
 import { createMainWindow, loadDshWeb } from './shell/main-window.js'
+import { createManualUpdateFeedback } from './update/manual-update-feedback.js'
 import { UpdateService } from './update/update-service.js'
 
 app.setName('Telos')
@@ -111,12 +112,24 @@ function requestQuit(): void {
   app.quit()
 }
 
+async function checkForUpdatesInteractively(): Promise<void> {
+  await updateService.checkForUpdates()
+  const feedback = createManualUpdateFeedback(updateService.getSnapshot())
+  const parent = mainWindow !== undefined && !mainWindow.isDestroyed() ? mainWindow : undefined
+  const result = parent === undefined
+    ? await dialog.showMessageBox(feedback.options)
+    : await dialog.showMessageBox(parent, feedback.options)
+  if (result.response === feedback.openReleaseResponse) {
+    await updateService.openReleasePage()
+  }
+}
+
 async function startApplication(): Promise<void> {
   loadDevelopmentEnvironment()
   installApplicationIcon()
   installApplicationMenu({
     showMainWindow,
-    checkForUpdates: () => updateService.checkForUpdates(),
+    checkForUpdates: checkForUpdatesInteractively,
     quit: requestQuit,
   })
   registerSystemHandlers()
@@ -170,7 +183,7 @@ async function startApplication(): Promise<void> {
   const window = openMainWindow()
   tray = createApplicationTray({
     showMainWindow,
-    checkForUpdates: () => updateService.checkForUpdates(),
+    checkForUpdates: checkForUpdatesInteractively,
     openReleasePage: () => updateService.openReleasePage(),
     quit: requestQuit,
     getUpdateSnapshot: () => updateService.getSnapshot(),

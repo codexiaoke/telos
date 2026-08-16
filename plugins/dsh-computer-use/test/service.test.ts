@@ -239,7 +239,7 @@ describe('ComputerUseService', () => {
     expect(initial.observation.screenshot?.attachment?.mediaType).toBe('image/png')
 
     const result = await service.computerUse({
-      app: { bundleId: APP.bundleId, pid: APP.pid },
+      app: { name: '计算器' },
       observationId: initial.observation.observationId,
       actions: [
         { type: 'click', x: 100, y: 35 },

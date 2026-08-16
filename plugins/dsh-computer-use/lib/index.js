@@ -1734,7 +1734,17 @@ var ComputerUseService = class extends Service {
     }
     const initial = this.requireObservation(request.observationId, context.agent);
     const selector = request.app;
-    if (selector.bundleId !== void 0 && selector.bundleId !== initial.backend.app.bundleId || selector.pid !== void 0 && selector.pid !== initial.backend.app.pid || selector.name !== void 0 && selector.name.localeCompare(initial.backend.app.name, void 0, { sensitivity: "accent" }) !== 0) {
+    let selectorMismatch = selector.bundleId !== void 0 && selector.bundleId !== initial.backend.app.bundleId || selector.pid !== void 0 && selector.pid !== initial.backend.app.pid;
+    const nameDiffers = selector.name !== void 0 && selector.name.localeCompare(initial.backend.app.name, void 0, { sensitivity: "accent" }) !== 0;
+    if (!selectorMismatch && nameDiffers && selector.bundleId === void 0 && selector.pid === void 0) {
+      try {
+        const resolved = await this.backend.resolveApp(selector, signal);
+        selectorMismatch = resolved.bundleId !== initial.backend.app.bundleId || resolved.pid !== initial.backend.app.pid;
+      } catch {
+        selectorMismatch = true;
+      }
+    }
+    if (selectorMismatch) {
       throw new ComputerUseError("COMPUTER_STALE_OBSERVATION", "computer_use app selector does not match the referenced screenshot");
     }
     const key = `${initial.backend.app.bundleId}:${initial.backend.app.pid}`;

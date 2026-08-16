@@ -1,0 +1,46 @@
+{
+  "name": "@telos/dsh-multi-root-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && node ../../scripts/build-dsh-multi-root-workspace.mjs"
+  },
+  "dependencies": {
+    "react": "19.2.8"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../third_party/deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-client-connection": "link:../../third_party/deepseek-harness/packages/client/connection",
+    "@deepseek-ai/dsh-client-runtime": "link:../../third_party/deepseek-harness/packages/client/runtime",
+    "@deepseek-ai/dsh-client-ui-workspace": "link:../../third_party/deepseek-harness/packages/client/ui-workspace",
+    "@deepseek-ai/dsh-host-directory-picker": "link:../../third_party/deepseek-harness/packages/host/directory-picker",
+    "@deepseek-ai/dsh-system-prompt": "link:../../third_party/deepseek-harness/packages/core/system-prompt",
+    "@deepseek-ai/dsh-tools": "link:../../third_party/deepseek-harness/packages/core/tools",
+    "@deepseek-ai/dsh-workspace": "link:../../third_party/deepseek-harness/packages/workspace/workspace",
+    "@types/node": "26.2.0",
+    "@types/react": "19.2.18",
+    "typescript": "7.0.2"
+  },
+  "license": "MIT"
+}

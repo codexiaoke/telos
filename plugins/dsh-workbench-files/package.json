@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.json --noEmit && node ../../scripts/build-dsh-workbench-files.mjs"
   },
   "devDependencies": {
+    "@telos/dsh-multi-root-workspace": "workspace:*",
     "@deepseek-ai/cordis": "link:../../third_party/deepseek-harness/vendor/cordis",
     "@deepseek-ai/dsh-agent": "link:../../third_party/deepseek-harness/packages/core/agent",
     "@deepseek-ai/dsh-client-connection": "link:../../third_party/deepseek-harness/packages/client/connection",

@@ -31,6 +31,7 @@ describe('prepareTelosDshWebPatch', () => {
       continuityPackageRoot: '',
       mcpManagerPackageRoot: '',
       multimodalPackageRoot: '',
+      multiRootWorkspacePackageRoot: '',
       workbenchFilesPackageRoot: '',
       workReportPackageRoot: '',
     })
@@ -48,6 +49,7 @@ describe('prepareTelosDshWebPatch', () => {
     const continuity = join(root, 'continuity')
     const mcpManager = join(root, 'mcp-manager')
     const multimodal = join(root, 'multimodal')
+    const multiRootWorkspace = join(root, 'multi-root-workspace')
     const workbenchFiles = join(root, 'workbench-files')
     const workReport = join(root, 'work-report')
     mkdirSync(join(sidebar, 'lib'), { recursive: true })
@@ -55,6 +57,7 @@ describe('prepareTelosDshWebPatch', () => {
     mkdirSync(join(continuity, 'lib'), { recursive: true })
     mkdirSync(join(mcpManager, 'lib'), { recursive: true })
     mkdirSync(join(multimodal, 'lib'), { recursive: true })
+    mkdirSync(join(multiRootWorkspace, 'lib'), { recursive: true })
     mkdirSync(join(workbenchFiles, 'lib'), { recursive: true })
     mkdirSync(join(workReport, 'lib'), { recursive: true })
     writeFileSync(join(sidebar, 'package.json'), JSON.stringify({
@@ -93,6 +96,12 @@ describe('prepareTelosDshWebPatch', () => {
     }))
     writeFileSync(join(multimodal, 'lib/index.js'), 'export const name = "telos-multimodal"')
     writeFileSync(join(multimodal, 'lib/client.js'), 'window.__TELOS_MULTIMODAL_TEST__ = true')
+    writeFileSync(join(multiRootWorkspace, 'package.json'), JSON.stringify({
+      name: '@telos/dsh-multi-root-workspace',
+      private: true,
+    }))
+    writeFileSync(join(multiRootWorkspace, 'lib/index.js'), 'export const name = "telos-multi-root-workspace"')
+    writeFileSync(join(multiRootWorkspace, 'lib/client.js'), 'window.__TELOS_MULTI_ROOT_WORKSPACE_TEST__ = true')
     writeFileSync(join(workbenchFiles, 'package.json'), JSON.stringify({
       name: '@telos/dsh-workbench-files',
       private: true,
@@ -111,6 +120,7 @@ describe('prepareTelosDshWebPatch', () => {
       continuityPackageRoot: continuity,
       mcpManagerPackageRoot: mcpManager,
       multimodalPackageRoot: multimodal,
+      multiRootWorkspacePackageRoot: multiRootWorkspace,
       workbenchFilesPackageRoot: workbenchFiles,
       workReportPackageRoot: workReport,
     })
@@ -131,6 +141,10 @@ describe('prepareTelosDshWebPatch', () => {
     expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-multimodal/lib/index.js')))
       .toBe(true)
     expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-multimodal/lib/client.js')))
+      .toBe(true)
+    expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-multi-root-workspace/lib/index.js')))
+      .toBe(true)
+    expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-multi-root-workspace/lib/client.js')))
       .toBe(true)
     expect(existsSync(join(root, 'home/profiles/web/node_modules/@telos/dsh-workbench-files/lib/index.js')))
       .toBe(true)

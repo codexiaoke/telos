@@ -51,6 +51,12 @@ export function resolveTelosDshMultimodalPackageRoot(): string {
     : join(developmentRepositoryRoot(), 'plugins/dsh-multimodal')
 }
 
+export function resolveTelosDshMultiRootWorkspacePackageRoot(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'dsh-overlays/telos-multi-root-workspace')
+    : join(developmentRepositoryRoot(), 'plugins/dsh-multi-root-workspace')
+}
+
 export function resolveTelosDshWorkbenchFilesPackageRoot(): string {
   return app.isPackaged
     ? join(process.resourcesPath, 'dsh-overlays/telos-workbench-files')

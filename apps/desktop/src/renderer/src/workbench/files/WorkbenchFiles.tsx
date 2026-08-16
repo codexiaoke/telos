@@ -5,6 +5,22 @@ import { editorContextStore, type EditorSelectionContext } from './editor-contex
 import { detectExternalFileChange, type ExternalFileChange } from './external-change'
 
 const WORKBENCH_FILES_RPC_CHANNEL = '/telos-workbench-files'
+const MULTI_ROOT_WORKSPACE_RPC_CHANNEL = '/telos-multi-root-workspace'
+
+interface WorkspaceRootView {
+  id: string
+  label: string
+  path: string
+  primary: boolean
+}
+
+interface WorkspaceGroupView {
+  workspaceId: string
+  title: string
+  primaryRootId: string
+  roots: WorkspaceRootView[]
+  updatedAt: string
+}
 
 export interface WorkbenchFileEntry {
   name: string
@@ -66,8 +82,30 @@ export class WorkbenchFilesClient {
     return this.call('stage-context', context, signal)
   }
 
+  workspaceGroup(sessionId: string): Promise<WorkspaceGroupView> {
+    return this.callChannel(MULTI_ROOT_WORKSPACE_RPC_CHANNEL, 'get-session', { sessionId })
+  }
+
+  async addWorkspaceRoot(workspaceId: string): Promise<WorkspaceGroupView | undefined> {
+    const path = await this.callChannel<string | null>(MULTI_ROOT_WORKSPACE_RPC_CHANNEL, 'pick-directory', {})
+    if (path === null) return undefined
+    return this.callChannel(MULTI_ROOT_WORKSPACE_RPC_CHANNEL, 'add-root', { workspaceId, path })
+  }
+
+  removeWorkspaceRoot(workspaceId: string, rootId: string): Promise<WorkspaceGroupView> {
+    return this.callChannel(MULTI_ROOT_WORKSPACE_RPC_CHANNEL, 'remove-root', { workspaceId, rootId })
+  }
+
+  renameWorkspaceRoot(workspaceId: string, rootId: string, label: string): Promise<WorkspaceGroupView> {
+    return this.callChannel(MULTI_ROOT_WORKSPACE_RPC_CHANNEL, 'rename-root', { workspaceId, rootId, label })
+  }
+
   private async call<T>(endpoint: string, payload: unknown, signal?: AbortSignal): Promise<T> {
-    const result = await this.rpc.call(WORKBENCH_FILES_RPC_CHANNEL, endpoint, payload, signal)
+    return this.callChannel(WORKBENCH_FILES_RPC_CHANNEL, endpoint, payload, signal)
+  }
+
+  private async callChannel<T>(channel: string, endpoint: string, payload: unknown, signal?: AbortSignal): Promise<T> {
+    const result = await this.rpc.call(channel, endpoint, payload, signal)
     if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
     return result.value as T
   }
@@ -124,6 +162,87 @@ function CloseIcon() {
     <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
       <path d="m4.5 4.5 7 7m0-7-7 7" stroke="currentColor" strokeLinecap="round" strokeWidth="1.35" />
     </svg>
+  )
+}
+
+function WorkspaceFoldersIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 18 18">
+      <path d="M2.7 5.2h4l1.2 1.4h7.4v6.9a1.4 1.4 0 0 1-1.4 1.4H4.1a1.4 1.4 0 0 1-1.4-1.4V5.2Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.35" />
+      <path d="M5.2 3.1h3.4l1.1 1.3h5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.35" />
+    </svg>
+  )
+}
+
+interface WorkspaceRootsDialogProps {
+  client: WorkbenchFilesClient
+  group: WorkspaceGroupView
+  openFilePaths: readonly string[]
+  onChange: (group: WorkspaceGroupView) => void
+  onClose: () => void
+}
+
+function WorkspaceRootsDialog({ client, group, openFilePaths, onChange, onClose }: WorkspaceRootsDialogProps) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string>()
+
+  const run = async (operation: () => Promise<WorkspaceGroupView | undefined>): Promise<void> => {
+    setBusy(true)
+    setError(undefined)
+    try {
+      const next = await operation()
+      if (next !== undefined) onChange(next)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const rename = (root: WorkspaceRootView): void => {
+    const label = window.prompt('文件夹显示名称', root.label)?.trim()
+    if (label === undefined || label === '' || label === root.label) return
+    void run(() => client.renameWorkspaceRoot(group.workspaceId, root.id, label))
+  }
+
+  const remove = (root: WorkspaceRootView): void => {
+    if (openFilePaths.some(path => path === `${root.id}:` || path.startsWith(`${root.id}:/`))) {
+      setError('请先关闭这个文件夹中已经打开的文件')
+      return
+    }
+    if (!window.confirm(`从工作区移除“${root.label}”？不会删除磁盘上的文件。`)) return
+    void run(() => client.removeWorkspaceRoot(group.workspaceId, root.id))
+  }
+
+  return (
+    <div className="telos-workspace-roots-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget && !busy) onClose()
+    }}>
+      <section aria-labelledby="telosWorkspaceRootsTitle" aria-modal="true" className="telos-workspace-roots-dialog" role="dialog">
+        <header>
+          <div><h2 id="telosWorkspaceRootsTitle">工作区文件夹</h2><p>{group.title} · {group.roots.length} 个文件夹</p></div>
+          <button aria-label="关闭" disabled={busy} onClick={onClose} type="button">×</button>
+        </header>
+        <div className="telos-workspace-roots-list">
+          {group.roots.map(root => (
+            <div className="telos-workspace-roots-row" key={root.id}>
+              <MaterialFileIcon expanded kind="folder" name={root.label} />
+              <span><strong>{root.label}</strong><small>{root.path}</small></span>
+              {root.primary && <em>主目录</em>}
+              <button disabled={busy} onClick={() => rename(root)} type="button">重命名</button>
+              {!root.primary && <button data-danger disabled={busy} onClick={() => remove(root)} type="button">移除</button>}
+            </div>
+          ))}
+        </div>
+        {error !== undefined && <p className="telos-workspace-roots-error" role="alert">{error}</p>}
+        <footer>
+          <span>移除文件夹不会删除本地文件。</span>
+          <button data-primary disabled={busy} onClick={() => void run(() => client.addWorkspaceRoot(group.workspaceId))} type="button">
+            {busy ? '处理中…' : '＋ 添加文件夹'}
+          </button>
+        </footer>
+      </section>
+    </div>
   )
 }
 
@@ -207,6 +326,8 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
   const [selection, setSelection] = useState<EditorSelectionContext>()
   const [tabContextMenu, setTabContextMenu] = useState<TabContextMenu>()
   const [error, setError] = useState<string>()
+  const [workspaceGroup, setWorkspaceGroup] = useState<WorkspaceGroupView>()
+  const [managingRoots, setManagingRoots] = useState(false)
   const activeFile = files.find(file => file.path === activePath)
   const filesRef = useRef(files)
   const checkingFilesRef = useRef(false)
@@ -257,9 +378,14 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
     setActivePath(undefined)
     setTabContextMenu(undefined)
     setError(undefined)
+    setWorkspaceGroup(undefined)
+    setManagingRoots(false)
     if (sessionId === undefined) return
     const controller = new AbortController()
     void loadDirectory('', controller.signal)
+    void client.workspaceGroup(sessionId).then(setWorkspaceGroup, reason => {
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason))
+    })
     return () => controller.abort()
   }, [active, loadDirectory, sessionId])
 
@@ -462,6 +588,7 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
       <aside className="telos-editor-explorer">
         <header className="telos-editor-explorer-header">
           <span title={title}>{title}</span>
+          <button aria-label="管理工作区文件夹" disabled={workspaceGroup === undefined} onClick={() => setManagingRoots(true)} title="管理工作区文件夹" type="button"><WorkspaceFoldersIcon /></button>
           <button aria-label="刷新文件" onClick={() => void loadDirectory('')} title="刷新文件" type="button"><RefreshIcon /></button>
         </header>
         <div className="telos-editor-explorer-body">
@@ -479,6 +606,20 @@ export function WorkbenchFiles({ active, client, sessionId, workspaceLabel }: Wo
           />
         </div>
       </aside>
+      {managingRoots && workspaceGroup !== undefined && (
+        <WorkspaceRootsDialog
+          client={client}
+          group={workspaceGroup}
+          onChange={(group) => {
+            setWorkspaceGroup(group)
+            setDirectories({})
+            setExpanded(new Set())
+            void loadDirectory('')
+          }}
+          onClose={() => setManagingRoots(false)}
+          openFilePaths={files.map(file => file.path)}
+        />
+      )}
       <main className="telos-editor-surface">
         {files.length > 0 && (
           <div className="telos-editor-tabs" role="tablist">

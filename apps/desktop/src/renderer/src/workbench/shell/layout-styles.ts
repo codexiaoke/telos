@@ -450,6 +450,59 @@ export const TELOS_LAYOUT_CSS = `
   height: 18px;
 }
 
+.telos-workspace-roots-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: grid;
+  padding: 24px;
+  place-items: center;
+  background: color-mix(in srgb, #000 30%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.telos-workspace-roots-dialog {
+  box-sizing: border-box;
+  width: min(680px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  padding: 24px;
+  overflow: auto;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 18px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .22);
+}
+
+.telos-workspace-roots-dialog header,
+.telos-workspace-roots-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.telos-workspace-roots-dialog h2 { margin: 0; font-size: 19px; }
+.telos-workspace-roots-dialog header p { margin: 5px 0 0; color: var(--dsw-alias-label-tertiary); font-size: 11px; }
+.telos-workspace-roots-dialog button { min-height: 32px; padding: 5px 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; color: inherit; background: var(--dsw-alias-bg-layer-2); cursor: pointer; }
+.telos-workspace-roots-dialog button:disabled { cursor: not-allowed; opacity: .48; }
+.telos-workspace-roots-dialog header > button { width: 32px; padding: 0; font-size: 22px; }
+.telos-workspace-roots-list { display: grid; gap: 8px; margin: 22px 0; }
+.telos-workspace-roots-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto auto; align-items: center; gap: 9px; padding: 11px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; background: var(--dsw-alias-bg-layer-2); }
+.telos-workspace-roots-row > svg { width: 19px; height: 19px; }
+.telos-workspace-roots-row > span { display: grid; min-width: 0; gap: 3px; }
+.telos-workspace-roots-row strong,
+.telos-workspace-roots-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.telos-workspace-roots-row strong { font-size: 12px; }
+.telos-workspace-roots-row small { color: var(--dsw-alias-label-tertiary); font-size: 10px; }
+.telos-workspace-roots-row em { padding: 3px 7px; border-radius: 999px; color: var(--dsw-alias-state-business-primary); background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 12%, transparent); font-size: 10px; font-style: normal; }
+.telos-workspace-roots-row button { border-color: transparent; background: transparent; font-size: 11px; }
+.telos-workspace-roots-row button[data-danger] { color: var(--dsw-alias-state-error-primary); }
+.telos-workspace-roots-error { color: var(--dsw-alias-state-error-primary); font-size: 11px; }
+.telos-workspace-roots-dialog footer { padding-top: 18px; border-top: 1px solid var(--dsw-alias-border-l1); }
+.telos-workspace-roots-dialog footer span { color: var(--dsw-alias-label-tertiary); font-size: 10px; }
+.telos-workspace-roots-dialog footer button[data-primary] { border-color: transparent; color: #fff; background: var(--dsw-alias-state-business-primary); }
+
 .telos-editor-explorer-body {
   min-height: 0;
   flex: 1;

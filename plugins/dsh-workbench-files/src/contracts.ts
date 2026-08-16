@@ -1,5 +1,12 @@
 export const WORKBENCH_FILES_RPC_CHANNEL = '/telos-workbench-files'
 
+export interface WorkbenchWorkspaceRoot {
+  id: string
+  label: string
+  path: string
+  primary: boolean
+}
+
 export interface WorkbenchFileEntry {
   name: string
   path: string
@@ -30,6 +37,7 @@ export interface WorkbenchEditorSelection {
 export interface WorkbenchEditorContext {
   sessionId: string
   path: string
+  toolPath?: string
   content: string
   revision: string
   selection?: WorkbenchEditorSelection

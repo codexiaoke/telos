@@ -209,6 +209,46 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  plugins/dsh-multi-root-workspace:
+    dependencies:
+      react:
+        specifier: 19.2.8
+        version: 19.2.8
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../third_party/deepseek-harness/vendor/cordis
+        version: link:../../third_party/deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-client-connection':
+        specifier: link:../../third_party/deepseek-harness/packages/client/connection
+        version: link:../../third_party/deepseek-harness/packages/client/connection
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: link:../../third_party/deepseek-harness/packages/client/runtime
+        version: link:../../third_party/deepseek-harness/packages/client/runtime
+      '@deepseek-ai/dsh-client-ui-workspace':
+        specifier: link:../../third_party/deepseek-harness/packages/client/ui-workspace
+        version: link:../../third_party/deepseek-harness/packages/client/ui-workspace
+      '@deepseek-ai/dsh-host-directory-picker':
+        specifier: link:../../third_party/deepseek-harness/packages/host/directory-picker
+        version: link:../../third_party/deepseek-harness/packages/host/directory-picker
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: link:../../third_party/deepseek-harness/packages/core/system-prompt
+        version: link:../../third_party/deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-tools':
+        specifier: link:../../third_party/deepseek-harness/packages/core/tools
+        version: link:../../third_party/deepseek-harness/packages/core/tools
+      '@deepseek-ai/dsh-workspace':
+        specifier: link:../../third_party/deepseek-harness/packages/workspace/workspace
+        version: link:../../third_party/deepseek-harness/packages/workspace/workspace
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
   plugins/dsh-multimodal:
     dependencies:
       react:
@@ -309,6 +349,9 @@ importers:
       '@deepseek-ai/dsh-workspace':
         specifier: link:../../third_party/deepseek-harness/packages/workspace/workspace
         version: link:../../third_party/deepseek-harness/packages/workspace/workspace
+      '@telos/dsh-multi-root-workspace':
+        specifier: workspace:*
+        version: link:../dsh-multi-root-workspace
       '@types/node':
         specifier: 26.2.0
         version: 26.2.0

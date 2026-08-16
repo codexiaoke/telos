@@ -58,6 +58,15 @@ const multimodalBuild = spawnSync(multimodalCommand.executable, multimodalComman
 if (multimodalBuild.error) throw multimodalBuild.error
 if (multimodalBuild.status !== 0) process.exit(multimodalBuild.status ?? 1)
 
+const multiRootWorkspaceCommand = corepackInvocation(['pnpm', '--filter', '@telos/dsh-multi-root-workspace', 'build'])
+const multiRootWorkspaceBuild = spawnSync(multiRootWorkspaceCommand.executable, multiRootWorkspaceCommand.args, {
+  cwd: repositoryRoot,
+  env: process.env,
+  stdio: 'inherit',
+})
+if (multiRootWorkspaceBuild.error) throw multiRootWorkspaceBuild.error
+if (multiRootWorkspaceBuild.status !== 0) process.exit(multiRootWorkspaceBuild.status ?? 1)
+
 const workbenchCommand = corepackInvocation(['pnpm', '--filter', '@telos/dsh-workbench-files', 'build'])
 const workbenchBuild = spawnSync(workbenchCommand.executable, workbenchCommand.args, {
   cwd: repositoryRoot,
@@ -91,6 +100,9 @@ accessSync(resolve(repositoryRoot, 'plugins/dsh-continuity/lib/BUILD.json'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-multimodal/lib/index.js'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-multimodal/lib/client.js'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-multimodal/lib/BUILD.json'))
+accessSync(resolve(repositoryRoot, 'plugins/dsh-multi-root-workspace/lib/index.js'))
+accessSync(resolve(repositoryRoot, 'plugins/dsh-multi-root-workspace/lib/client.js'))
+accessSync(resolve(repositoryRoot, 'plugins/dsh-multi-root-workspace/lib/BUILD.json'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-workbench-files/lib/index.js'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-workbench-files/lib/BUILD.json'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-work-report/lib/index.js'))

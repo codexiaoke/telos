@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node", "react"],
+    "jsx": "react-jsx",
+    "paths": {
+      "@deepseek-ai/cordis": ["../../third_party/deepseek-harness/vendor/cordis/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-client-connection": ["../../third_party/deepseek-harness/packages/client/connection/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-client-connection/client": ["../../third_party/deepseek-harness/packages/client/connection/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-runtime/client": ["../../third_party/deepseek-harness/packages/client/runtime/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-slots": ["../../third_party/deepseek-harness/packages/client/ui-slots/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-client-ui-workspace/client": ["../../third_party/deepseek-harness/packages/client/ui-workspace/lib/types/client/index.d.ts"],
+      "@deepseek-ai/dsh-host-directory-picker": ["../../third_party/deepseek-harness/packages/host/directory-picker/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-system-prompt": ["../../third_party/deepseek-harness/packages/core/system-prompt/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-tools": ["../../third_party/deepseek-harness/packages/core/tools/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-workspace": ["../../third_party/deepseek-harness/packages/workspace/workspace/lib/types/index.d.ts"]
+    },
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "test/**/*.tsx"]
+}

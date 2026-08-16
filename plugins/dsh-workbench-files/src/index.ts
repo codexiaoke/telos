@@ -3,7 +3,7 @@ import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
-import type { Workspace } from '@deepseek-ai/dsh-workspace'
+import type { WorkspaceGroupService } from '@telos/dsh-multi-root-workspace'
 import { WORKBENCH_FILES_RPC_CHANNEL, type WorkbenchFilesRpcResult } from './contracts.js'
 import { editorContextPaths, renderEditorContext, type TelosEditorContextSource } from './context.js'
 import { WorkspaceFileService } from './service.js'
@@ -13,10 +13,12 @@ export type * from './contracts.js'
 export { WorkspaceFileService } from './service.js'
 
 export const name = 'telos-workbench-files'
-export const inject = ['agents', 'connection', 'workspaceRegistry']
+export const inject = ['agents', 'connection', 'telosWorkspaceGroups']
 
-function workspaceFor(ctx: Context, sessionId: string): Workspace | undefined {
-  return ctx.workspaceRegistry.list().find(workspace => workspace.sessionIds.some(id => String(id) === sessionId))
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    telosWorkspaceGroups: WorkspaceGroupService
+  }
 }
 
 function result<T>(operation: () => T | Promise<T>): Promise<WorkbenchFilesRpcResult<T>> {
@@ -33,7 +35,7 @@ function result<T>(operation: () => T | Promise<T>): Promise<WorkbenchFilesRpcRe
 
 export function apply(ctx: Context): void {
   const service = new WorkspaceFileService({
-    rootForSession: sessionId => workspaceFor(ctx, sessionId)?.path,
+    rootsForSession: sessionId => ctx.telosWorkspaceGroups.groupForSession(sessionId)?.roots,
   })
   ctx.connection.rpc.handle(
     WORKBENCH_FILES_RPC_CHANNEL,
@@ -57,7 +59,7 @@ export function apply(ctx: Context): void {
       if (context === undefined) continue
       const source: TelosEditorContextSource = {
         kind: 'telos-editor-context',
-        path,
+        path: context.toolPath ?? context.path,
         revision: context.revision,
         ...(context.selection === undefined ? {} : {
           selection: { startLine: context.selection.startLine, endLine: context.selection.endLine },

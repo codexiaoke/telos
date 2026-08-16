@@ -13,6 +13,7 @@ const layoutRoot = resolve(repositoryRoot, 'integrations/dsh/plugins/telos-ui-la
 const continuityRoot = resolve(repositoryRoot, 'plugins/dsh-continuity')
 const mcpManagerRoot = resolve(repositoryRoot, 'plugins/dsh-mcp-manager')
 const multimodalRoot = resolve(repositoryRoot, 'plugins/dsh-multimodal')
+const multiRootWorkspaceRoot = resolve(repositoryRoot, 'plugins/dsh-multi-root-workspace')
 const workbenchFilesRoot = resolve(repositoryRoot, 'plugins/dsh-workbench-files')
 const workReportRoot = resolve(repositoryRoot, 'plugins/dsh-work-report')
 const patchPath = resolve(sidebarRoot, 'telos.web.patch.yml')
@@ -80,6 +81,10 @@ try {
     resolve(multimodalRoot, 'lib/index.js'),
     resolve(multimodalRoot, 'lib/client.js'),
     resolve(multimodalRoot, 'lib/BUILD.json'),
+    resolve(multiRootWorkspaceRoot, 'package.json'),
+    resolve(multiRootWorkspaceRoot, 'lib/index.js'),
+    resolve(multiRootWorkspaceRoot, 'lib/client.js'),
+    resolve(multiRootWorkspaceRoot, 'lib/BUILD.json'),
     resolve(workbenchFilesRoot, 'package.json'),
     resolve(workbenchFilesRoot, 'lib/index.js'),
     resolve(workbenchFilesRoot, 'lib/BUILD.json'),
@@ -119,6 +124,7 @@ try {
   const installedContinuity = resolve(profileRoot, 'node_modules/@telos/dsh-continuity')
   const installedMcpManager = resolve(profileRoot, 'node_modules/@telos/dsh-mcp-manager')
   const installedMultimodal = resolve(profileRoot, 'node_modules/@telos/dsh-multimodal')
+  const installedMultiRootWorkspace = resolve(profileRoot, 'node_modules/@telos/dsh-multi-root-workspace')
   const installedWorkbenchFiles = resolve(profileRoot, 'node_modules/@telos/dsh-workbench-files')
   const installedWorkReport = resolve(profileRoot, 'node_modules/@telos/dsh-work-report')
   mkdirSync(resolve(profileRoot, 'node_modules/@deepseek-ai'), { recursive: true })
@@ -127,6 +133,7 @@ try {
   cpSync(continuityRoot, installedContinuity, { recursive: true })
   cpSync(mcpManagerRoot, installedMcpManager, { recursive: true })
   cpSync(multimodalRoot, installedMultimodal, { recursive: true })
+  cpSync(multiRootWorkspaceRoot, installedMultiRootWorkspace, { recursive: true })
   cpSync(workbenchFilesRoot, installedWorkbenchFiles, { recursive: true })
   cpSync(workReportRoot, installedWorkReport, { recursive: true })
   const profileAnchor = resolve(profileRoot, 'cordis.yml')
@@ -151,6 +158,11 @@ try {
   assert(
     realpathSync(resolvedMultimodalManifest) === realpathSync(resolve(installedMultimodal, 'package.json')),
     `Profile-local multimodal plugin does not win package resolution: ${resolvedMultimodalManifest}`,
+  )
+  const resolvedMultiRootWorkspaceManifest = profileRequire.resolve('@telos/dsh-multi-root-workspace/package.json')
+  assert(
+    realpathSync(resolvedMultiRootWorkspaceManifest) === realpathSync(resolve(installedMultiRootWorkspace, 'package.json')),
+    `Profile-local multi-root workspace plugin does not win package resolution: ${resolvedMultiRootWorkspaceManifest}`,
   )
   const resolvedWorkbenchFilesManifest = profileRequire.resolve('@telos/dsh-workbench-files/package.json')
   assert(
@@ -182,6 +194,7 @@ try {
     'ui-plan',
     'ui-user-questions',
     'ui-trajectory',
+    'directory-picker',
   ]
   for (const id of requiredSurfaceIds) {
     assert(defaultById.has(id), `pinned DSH default Web config is missing required surface ${id}`)
@@ -197,8 +210,17 @@ try {
     'the upstream ui-sidebar row changed beyond the declared disabled flag',
   )
 
+  const upstreamDirectoryPicker = defaultById.get('directory-picker')
+  const effectiveDirectoryPicker = effectiveById.get('directory-picker')
+  assert(upstreamDirectoryPicker !== undefined, 'default DSH Web config has no directory-picker row')
+  assert(effectiveDirectoryPicker !== undefined, 'Telos effective config has no directory-picker row')
+  assert(
+    isDeepStrictEqual(effectiveDirectoryPicker, { ...upstreamDirectoryPicker, disabled: true }),
+    'the upstream directory-picker row changed beyond the declared disabled flag',
+  )
+
   for (const row of defaultRows) {
-    if (row.id === 'ui-sidebar') continue
+    if (row.id === 'ui-sidebar' || row.id === 'directory-picker') continue
     assert(effectiveById.has(row.id), `Telos effective config removed ${row.id}`)
     assert(
       isDeepStrictEqual(effectiveById.get(row.id), row),
@@ -210,12 +232,15 @@ try {
     .map((row) => row.id)
     .filter((id) => !defaultById.has(id))
   assert(
-    isDeepStrictEqual(addedIds, ['telos-ui-sidebar', 'telos-continuity', 'telos-mcp-manager', 'telos-multimodal', 'telos-workbench-files', 'telos-work-report']),
+    isDeepStrictEqual(addedIds, ['telos-directory-picker-native', 'telos-ui-sidebar', 'telos-continuity', 'telos-mcp-manager', 'telos-multimodal', 'telos-multi-root-workspace', 'telos-workbench-files', 'telos-work-report']),
     `unexpected Telos-only rows: ${addedIds.join(', ')}`,
   )
   const telosSidebar = effectiveById.get('telos-ui-sidebar')
   assert(telosSidebar.name === '@telos/dsh-client-ui-sidebar', 'Telos sidebar package name changed')
   assert(telosSidebar.disabled !== true, 'Telos sidebar replacement is disabled')
+  const telosDirectoryPicker = effectiveById.get('telos-directory-picker-native')
+  assert(telosDirectoryPicker?.name === '@deepseek-ai/dsh-host-directory-picker-native', 'Telos native directory picker package name changed')
+  assert(telosDirectoryPicker.disabled !== true, 'Telos native directory picker backend is disabled')
   const telosContinuity = effectiveById.get('telos-continuity')
   assert(telosContinuity?.name === '@telos/dsh-continuity', 'Telos continuity package name changed')
   assert(telosContinuity.disabled !== true, 'Telos continuity plugin is disabled')
@@ -254,6 +279,15 @@ try {
   const telosWorkbenchFiles = effectiveById.get('telos-workbench-files')
   assert(telosWorkbenchFiles?.name === '@telos/dsh-workbench-files', 'Telos workbench files package name changed')
   assert(telosWorkbenchFiles.disabled !== true, 'Telos workbench files plugin is disabled')
+  const telosMultiRootWorkspace = effectiveById.get('telos-multi-root-workspace')
+  assert(telosMultiRootWorkspace?.name === '@telos/dsh-multi-root-workspace', 'Telos multi-root workspace package name changed')
+  assert(telosMultiRootWorkspace.disabled !== true, 'Telos multi-root workspace plugin is disabled')
+  assert(
+    isDeepStrictEqual(telosMultiRootWorkspace.config, {
+      storePath: { javascriptSource: "dshHomePath('telos', 'workspace-groups.json')" },
+    }),
+    'Telos multi-root workspace storage configuration changed',
+  )
   const telosWorkReport = effectiveById.get('telos-work-report')
   assert(telosWorkReport?.name === '@telos/dsh-work-report', 'Telos work report package name changed')
   assert(telosWorkReport.disabled !== true, 'Telos work report plugin is disabled')
@@ -298,6 +332,17 @@ try {
     ]),
     'multimodal Client dependency edges changed',
   )
+  const multiRootWorkspaceManifest = JSON.parse(readFileSync(resolve(multiRootWorkspaceRoot, 'package.json'), 'utf8'))
+  assert(multiRootWorkspaceManifest.name === '@telos/dsh-multi-root-workspace', 'multi-root workspace manifest identity changed')
+  assert(multiRootWorkspaceManifest.private === true, 'multi-root workspace package must stay private')
+  assert(
+    isDeepStrictEqual(multiRootWorkspaceManifest.dsh?.client?.inject, [
+      '@deepseek-ai/dsh-client-connection',
+      '@deepseek-ai/dsh-client-runtime',
+      '@deepseek-ai/dsh-client-ui-workspace',
+    ]),
+    'multi-root workspace Client dependency edges changed',
+  )
   const workReportManifest = JSON.parse(readFileSync(resolve(workReportRoot, 'package.json'), 'utf8'))
   assert(workReportManifest.name === '@telos/dsh-work-report', 'work report manifest identity changed')
   assert(workReportManifest.private === true, 'work report package must stay private')
@@ -310,8 +355,8 @@ try {
     'work report Client dependency edges changed',
   )
   assert(
-    effectiveRows.length === defaultRows.length + 6,
-    `expected ${String(defaultRows.length + 6)} effective rows, found ${String(effectiveRows.length)}`,
+    effectiveRows.length === defaultRows.length + 8,
+    `expected ${String(defaultRows.length + 8)} effective rows, found ${String(effectiveRows.length)}`,
   )
 
   // Reading the tracked file here makes the same patch consumed by Electron
@@ -320,13 +365,14 @@ try {
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-continuity'), 'tracked continuity patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-mcp-manager'), 'tracked MCP manager patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-multimodal'), 'tracked multimodal patch is incomplete')
+  assert(readFileSync(patchPath, 'utf8').includes('id: telos-multi-root-workspace'), 'tracked multi-root workspace patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-workbench-files'), 'tracked workbench files patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-work-report'), 'tracked work report patch is incomplete')
 
   process.stdout.write(`[PASS] DSH default Web rows: ${String(defaultRows.length)}\n`)
-  process.stdout.write(`[PASS] Unchanged upstream rows: ${String(defaultRows.length - 1)}\n`)
-  process.stdout.write('[PASS] Explained upstream delta: ui-sidebar disabled\n')
-  process.stdout.write('[PASS] Explained Telos additions: sidebar, continuity, MCP manager, multimodal settings, workbench files, and work report enabled\n')
+  process.stdout.write(`[PASS] Unchanged upstream rows: ${String(defaultRows.length - 2)}\n`)
+  process.stdout.write('[PASS] Explained upstream delta: ui-sidebar and directory-picker disabled\n')
+  process.stdout.write('[PASS] Explained Telos additions: native picker backend, multi-root workspace, sidebar, continuity, MCP manager, multimodal settings, workbench files, and work report enabled\n')
   process.stdout.write('[PASS] Profile resolves the Telos Renderer derivative and all Telos Host plugins\n')
   process.stdout.write(`[PASS] Required functional surfaces: ${String(requiredSurfaceIds.length)}\n`)
   process.stdout.write('Telos effective DSH Web composition is structurally equivalent to the pinned default.\n')

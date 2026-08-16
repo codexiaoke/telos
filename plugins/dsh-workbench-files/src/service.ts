@@ -1,10 +1,16 @@
 import { copyFile, readFile, readdir, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
-import type { WorkbenchDirectoryView, WorkbenchEditorContext, WorkbenchEditorSelection, WorkbenchTextFile } from './contracts.js'
+import type {
+  WorkbenchDirectoryView,
+  WorkbenchEditorContext,
+  WorkbenchEditorSelection,
+  WorkbenchTextFile,
+  WorkbenchWorkspaceRoot,
+} from './contracts.js'
 
 export interface WorkspaceFileServiceOptions {
-  rootForSession: (sessionId: string) => string | undefined
+  rootsForSession: (sessionId: string) => readonly WorkbenchWorkspaceRoot[] | undefined
   maxEntries?: number
   maxFileBytes?: number
 }
@@ -24,6 +30,10 @@ function isInside(root: string, target: string): boolean {
 
 function toWorkspacePath(root: string, target: string): string {
   return relative(root, target).split(sep).join('/')
+}
+
+function qualifiedPath(rootId: string, relativePath: string): string {
+  return relativePath === '' ? `${rootId}:` : `${rootId}:/${relativePath}`
 }
 
 function revisionOf(content: Uint8Array): string {
@@ -48,7 +58,20 @@ export class WorkspaceFileService {
 
   async list(payload: unknown): Promise<WorkbenchDirectoryView> {
     const request = this.parsePathRequest(payload)
-    const { root, target } = await this.resolveExisting(request.sessionId, request.path)
+    if (request.path === '') {
+      const roots = this.requireRoots(request.sessionId)
+      return {
+        path: '',
+        entries: roots.map(root => ({
+          name: root.label,
+          path: `${root.id}:`,
+          kind: 'directory',
+          hidden: false,
+        })),
+        truncated: false,
+      }
+    }
+    const { rootId, root, target } = await this.resolveExisting(request.sessionId, request.path)
     const targetStat = await stat(target)
     if (!targetStat.isDirectory()) throw new TypeError('path must identify a directory')
     const rows = await readdir(target, { withFileTypes: true })
@@ -68,24 +91,24 @@ export class WorkspaceFileService {
         else if (linked.isFile()) kind = 'file'
         else continue
       } else continue
-      entries.push({ name: row.name, path: toWorkspacePath(root, resolved), kind, hidden: row.name.startsWith('.') })
+      entries.push({ name: row.name, path: qualifiedPath(rootId, toWorkspacePath(root, resolved)), kind, hidden: row.name.startsWith('.') })
     }
     entries.sort((left, right) => left.kind === right.kind
       ? left.name.localeCompare(right.name)
       : left.kind === 'directory' ? -1 : 1)
-    return { path: toWorkspacePath(root, target), entries, truncated: rows.length > this.maxEntries }
+    return { path: qualifiedPath(rootId, toWorkspacePath(root, target)), entries, truncated: rows.length > this.maxEntries }
   }
 
   async read(payload: unknown): Promise<WorkbenchTextFile> {
     const request = this.parsePathRequest(payload)
-    const { root, target } = await this.resolveExisting(request.sessionId, request.path)
+    const { rootId, root, target } = await this.resolveExisting(request.sessionId, request.path)
     const metadata = await stat(target)
     if (!metadata.isFile()) throw new TypeError('path must identify a file')
     if (metadata.size > this.maxFileBytes) throw Object.assign(new Error('file exceeds the workbench preview limit'), { code: 'file-too-large' })
     const buffer = await readFile(target)
     if (buffer.includes(0)) throw Object.assign(new Error('binary files cannot be opened in the text editor'), { code: 'binary-file' })
     return {
-      path: toWorkspacePath(root, target),
+      path: qualifiedPath(rootId, toWorkspacePath(root, target)),
       content: buffer.toString('utf8'),
       revision: revisionOf(buffer),
       mtimeMs: metadata.mtimeMs,
@@ -139,12 +162,14 @@ export class WorkspaceFileService {
     const content = input.content
     const revision = requiredString(input.revision, 'revision')
     if (Buffer.byteLength(content) > this.maxFileBytes) throw Object.assign(new Error('editor context exceeds the workbench limit'), { code: 'file-too-large' })
-    const { root, target } = await this.resolveExisting(sessionId, path)
-    const canonicalPath = toWorkspacePath(root, target)
+    const { configuredRoot, rootId, root, target } = await this.resolveExisting(sessionId, path)
+    const canonicalPath = qualifiedPath(rootId, toWorkspacePath(root, target))
+    const relativePath = toWorkspacePath(root, target)
     const selection = this.parseSelection(input.selection)
     const context: WorkbenchEditorContext = {
       sessionId,
       path: canonicalPath,
+      toolPath: configuredRoot.primary ? relativePath : canonicalPath,
       content,
       revision,
       ...(selection === undefined ? {} : { selection }),
@@ -187,14 +212,35 @@ export class WorkspaceFileService {
     return `${sessionId}\u001f${path}`
   }
 
-  private async resolveExisting(sessionId: string, workspacePath: string): Promise<{ root: string; target: string }> {
-    const configuredRoot = this.options.rootForSession(sessionId)
-    if (configuredRoot === undefined) throw Object.assign(new Error('session is not attached to a registered workspace'), { code: 'workspace-unavailable' })
-    const root = await realpath(configuredRoot)
-    const targetSpelling = resolve(root, workspacePath)
+  private requireRoots(sessionId: string): readonly WorkbenchWorkspaceRoot[] {
+    const roots = this.options.rootsForSession(sessionId)
+    if (roots === undefined || roots.length === 0) {
+      throw Object.assign(new Error('session is not attached to a registered workspace'), { code: 'workspace-unavailable' })
+    }
+    return roots
+  }
+
+  private parseQualifiedPath(sessionId: string, workspacePath: string): { configuredRoot: WorkbenchWorkspaceRoot; relativePath: string } {
+    const match = /^([^/:]+):(?:\/(.*))?$/u.exec(workspacePath)
+    if (match === null) throw Object.assign(new Error('path must include a workspace root id'), { code: 'path-forbidden' })
+    const rootId = match[1] as string
+    const configuredRoot = this.requireRoots(sessionId).find(root => root.id === rootId)
+    if (configuredRoot === undefined) throw Object.assign(new Error(`unknown workspace root: ${rootId}`), { code: 'path-forbidden' })
+    return { configuredRoot, relativePath: match[2] ?? '' }
+  }
+
+  private async resolveExisting(sessionId: string, workspacePath: string): Promise<{
+    configuredRoot: WorkbenchWorkspaceRoot
+    rootId: string
+    root: string
+    target: string
+  }> {
+    const { configuredRoot, relativePath } = this.parseQualifiedPath(sessionId, workspacePath)
+    const root = await realpath(configuredRoot.path)
+    const targetSpelling = resolve(root, relativePath)
     if (!isInside(root, targetSpelling)) throw Object.assign(new Error('path escapes the current workspace'), { code: 'path-forbidden' })
     const target = await realpath(targetSpelling)
     if (!isInside(root, target)) throw Object.assign(new Error('resolved path escapes the current workspace'), { code: 'path-forbidden' })
-    return { root, target }
+    return { configuredRoot, rootId: configuredRoot.id, root, target }
   }
 }

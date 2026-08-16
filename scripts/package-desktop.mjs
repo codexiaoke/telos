@@ -60,6 +60,9 @@ function assertRuntimeBuilt() {
     join(repositoryRoot, 'plugins/dsh-multimodal/lib/index.js'),
     join(repositoryRoot, 'plugins/dsh-multimodal/lib/client.js'),
     join(repositoryRoot, 'plugins/dsh-multimodal/lib/BUILD.json'),
+    join(repositoryRoot, 'plugins/dsh-multi-root-workspace/lib/index.js'),
+    join(repositoryRoot, 'plugins/dsh-multi-root-workspace/lib/client.js'),
+    join(repositoryRoot, 'plugins/dsh-multi-root-workspace/lib/BUILD.json'),
     join(repositoryRoot, 'plugins/dsh-workbench-files/lib/index.js'),
     join(repositoryRoot, 'plugins/dsh-workbench-files/lib/BUILD.json'),
     join(repositoryRoot, 'plugins/dsh-work-report/lib/index.js'),
@@ -180,6 +183,7 @@ async function smokePackagedDshWeb(resourcesDirectory, packagedDshRoot, packaged
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-continuity'), profileModules, '@telos/dsh-continuity')
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager'), profileModules, '@telos/dsh-mcp-manager')
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-multimodal'), profileModules, '@telos/dsh-multimodal')
+    installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-multi-root-workspace'), profileModules, '@telos/dsh-multi-root-workspace')
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-workbench-files'), profileModules, '@telos/dsh-workbench-files')
     installSmokePackage(join(resourcesDirectory, 'dsh-overlays/telos-work-report'), profileModules, '@telos/dsh-work-report')
     const output = { value: '' }
@@ -195,6 +199,7 @@ async function smokePackagedDshWeb(resourcesDirectory, packagedDshRoot, packaged
       || !indexHtml.includes('"@telos/dsh-continuity"')
       || !indexHtml.includes('"@telos/dsh-mcp-manager"')
       || !indexHtml.includes('"@telos/dsh-multimodal"')
+      || !indexHtml.includes('"@telos/dsh-multi-root-workspace"')
       || !indexHtml.includes('"@telos/dsh-work-report"')) {
       throw new Error(`Packaged DSH Web omitted a Telos Client module (${String(indexResponse.status)})`)
     }
@@ -272,6 +277,8 @@ async function verifyPackagedRuntime(expectedManifest) {
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager/lib/client.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-multimodal/lib/index.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-multimodal/lib/client.js'))
+  accessSync(join(resourcesDirectory, 'dsh-overlays/telos-multi-root-workspace/lib/index.js'))
+  accessSync(join(resourcesDirectory, 'dsh-overlays/telos-multi-root-workspace/lib/client.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-workbench-files/lib/index.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-work-report/lib/index.js'))
   accessSync(join(resourcesDirectory, 'dsh-overlays/telos-work-report/lib/client.js'))

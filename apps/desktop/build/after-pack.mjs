@@ -78,6 +78,7 @@ export default async function afterPack(context) {
   copyPlugin(join(repositoryRoot, 'plugins/dsh-continuity'), join(resourcesDirectory, 'dsh-overlays/telos-continuity'))
   copyPlugin(join(repositoryRoot, 'plugins/dsh-mcp-manager'), join(resourcesDirectory, 'dsh-overlays/telos-mcp-manager'))
   copyPlugin(join(repositoryRoot, 'plugins/dsh-multimodal'), join(resourcesDirectory, 'dsh-overlays/telos-multimodal'))
+  copyPlugin(join(repositoryRoot, 'plugins/dsh-multi-root-workspace'), join(resourcesDirectory, 'dsh-overlays/telos-multi-root-workspace'))
   copyPlugin(join(repositoryRoot, 'plugins/dsh-workbench-files'), join(resourcesDirectory, 'dsh-overlays/telos-workbench-files'))
   copyPlugin(join(repositoryRoot, 'plugins/dsh-work-report'), join(resourcesDirectory, 'dsh-overlays/telos-work-report'))
   copyResource(nodeRoot, join(resourcesDirectory, 'dsh-node'))

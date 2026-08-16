@@ -15,6 +15,8 @@ describe('resolveConfig', () => {
       maxDepth: 14,
       maxTextBytes: 64000,
       maxScreenshotBytes: 33554432,
+      maxComputerUseSteps: 12,
+      maxActionsPerStep: 8,
       artifactRoot: '.dsh-computer-use/artifacts',
       allowAllApps: false,
     })

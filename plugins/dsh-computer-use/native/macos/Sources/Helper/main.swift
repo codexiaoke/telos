@@ -1264,6 +1264,24 @@ private func performAction(_ request: [String: Any]) throws -> [String: Any] {
             try targetedDrag(from: from, to: to, target: target)
         }
         return actionResult(channel: "coordinates", activation: current.activation, pointerInput: true, pointerRouting: "target-process")
+    case "move":
+        try requirePointerInput(pointerInputPolicy)
+        let current = try inputContext(
+            app: app,
+            request: request,
+            limits: limits,
+            snapshot: snapshot,
+            record: record,
+            focusPolicy: focusPolicy,
+            keyboardPolicy: keyboardPolicy,
+            actionKind: kind,
+            timeoutMs: actionTimeoutMs,
+        )
+        let coordinateSpace = action["coordinateSpace"] as? String ?? "window"
+        let point = try windowPoint(action, window: current.snapshot.windowJSON, xKey: "x", yKey: "y", coordinateSpace: coordinateSpace)
+        let target = try pointerTarget(app: app, window: current.snapshot.windowJSON, at: point)
+        try pointerAction { try targetedMove(to: point, target: target) }
+        return actionResult(channel: "coordinates", activation: current.activation, pointerInput: true, pointerRouting: "target-process")
     case "perform-action":
         guard let record else { throw fail("COMPUTER_ELEMENT_UNAVAILABLE", "perform-action requires an observed element") }
         let actionName = try string(action["action"], "action.action")

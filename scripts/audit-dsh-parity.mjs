@@ -325,6 +325,8 @@ try {
   assert(
     isDeepStrictEqual(telosComputerUse.config, {
       observationTtlMs: 0,
+      settleMs: 100,
+      maxSettleMs: 1500,
       allowAllApps: true,
       interaction: {
         focusPolicy: 'activate',
@@ -423,6 +425,10 @@ try {
   assert(
     readFileSync(resolve(computerUseRoot, 'lib/index.js'), 'utf8').includes('computer_open_app'),
     'computer use build is missing deterministic app launch',
+  )
+  assert(
+    readFileSync(resolve(computerUseRoot, 'lib/index.js'), 'utf8').includes('computer_use'),
+    'computer use build is missing the screenshot/action feedback loop',
   )
 
   process.stdout.write(`[PASS] DSH default Web rows: ${String(defaultRows.length)}\n`)

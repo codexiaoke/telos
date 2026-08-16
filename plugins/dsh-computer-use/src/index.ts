@@ -2,6 +2,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/dsh-tools'
 import { resolveConfig, type ComputerUseConfig } from './config.js'
@@ -15,7 +16,7 @@ export * from './errors.js'
 export * from './types.js'
 
 export const name = 'telos-computer-use'
-export const inject = ['subprocess', 'approval', 'sessions', 'agents', 'tools']
+export const inject = ['subprocess', 'approval', 'sessions', 'agents', 'tools', 'attachments']
 
 export function apply(ctx: Context, config: ComputerUseConfig = {}): void {
   if (process.platform !== 'darwin') {

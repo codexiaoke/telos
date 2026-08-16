@@ -1,6 +1,7 @@
 /** Provider-independent Computer Use Service: leases, observations, staleness, confirmations, and fresh post-action state. */
 
 import { randomUUID } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 import { setTimeout as delay } from 'node:timers/promises'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -21,6 +22,8 @@ import {
   ComputerTargetHandle,
   type ComputerActionRequest,
   type ComputerActionResult,
+  type ComputerCallAction,
+  type ComputerCallActionResult,
   type ComputerAppIdentity,
   type ComputerAppSummary,
   type ComputerConfirmRequest,
@@ -32,7 +35,10 @@ import {
   type ComputerObserveRequest,
   type ComputerTargetResolutionResult,
   type ComputerUseContext,
+  type ComputerUseStepRequest,
+  type ComputerUseStepResult,
   type ComputerUseStatus,
+  type ComputerKeyModifier,
 } from './types.js'
 
 declare module '@deepseek-ai/cordis' {
@@ -66,6 +72,7 @@ interface StoredObservation {
 interface AgentState {
   observations: Map<ComputerObservationId, StoredObservation>
   latestByApp: Map<string, ComputerObservationId>
+  computerUseStepsByApp: Map<string, number>
 }
 
 function publicElements(observation: BackendObservation): {
@@ -99,6 +106,7 @@ function targetIndex(action: ComputerActionRequest): number | undefined {
     case 'type-text':
     case 'press-key':
     case 'drag':
+    case 'move':
     case 'wait': return undefined
   }
 }
@@ -112,6 +120,7 @@ function targetHandle(action: ComputerActionRequest): ComputerTargetHandle | und
     case 'type-text':
     case 'press-key':
     case 'drag':
+    case 'move':
     case 'wait': return undefined
   }
 }
@@ -125,6 +134,7 @@ function allowsTargetRebind(action: ComputerActionRequest): boolean {
     case 'type-text':
     case 'press-key':
     case 'drag':
+    case 'move':
     case 'wait': return false
   }
 }
@@ -142,7 +152,8 @@ function requiresPointerInput(
       if (action.x !== undefined || action.y !== undefined) return true
       return element !== undefined && !element.actions.includes('AXPress') && action.allowCoordinateFallback === true
     case 'scroll':
-    case 'drag': return true
+    case 'drag':
+    case 'move': return true
     case 'set-value':
     case 'type-text':
     case 'press-key':
@@ -169,7 +180,7 @@ function cursorAction(
   const elementPoint = element?.frame === undefined
     ? undefined
     : { x: element.frame.x + element.frame.width / 2, y: element.frame.y + element.frame.height / 2 }
-  const coordinateSpace = action.kind === 'click' || action.kind === 'scroll' || action.kind === 'drag'
+  const coordinateSpace = action.kind === 'click' || action.kind === 'scroll' || action.kind === 'drag' || action.kind === 'move'
     ? action.coordinateSpace
     : undefined
   const windowPoint = (x: number | undefined, y: number | undefined): { x: number; y: number } | undefined => {
@@ -187,10 +198,123 @@ function cursorAction(
       const to = windowPoint(action.toX, action.toY)
       return from === undefined || to === undefined ? undefined : { kind: 'drag', from, to, ...target }
     }
+    case 'move': {
+      const point = windowPoint(action.x, action.y)
+      return point === undefined ? undefined : { kind: 'move', to: point, ...target }
+    }
     case 'set-value':
     case 'type-text':
     case 'press-key':
     case 'perform-action': return undefined
+  }
+}
+
+const COMPUTER_KEY_MODIFIERS = new Map<string, ComputerKeyModifier>([
+  ['CMD', 'command'],
+  ['COMMAND', 'command'],
+  ['CTRL', 'control'],
+  ['CONTROL', 'control'],
+  ['ALT', 'option'],
+  ['OPTION', 'option'],
+  ['SHIFT', 'shift'],
+])
+
+function normalizedComputerKey(value: string): string {
+  const key = value.trim().toUpperCase()
+  const aliases: Record<string, string> = {
+    ENTER: 'return', RETURN: 'return', ESC: 'escape', ESCAPE: 'escape',
+    BACKSPACE: 'delete', DELETE: 'delete', TAB: 'tab', SPACE: 'space',
+    ARROWUP: 'up', ARROWDOWN: 'down', ARROWLEFT: 'left', ARROWRIGHT: 'right',
+    HOME: 'home', END: 'end', PAGEUP: 'pageup', PAGEDOWN: 'pagedown',
+  }
+  return aliases[key] ?? key.toLocaleLowerCase()
+}
+
+function rejectPointerModifiers(action: ComputerCallAction): void {
+  if ('keys' in action && action.keys !== undefined && action.keys.length > 0) {
+    throw new ComputerUseError(
+      'COMPUTER_ACTION_BLOCKED',
+      `${action.type} modifier keys are not supported by the targeted macOS pointer route`,
+    )
+  }
+}
+
+function actionRequests(
+  action: ComputerCallAction,
+  observationId: ComputerObservationId,
+): ComputerActionRequest[] {
+  switch (action.type) {
+    case 'click':
+      rejectPointerModifiers(action)
+      return [{
+        kind: 'click', observationId, x: action.x, y: action.y,
+        coordinateSpace: 'window', button: action.button ?? 'left', clickCount: 1,
+      }]
+    case 'double_click':
+      rejectPointerModifiers(action)
+      return [{
+        kind: 'click', observationId, x: action.x, y: action.y,
+        coordinateSpace: 'window', button: action.button ?? 'left', clickCount: 2,
+      }]
+    case 'scroll': {
+      rejectPointerModifiers(action)
+      const horizontal = Math.abs(action.scroll_x) > Math.abs(action.scroll_y)
+      const delta = horizontal ? action.scroll_x : action.scroll_y
+      if (!Number.isFinite(delta) || delta === 0) {
+        throw new ComputerUseError('COMPUTER_ACTION_BLOCKED', 'scroll requires one non-zero finite scroll_x or scroll_y delta')
+      }
+      const direction = horizontal
+        ? delta < 0 ? 'left' : 'right'
+        : delta < 0 ? 'up' : 'down'
+      return [{
+        kind: 'scroll', observationId, x: action.x, y: action.y,
+        coordinateSpace: 'window', direction,
+        pages: Math.min(10, Math.max(1, Math.ceil(Math.abs(delta) / 500))),
+      }]
+    }
+    case 'type':
+      if (action.text === '') return []
+      return [{ kind: 'type-text', observationId, text: action.text }]
+    case 'keypress': {
+      if (action.keys.length === 0) {
+        throw new ComputerUseError('COMPUTER_ACTION_BLOCKED', 'keypress requires at least one key')
+      }
+      if (action.keys.length === 1 && action.keys[0]!.includes('+')) {
+        const parts = action.keys[0]!.split('+').map(part => part.trim()).filter(Boolean)
+        return actionRequests({ type: 'keypress', keys: parts }, observationId)
+      }
+      const modifiers: ComputerKeyModifier[] = []
+      const ordinary: string[] = []
+      for (const raw of action.keys) {
+        const modifier = COMPUTER_KEY_MODIFIERS.get(raw.trim().toUpperCase())
+        if (modifier === undefined) ordinary.push(normalizedComputerKey(raw))
+        else modifiers.push(modifier)
+      }
+      if (ordinary.length === 1) {
+        return [{ kind: 'press-key', observationId, key: ordinary[0]!, ...(modifiers.length === 0 ? {} : { modifiers }) }]
+      }
+      if (modifiers.length > 0) {
+        throw new ComputerUseError('COMPUTER_ACTION_BLOCKED', 'keypress modifiers must accompany exactly one ordinary key')
+      }
+      return ordinary.map(key => ({ kind: 'press-key' as const, observationId, key }))
+    }
+    case 'drag': {
+      rejectPointerModifiers(action)
+      if (action.path.length < 2) {
+        throw new ComputerUseError('COMPUTER_ACTION_BLOCKED', 'drag path requires at least two points')
+      }
+      const from = action.path[0]!
+      const to = action.path[action.path.length - 1]!
+      return [{
+        kind: 'drag', observationId, fromX: from.x, fromY: from.y,
+        toX: to.x, toY: to.y, coordinateSpace: 'window',
+      }]
+    }
+    case 'move':
+      rejectPointerModifiers(action)
+      return [{ kind: 'move', observationId, x: action.x, y: action.y, coordinateSpace: 'window' }]
+    case 'wait':
+    case 'screenshot': return []
   }
 }
 
@@ -203,6 +327,7 @@ export class ComputerUseService extends Service {
   private readonly leases: ComputerLeaseManager
   private readonly confirmations: ComputerConfirmationManager
   private readonly lifecycle = new AbortController()
+  private readonly host: Context
   private healthState: Omit<ComputerUseStatus, 'platform' | 'provider' | 'generation' | 'helperPath'> = {
     ready: false,
     accessibility: 'unavailable',
@@ -212,6 +337,7 @@ export class ComputerUseService extends Service {
   /** Register `ctx.computerUse` using one validated backend and configuration generation. */
   constructor(ctx: Context, backend: ComputerUseBackend, config: ResolvedComputerUseConfig) {
     super(ctx, 'computerUse')
+    this.host = ctx
     this.backend = backend
     this.config = config
     this.leases = new ComputerLeaseManager(ctx, () => this.config)
@@ -290,7 +416,9 @@ export class ComputerUseService extends Service {
       name: target.name,
       pid: target.pid ?? 0,
     }, 'control', 'computer_open_app', context.callId, signal)
-    return await this.backend.openApp(target, this.config.interaction.focusPolicy === 'activate', signal)
+    const result = await this.backend.openApp(target, this.config.interaction.focusPolicy === 'activate', signal)
+    this.state(context.agent).computerUseStepsByApp.set(`${result.app.bundleId}:${result.app.pid}`, 0)
+    return result
   }
 
   /** Obtain a fresh, scoped observation after enforcing the app read lease. */
@@ -315,6 +443,14 @@ export class ComputerUseService extends Service {
 
   /** Execute one observation-bound action and always return a fresh post-action observation. */
   async act(action: ComputerActionRequest, context: ComputerUseContext): Promise<ComputerActionResult> {
+    return await this.actWithScreenshot(action, context)
+  }
+
+  private async actWithScreenshot(
+    action: ComputerActionRequest,
+    context: ComputerUseContext,
+    postScreenshot?: 'none' | 'optional' | 'required',
+  ): Promise<ComputerActionResult> {
     const signal = AbortSignal.any([context.signal, this.lifecycle.signal])
     const stored = this.requireObservation(action.observationId, context.agent)
     if (action.kind === 'wait') return await this.wait(stored, action, context, signal)
@@ -431,7 +567,10 @@ export class ComputerUseService extends Service {
     } while (unchangedSamples < MAX_UNCHANGED_SETTLE_SAMPLES && Date.now() - started < this.config.maxSettleMs)
     const observation = await this.capture(
       stored.backend.app,
-      { app: { bundleId: stored.backend.app.bundleId, pid: stored.backend.app.pid }, screenshot: stored.public.screenshot === undefined ? 'none' : 'optional' },
+      {
+        app: { bundleId: stored.backend.app.bundleId, pid: stored.backend.app.pid },
+        screenshot: postScreenshot ?? (stored.public.screenshot === undefined ? 'none' : 'optional'),
+      },
       context,
       'computer_action',
       latest,
@@ -447,6 +586,98 @@ export class ComputerUseService extends Service {
     }
   }
 
+  /**
+   * Run one screenshot-grounded action batch and return a new screenshot.
+   * This is the custom-harness form of the OpenAI Computer Use loop: callers
+   * begin with an empty batch, then ground each subsequent batch only in the
+   * returned frame.
+   */
+  async computerUse(request: ComputerUseStepRequest, context: ComputerUseContext): Promise<ComputerUseStepResult> {
+    const signal = AbortSignal.any([context.signal, this.lifecycle.signal])
+    if (request.actions.length > this.config.maxActionsPerStep) {
+      throw new ComputerUseError(
+        'COMPUTER_ACTION_BLOCKED',
+        `computer_use accepts at most ${String(this.config.maxActionsPerStep)} ordered actions per screenshot`,
+      )
+    }
+
+    if (request.observationId === undefined) {
+      if (request.actions.length !== 0) {
+        throw new ComputerUseError(
+          'COMPUTER_STALE_OBSERVATION',
+          'the first computer_use call must use actions=[] so actions can be grounded in its returned screenshot',
+        )
+      }
+      const opened = await this.openApp({ app: request.app }, context)
+      await this.leases.ensure(context.agent, opened.app, 'read', 'computer_use', context.callId, signal)
+      const key = `${opened.app.bundleId}:${opened.app.pid}`
+      this.state(context.agent).computerUseStepsByApp.set(key, 0)
+      const observation = await this.capture(
+        opened.app,
+        { app: { bundleId: opened.app.bundleId, pid: opened.app.pid }, screenshot: 'required', full: true },
+        context,
+        'computer_use',
+      )
+      return { step: 0, actions: [], observation }
+    }
+
+    const initial = this.requireObservation(request.observationId, context.agent)
+    const selector = request.app
+    if ((selector.bundleId !== undefined && selector.bundleId !== initial.backend.app.bundleId)
+      || (selector.pid !== undefined && selector.pid !== initial.backend.app.pid)
+      || (selector.name !== undefined
+        && selector.name.localeCompare(initial.backend.app.name, undefined, { sensitivity: 'accent' }) !== 0)) {
+      throw new ComputerUseError('COMPUTER_STALE_OBSERVATION', 'computer_use app selector does not match the referenced screenshot')
+    }
+    const key = `${initial.backend.app.bundleId}:${initial.backend.app.pid}`
+    const state = this.state(context.agent)
+    const step = (state.computerUseStepsByApp.get(key) ?? 0) + 1
+    if (step > this.config.maxComputerUseSteps) {
+      throw new ComputerUseError(
+        'COMPUTER_TIMEOUT',
+        `computer_use stopped after ${String(this.config.maxComputerUseSteps)} screenshot/action steps; report the blocker instead of retrying`,
+      )
+    }
+    state.computerUseStepsByApp.set(key, step)
+
+    let currentId = request.observationId
+    const outcomes: ComputerCallActionResult[] = []
+    for (const callAction of request.actions) {
+      signal.throwIfAborted()
+      if (callAction.type === 'wait') {
+        const waitMs = callAction.ms ?? 500
+        if (!Number.isInteger(waitMs) || waitMs < 0 || waitMs > 2_000) {
+          throw new ComputerUseError('COMPUTER_TIMEOUT', 'computer_use wait.ms must be an integer between 0 and 2000')
+        }
+        if (waitMs > 0) await delay(waitMs, undefined, { signal })
+        outcomes.push({ type: callAction.type, status: 'completed', channel: 'wait' })
+        continue
+      }
+      if (callAction.type === 'screenshot') {
+        outcomes.push({ type: callAction.type, status: 'completed', channel: 'screenshot' })
+        continue
+      }
+      const requests = actionRequests(callAction, currentId)
+      let channel: ComputerActionResult['channel'] = 'wait'
+      for (const action of requests) {
+        const rebound = { ...action, observationId: currentId } as ComputerActionRequest
+        const result = await this.actWithScreenshot(rebound, context, 'none')
+        currentId = result.observation.observationId
+        channel = result.channel
+      }
+      outcomes.push({ type: callAction.type, status: 'completed', channel })
+    }
+
+    const latest = this.requireObservation(currentId, context.agent)
+    const observation = await this.capture(
+      latest.backend.app,
+      { app: { bundleId: latest.backend.app.bundleId, pid: latest.backend.app.pid }, screenshot: 'required', full: true },
+      context,
+      'computer_use',
+    )
+    return { step, actions: outcomes, observation }
+  }
+
   /** Release all scoped observations and confirmations for one disposed Agent. */
   releaseAgent(agent: Agent): void {
     this.agents.delete(agent)
@@ -457,7 +688,7 @@ export class ComputerUseService extends Service {
   private state(agent: Agent): AgentState {
     let state = this.agents.get(agent)
     if (state === undefined) {
-      state = { observations: new Map(), latestByApp: new Map() }
+      state = { observations: new Map(), latestByApp: new Map(), computerUseStepsByApp: new Map() }
       this.agents.set(agent, state)
     }
     return state
@@ -488,7 +719,7 @@ export class ComputerUseService extends Service {
     app: ComputerAppIdentity,
     request: ComputerObserveRequest,
     context: ComputerUseContext,
-    sourceTool: 'computer_observe' | 'computer_action',
+    sourceTool: 'computer_observe' | 'computer_action' | 'computer_use',
     preObserved?: BackendObservation,
   ): Promise<ComputerObservation> {
     const signal = AbortSignal.any([context.signal, this.lifecycle.signal])
@@ -518,7 +749,7 @@ export class ComputerUseService extends Service {
     const full = request.full === true || previous === undefined
     const createdAt = Date.now()
     const observationId = ComputerObservationId(randomUUID())
-    const artifact = backend.screenshot === undefined
+    const describedArtifact = backend.screenshot === undefined
       ? undefined
       : await describeScreenshot(
         backend.screenshot.path,
@@ -527,6 +758,18 @@ export class ComputerUseService extends Service {
         this.config.maxScreenshotBytes,
         sourceTool,
       )
+    let artifact
+    if (describedArtifact !== undefined) {
+      const saved = await this.host.attachments.saveImage({
+        data: await readFile(describedArtifact.path),
+        mediaType: 'image/png',
+        name: describedArtifact.filename,
+      })
+      if (saved.mediaType !== 'image/png') {
+        throw new ComputerUseError('COMPUTER_PROVIDER_FAILURE', 'attachment storage changed the verified screenshot media type')
+      }
+      artifact = { ...describedArtifact, attachment: { ...saved, mediaType: 'image/png' as const } }
+    }
     const observation: ComputerObservation = {
       observationId,
       app: backend.app,

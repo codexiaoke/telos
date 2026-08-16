@@ -86,7 +86,7 @@ export interface BackendActionResult {
 
 /** One model-selected point or gesture for the non-interactive Agent cursor overlay. */
 export interface BackendCursorAction {
-  kind: 'click' | 'scroll' | 'drag'
+  kind: 'click' | 'scroll' | 'drag' | 'move'
   from?: { x: number; y: number }
   to: { x: number; y: number }
   /** Exact target identity used to prevent the overlay from lingering over another window. */

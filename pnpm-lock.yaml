@@ -161,6 +161,9 @@ importers:
       '@deepseek-ai/dsh-agent':
         specifier: link:../../third_party/deepseek-harness/packages/core/agent
         version: link:../../third_party/deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-attachment':
+        specifier: link:../../third_party/deepseek-harness/packages/attachment/attachment
+        version: link:../../third_party/deepseek-harness/packages/attachment/attachment
       '@deepseek-ai/dsh-brand':
         specifier: link:../../third_party/deepseek-harness/packages/util/brand
         version: link:../../third_party/deepseek-harness/packages/util/brand

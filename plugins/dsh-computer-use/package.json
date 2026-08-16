@@ -14,6 +14,7 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../third_party/deepseek-harness/vendor/cordis",
     "@deepseek-ai/dsh-agent": "link:../../third_party/deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-attachment": "link:../../third_party/deepseek-harness/packages/attachment/attachment",
     "@deepseek-ai/dsh-brand": "link:../../third_party/deepseek-harness/packages/util/brand",
     "@deepseek-ai/dsh-llm": "link:../../third_party/deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-session": "link:../../third_party/deepseek-harness/packages/core/session",

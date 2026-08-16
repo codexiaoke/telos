@@ -1,18 +1,30 @@
 /** Focused model-facing Computer Use Tool definitions. */
 
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { defineTool, type ToolDefinition, type ToolRunContext, type ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
 import {
   ComputerConfirmationToken,
   ComputerObservationId,
   ComputerTargetHandle,
   type ComputerActionRequest,
+  type ComputerCallAction,
   type ComputerUseContext,
 } from './types.js'
 import type { ComputerUseService } from './service.js'
 
 function renderJson(_args: unknown, value: unknown): ContentBlock[] {
   return [{ type: 'text', text: JSON.stringify(value, null, 2) }]
+}
+
+function renderComputerResult(args: unknown, value: unknown): ContentBlock[] {
+  const blocks = renderJson(args, value)
+  const record = value as { observation?: { screenshot?: { attachment?: ImageAttachmentRef } }; screenshot?: { attachment?: ImageAttachmentRef } }
+  const attachment = record.observation?.screenshot?.attachment ?? record.screenshot?.attachment
+  if (attachment !== undefined) {
+    blocks.push({ type: 'image', attachment })
+  }
+  return blocks
 }
 
 function contextOf(exec: ToolRunContext): ComputerUseContext {
@@ -85,11 +97,23 @@ const artifactSchema = {
     mimeType: { type: 'string', enum: ['image/png'], required: true },
     kind: { type: 'string', enum: ['image'], required: true },
     description: { type: 'string', required: true },
-    sourceTool: { type: 'string', enum: ['computer_observe', 'computer_action'], required: true },
+    sourceTool: { type: 'string', enum: ['computer_observe', 'computer_action', 'computer_use'], required: true },
     previewIntent: { type: 'string', enum: ['image'], required: true },
     bytes: { type: 'integer', required: true },
     width: { type: 'integer', required: true },
     height: { type: 'integer', required: true },
+    attachment: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        attachmentId: { type: 'string', required: true },
+        mediaType: { type: 'string', enum: ['image/png'], required: true },
+        bytes: { type: 'integer', required: true },
+        width: { type: 'integer', required: true },
+        height: { type: 'integer', required: true },
+        name: { type: 'string' },
+      },
+    },
   },
 } as const satisfies ValueSchemaSpec
 
@@ -139,7 +163,7 @@ const actionResultSchema = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    action: { type: 'string', enum: ['click', 'set-value', 'type-text', 'press-key', 'scroll', 'drag', 'perform-action', 'wait'], required: true },
+    action: { type: 'string', enum: ['click', 'set-value', 'type-text', 'press-key', 'scroll', 'drag', 'move', 'perform-action', 'wait'], required: true },
     channel: { type: 'string', enum: ['accessibility', 'coordinates', 'keyboard', 'wait'], required: true },
     activation: { type: 'string', enum: ['not-requested', 'already-frontmost', 'activated'], required: true },
     pointerInput: { type: 'boolean', required: true },
@@ -189,9 +213,40 @@ function elementTarget(args: { elementIndex?: number; targetHandle?: string; all
 function actionOutput() {
   return {
     schema: actionResultSchema,
-    render: renderJson,
+    render: renderComputerResult,
   }
 }
+
+const computerCallActionSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    type: {
+      type: 'string',
+      enum: ['click', 'double_click', 'scroll', 'type', 'wait', 'keypress', 'drag', 'move', 'screenshot'],
+      required: true,
+    },
+    x: { type: 'number' },
+    y: { type: 'number' },
+    button: { type: 'string', enum: ['left', 'right', 'middle'] },
+    keys: { type: 'array', items: { type: 'string' } },
+    scroll_x: { type: 'number' },
+    scroll_y: { type: 'number' },
+    text: { type: 'string' },
+    ms: { type: 'integer' },
+    path: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          x: { type: 'number', required: true },
+          y: { type: 'number', required: true },
+        },
+      },
+    },
+  },
+} as const satisfies ValueSchemaSpec
 
 /** Create the focused execution definitions bound to one active Service generation. */
 export function createComputerUseTools(service: ComputerUseService): ToolDefinition[] {
@@ -221,7 +276,7 @@ export function createComputerUseTools(service: ComputerUseService): ToolDefinit
 
   const openApp = defineTool({
     name: 'computer_open_app',
-    description: 'Launch an installed macOS app or activate its existing process in one deterministic call. For requests to open, launch, show, switch to, or bring an app forward, call this directly first; do not use computer_list_apps, computer_observe, AXRaise, screenshots, vision, or coordinate clicks merely to activate an app. Foreground activation occurs only when host focusPolicy is activate.',
+    description: 'Launch an installed macOS app or activate its existing process in one deterministic call. When host focusPolicy is activate, this returns only after a visible normal app window is ready or fails clearly; it never treats the menu bar as an app window. For requests to open, launch, show, switch to, or bring an app forward, call this directly first; do not use computer_list_apps, computer_observe, AXRaise, screenshots, vision, or coordinate clicks merely to activate an app.',
     parameters: {
       app: { ...appSelectorSchema, required: true },
     },
@@ -251,22 +306,67 @@ export function createComputerUseTools(service: ComputerUseService): ToolDefinit
     presentCall: () => ({ card: 'generic', title: 'Open macOS app', kind: 'execute' }),
   })
 
+  const computerUse = defineTool({
+    name: 'computer_use',
+    description: 'Preferred visual control loop for macOS apps, following the OpenAI Computer Use custom-harness pattern. First call with the target app and actions=[]; this opens/restores the app and returns a fresh screenshot directly in the Tool result. Then send one bounded ordered actions[] batch grounded only in that screenshot, using its observationId. The result always includes the next fresh screenshot. Repeat until complete. Do not call vision_glance, Bash screenshot/OCR, AppleScript, or the individual computer_* action tools inside this loop. Stop and report a blocker after an error; the host enforces a finite step budget. Purchases, credential entry, destructive actions, or other high-impact operations must use the existing confirmation flow instead of this batch tool.',
+    parameters: {
+      app: { ...appSelectorSchema, required: true },
+      observationId: { type: 'string', description: 'Omit only on the first call. Later calls must use the id from the immediately preceding screenshot.' },
+      actions: {
+        type: 'array',
+        items: computerCallActionSchema,
+        required: true,
+        description: 'Ordered OpenAI-style UI actions grounded only in the referenced screenshot. Use [] to obtain the initial screenshot.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          step: { type: 'integer', required: true },
+          actions: {
+            type: 'array',
+            required: true,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                type: { type: 'string', enum: ['click', 'double_click', 'scroll', 'type', 'wait', 'keypress', 'drag', 'move', 'screenshot'], required: true },
+                status: { type: 'string', enum: ['completed'], required: true },
+                channel: { type: 'string', enum: ['accessibility', 'coordinates', 'keyboard', 'wait', 'screenshot'], required: true },
+              },
+            },
+          },
+          observation: { ...observationSchema, required: true },
+        },
+      },
+      render: renderComputerResult,
+    },
+    execute: (args, exec) => service.computerUse({
+      app: args.app,
+      ...(args.observationId === undefined ? {} : { observationId: ComputerObservationId(args.observationId) }),
+      actions: args.actions as ComputerCallAction[],
+    }, contextOf(exec)),
+    presentCall: () => ({ card: 'generic', title: 'Use macOS app visually', kind: 'execute' }),
+  })
+
   const observe = defineTool({
     name: 'computer_observe',
-    description: 'Read a fresh Accessibility observation for one exact running app. Element indexes belong only to the returned observationId. Prefer the tree; request a screenshot only for pixel-only facts. This tool does not launch or activate apps: use computer_open_app first when the user asks to open or switch to an app.',
+    description: 'Compatibility and diagnostics tool for reading a fresh Accessibility observation for one exact running app. Prefer computer_use for screenshot-grounded visual workflows because it returns the screenshot in-band and keeps one bounded action/observation loop. Element indexes belong only to the returned observationId. This tool does not launch or activate apps: use computer_open_app first when the user only asks to open or switch to an app.',
     parameters: {
       app: { ...appSelectorSchema, required: true },
       screenshot: { type: 'string', enum: ['none', 'optional', 'required'], description: 'Default none for low latency. Required fails when Screen Recording is unavailable.' },
       full: { type: 'boolean', description: 'Return a full tree instead of a diff from the previous observation.' },
     },
-    output: { schema: observationSchema, render: renderJson },
+    output: { schema: observationSchema, render: renderComputerResult },
     execute: (args, exec) => service.observe(args, contextOf(exec)),
     presentCall: () => ({ card: 'generic', title: 'Observe macOS app', kind: 'read' }),
   })
 
   const click = defineTool({
     name: 'computer_click',
-    description: 'Click an observed element, preferring AXPress, or use a window-relative or screen-global coordinate when host pointer policy allows it. Use computer_open_app instead of clicks to activate an app. For safe recovery after harmless tree reordering, pass targetHandle and allowRebind=true. After one stale-state failure, obtain one fresh observation and do not repeat the same guessed coordinate.',
+    description: 'Compatibility primitive for one click. Prefer computer_use for screenshot-grounded visual workflows. Click an observed element, preferring AXPress, or use a window-relative or screen-global coordinate when host pointer policy allows it. Use computer_open_app instead of clicks to activate an app. For safe recovery after harmless tree reordering, pass targetHandle and allowRebind=true. After one stale-state failure, obtain one fresh observation and do not repeat the same guessed coordinate.',
     parameters: {
       observationId: { type: 'string', required: true },
       elementIndex: { type: 'integer' },
@@ -297,7 +397,7 @@ export function createComputerUseTools(service: ComputerUseService): ToolDefinit
 
   const setValue = defineTool({
     name: 'computer_set_value',
-    description: 'Set one observed editable Accessibility value without using the clipboard. Supply elementIndex or targetHandle; targetHandle plus allowRebind=true permits deterministic fail-closed recovery after harmless tree reordering.',
+    description: 'Compatibility primitive for one Accessibility value change. Prefer computer_use for screenshot-grounded visual workflows. Set one observed editable value without using the clipboard. Supply elementIndex or targetHandle; targetHandle plus allowRebind=true permits deterministic fail-closed recovery after harmless tree reordering.',
     parameters: {
       observationId: { type: 'string', required: true },
       elementIndex: { type: 'integer' },
@@ -313,7 +413,7 @@ export function createComputerUseTools(service: ComputerUseService): ToolDefinit
 
   const typeText = defineTool({
     name: 'computer_type_text',
-    description: 'Type Unicode into the currently focused control without reading or replacing the clipboard. Focus a control using fresh state first; keyboard fallback may require host-authorized foreground activation. The result does not echo the supplied text.',
+    description: 'Compatibility primitive for one text entry. Prefer computer_use for screenshot-grounded visual workflows. Type Unicode into the currently focused control without reading or replacing the clipboard. Focus a control using fresh state first; keyboard fallback may require host-authorized foreground activation. The result does not echo the supplied text.',
     parameters: {
       observationId: { type: 'string', required: true },
       text: { type: 'string', required: true },
@@ -326,7 +426,7 @@ export function createComputerUseTools(service: ComputerUseService): ToolDefinit
 
   const pressKey = defineTool({
     name: 'computer_press_key',
-    description: 'Press one validated key or chord by routing it to the selected app process. The default host policy preserves the current foreground app; read the returned fresh observation.',
+    description: 'Compatibility primitive for one keypress. Prefer computer_use for screenshot-grounded visual workflows. Press one validated key or chord by routing it to the selected app process. The default host policy preserves the current foreground app; read the returned fresh observation.',
     parameters: {
       observationId: { type: 'string', required: true },
       key: { type: 'string', enum: keyNames, required: true },
@@ -340,7 +440,7 @@ export function createComputerUseTools(service: ComputerUseService): ToolDefinit
 
   const scroll = defineTool({
     name: 'computer_scroll',
-    description: 'Scroll by routing a wheel event only to the selected app process at an observed element or window-relative/screen-global coordinate. The system cursor is not moved.',
+    description: 'Compatibility primitive for one scroll. Prefer computer_use for screenshot-grounded visual workflows. Route a wheel event only to the selected app process at an observed element or window-relative/screen-global coordinate. The system cursor is not moved.',
     parameters: {
       observationId: { type: 'string', required: true },
       elementIndex: { type: 'integer' },
@@ -369,7 +469,7 @@ export function createComputerUseTools(service: ComputerUseService): ToolDefinit
 
   const drag = defineTool({
     name: 'computer_drag',
-    description: 'Drag by routing mouse events only to the selected app process between two points in the observed-window or screen-global coordinate space. The system cursor is not moved.',
+    description: 'Compatibility primitive for one drag. Prefer computer_use for screenshot-grounded visual workflows. Route mouse events only to the selected app process between two points in the observed-window or screen-global coordinate space. The system cursor is not moved.',
     parameters: {
       observationId: { type: 'string', required: true },
       fromX: { type: 'number', required: true },
@@ -390,6 +490,24 @@ export function createComputerUseTools(service: ComputerUseService): ToolDefinit
       ...(args.coordinateSpace === undefined ? {} : { coordinateSpace: args.coordinateSpace }),
     }, contextOf(exec)),
     presentCall: () => ({ card: 'generic', title: 'Drag in macOS app', kind: 'execute' }),
+  })
+
+  const move = defineTool({
+    name: 'computer_move',
+    description: 'Compatibility primitive for one target-process pointer move. Prefer computer_use for screenshot-grounded visual workflows.',
+    parameters: {
+      observationId: { type: 'string', required: true },
+      x: { type: 'number', required: true },
+      y: { type: 'number', required: true },
+      coordinateSpace: { type: 'string', enum: ['window', 'screen'] },
+      ...sensitiveParameters,
+    },
+    output: actionOutput(),
+    execute: (args, exec) => service.act({
+      kind: 'move', ...actionBase(args), x: args.x, y: args.y,
+      ...(args.coordinateSpace === undefined ? {} : { coordinateSpace: args.coordinateSpace }),
+    }, contextOf(exec)),
+    presentCall: () => ({ card: 'generic', title: 'Move in macOS app', kind: 'execute' }),
   })
 
   const perform = defineTool({
@@ -461,5 +579,5 @@ export function createComputerUseTools(service: ComputerUseService): ToolDefinit
     presentCall: () => ({ card: 'generic', title: 'Confirm sensitive app action', kind: 'execute' }),
   })
 
-  return [listApps, openApp, observe, click, setValue, typeText, pressKey, scroll, drag, perform, wait, confirm]
+  return [listApps, openApp, computerUse, observe, click, setValue, typeText, pressKey, scroll, drag, move, perform, wait, confirm]
 }

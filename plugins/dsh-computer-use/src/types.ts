@@ -1,6 +1,7 @@
 /** Public Computer Use types shared by the Service, provider, and Tool consumer. */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { CallId } from '@deepseek-ai/dsh-llm'
 
@@ -111,11 +112,13 @@ export interface ComputerArtifact {
   mimeType: 'image/png'
   kind: 'image'
   description: string
-  sourceTool: 'computer_observe' | 'computer_action'
+  sourceTool: 'computer_observe' | 'computer_action' | 'computer_use'
   previewIntent: 'image'
   bytes: number
   width: number
   height: number
+  /** Durable image reference embedded into the Tool result for visual models. */
+  attachment?: Omit<ImageAttachmentRef, 'mediaType'> & { mediaType: 'image/png' }
 }
 
 /** Complete model-visible observation. */
@@ -232,6 +235,14 @@ export interface ComputerDragAction extends ComputerActionBase {
   coordinateSpace?: ComputerCoordinateSpace
 }
 
+/** Move the target-process pointer stream without clicking. */
+export interface ComputerMoveAction extends ComputerActionBase {
+  kind: 'move'
+  x: number
+  y: number
+  coordinateSpace?: ComputerCoordinateSpace
+}
+
 /** Perform one Accessibility action advertised by an observed element. */
 export interface ComputerPerformAction extends ComputerActionBase, ComputerElementTarget {
   kind: 'perform-action'
@@ -257,8 +268,42 @@ export type ComputerActionRequest =
   | ComputerPressKeyAction
   | ComputerScrollAction
   | ComputerDragAction
+  | ComputerMoveAction
   | ComputerPerformAction
   | ComputerWaitAction
+
+/** OpenAI-compatible screenshot-grounded action vocabulary used by `computer_use`. */
+export type ComputerCallAction =
+  | { type: 'click'; x: number; y: number; button?: ComputerMouseButton; keys?: string[] }
+  | { type: 'double_click'; x: number; y: number; button?: ComputerMouseButton; keys?: string[] }
+  | { type: 'scroll'; x: number; y: number; scroll_x: number; scroll_y: number; keys?: string[] }
+  | { type: 'type'; text: string }
+  | { type: 'wait'; ms?: number }
+  | { type: 'keypress'; keys: string[] }
+  | { type: 'drag'; path: Array<{ x: number; y: number }>; keys?: string[] }
+  | { type: 'move'; x: number; y: number; keys?: string[] }
+  | { type: 'screenshot' }
+
+/** One bounded custom-harness step following the OpenAI Computer Use loop. */
+export interface ComputerUseStepRequest {
+  app: ComputerAppSelector
+  observationId?: ComputerObservationId
+  actions: ComputerCallAction[]
+}
+
+/** Outcome for one action in an ordered Computer Use batch. */
+export interface ComputerCallActionResult {
+  type: ComputerCallAction['type']
+  status: 'completed'
+  channel: ComputerActionResult['channel'] | 'screenshot'
+}
+
+/** Fresh screenshot result returned after every Computer Use action batch. */
+export interface ComputerUseStepResult {
+  step: number
+  actions: ComputerCallActionResult[]
+  observation: ComputerObservation
+}
 
 /** Result of a successful action followed by a fresh observation. */
 export interface ComputerActionResult {

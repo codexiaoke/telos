@@ -47,6 +47,8 @@
       name: '@telos/dsh-computer-use'
       config:
         observationTtlMs: 0
+        settleMs: 100
+        maxSettleMs: 1500
         allowAllApps: true
         interaction:
           focusPolicy: activate

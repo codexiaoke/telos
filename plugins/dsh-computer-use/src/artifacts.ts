@@ -7,8 +7,8 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import { ComputerUseError } from './errors.js'
 import type { ComputerArtifact } from './types.js'
 
-/** Screenshot description that hands visual analysis to the sibling vision path. */
-export const COMPUTER_SCREENSHOT_DESCRIPTION = 'Current macOS application window observation. For OCR, visual grounding, or pixel inspection use the Telos multimodal/vision path with this exact screenshot path; do not recreate OCR with bash, tesseract, or an ad hoc script.'
+/** Screenshot description used by the direct screenshot/action feedback loop. */
+export const COMPUTER_SCREENSHOT_DESCRIPTION = 'Current macOS application window after the latest Computer Use step. The image is embedded directly in this Tool result; ground the next action only from this fresh frame and do not call vision_glance or recreate OCR with scripts.'
 
 function isWithin(root: string, candidate: string): boolean {
   const rel = relative(root, candidate)

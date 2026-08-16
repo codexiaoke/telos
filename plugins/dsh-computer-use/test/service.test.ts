@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { mkdtemp, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Context } from '@deepseek-ai/cordis'
 import type { BackendObservation, ComputerUseBackend } from '../src/backend.js'
@@ -10,8 +13,8 @@ import type { ComputerAppIdentity, ComputerUseContext } from '../src/types.js'
 const APP: ComputerAppIdentity = { bundleId: 'com.example.app', pid: 42, name: 'Example' }
 const AGENT = { session: { id: 'sess-1', header: { createdAt: 1234567890, cwd: '/tmp/telos-ws' }, events: [{ type: 'turn/start', data: { turn: 1 } }] } } as unknown as Agent
 
-function context(): ComputerUseContext {
-  return { agent: AGENT, workspace: '/tmp/telos-ws', signal: new AbortController().signal }
+function context(workspace = '/tmp/telos-ws'): ComputerUseContext {
+  return { agent: AGENT, workspace, signal: new AbortController().signal }
 }
 
 function baseObservation(): BackendObservation {
@@ -87,6 +90,16 @@ function makeFakeCtx(requests?: { count: number }): Context {
       },
     },
     sessions: { flush: async () => true },
+    attachments: {
+      saveImage: async ({ data, mediaType, name }: { data: Uint8Array; mediaType: 'image/png'; name?: string }) => ({
+        attachmentId: 'attachment-computer-use',
+        mediaType,
+        bytes: data.byteLength,
+        width: 800,
+        height: 600,
+        ...(name === undefined ? {} : { name }),
+      }),
+    },
   } as unknown as Context
 }
 
@@ -192,5 +205,79 @@ describe('ComputerUseService', () => {
     const observation = await service.observe({ app: { bundleId: APP.bundleId } }, context())
     await service.act({ kind: 'click', observationId: observation.observationId, elementIndex: 0 }, context())
     expect(backend.observeCount).toBe(3)
+  })
+
+  it('runs an OpenAI-style screenshot and batched-action feedback step', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'telos-computer-use-step-'))
+    const backend = fakeBackend({
+      observe: async (_app, options) => {
+        backend.observeCount += 1
+        const observation = { ...baseObservation(), stateHash: `h${String(backend.observeCount)}` }
+        if (options.screenshotPath === undefined) return observation
+        await writeFile(options.screenshotPath, Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+        return { ...observation, screenshot: { path: options.screenshotPath, width: 800, height: 600 } }
+      },
+    })
+    const service = new ComputerUseService(fakeCtx(), backend, resolveConfig({
+      allowAllApps: true,
+      settleMs: 0,
+      maxSettleMs: 100,
+      interaction: { focusPolicy: 'activate', keyboardPolicy: 'activate' },
+    }))
+    const initial = await service.computerUse({ app: { name: APP.name }, actions: [] }, context(workspace))
+    expect(initial.step).toBe(0)
+    expect(initial.observation.screenshot?.attachment?.mediaType).toBe('image/png')
+
+    const result = await service.computerUse({
+      app: { bundleId: APP.bundleId, pid: APP.pid },
+      observationId: initial.observation.observationId,
+      actions: [
+        { type: 'click', x: 100, y: 80 },
+        { type: 'type', text: 'hello' },
+      ],
+    }, context(workspace))
+    expect(result.step).toBe(1)
+    expect(result.actions.map(action => action.type)).toEqual(['click', 'type'])
+    expect(result.observation.screenshot?.attachment?.attachmentId).toBe('attachment-computer-use')
+    expect(backend.actCount).toBe(2)
+  })
+
+  it('requires the initial screenshot before accepting coordinates', async () => {
+    const service = new ComputerUseService(fakeCtx(), fakeBackend(), resolveConfig({ allowAllApps: true }))
+    await expect(service.computerUse({
+      app: { bundleId: APP.bundleId },
+      actions: [{ type: 'click', x: 1, y: 1 }],
+    }, context())).rejects.toThrow(/first computer_use call/)
+  })
+
+  it('stops a screenshot/action loop at the configured step budget', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'telos-computer-use-budget-'))
+    const backend = fakeBackend({
+      observe: async (_app, options) => {
+        backend.observeCount += 1
+        const observation = { ...baseObservation(), stateHash: `h${String(backend.observeCount)}` }
+        if (options.screenshotPath === undefined) return observation
+        await writeFile(options.screenshotPath, Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+        return { ...observation, screenshot: { path: options.screenshotPath, width: 800, height: 600 } }
+      },
+    })
+    const service = new ComputerUseService(fakeCtx(), backend, resolveConfig({
+      allowAllApps: true,
+      maxComputerUseSteps: 1,
+      settleMs: 0,
+      maxSettleMs: 100,
+      interaction: { focusPolicy: 'activate' },
+    }))
+    const initial = await service.computerUse({ app: { bundleId: APP.bundleId }, actions: [] }, context(workspace))
+    const first = await service.computerUse({
+      app: { bundleId: APP.bundleId },
+      observationId: initial.observation.observationId,
+      actions: [{ type: 'screenshot' }],
+    }, context(workspace))
+    await expect(service.computerUse({
+      app: { bundleId: APP.bundleId },
+      observationId: first.observation.observationId,
+      actions: [{ type: 'screenshot' }],
+    }, context(workspace))).rejects.toThrow(/stopped after 1 screenshot\/action steps/)
   })
 })

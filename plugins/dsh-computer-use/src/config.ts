@@ -30,6 +30,8 @@ export interface ComputerUseConfig {
   maxDepth?: number
   maxTextBytes?: number
   maxScreenshotBytes?: number
+  maxComputerUseSteps?: number
+  maxActionsPerStep?: number
   artifactRoot?: string
   helper?: {
     path?: string
@@ -51,6 +53,8 @@ export interface ResolvedComputerUseConfig {
   maxDepth: number
   maxTextBytes: number
   maxScreenshotBytes: number
+  maxComputerUseSteps: number
+  maxActionsPerStep: number
   artifactRoot: string
   helper: {
     path?: string
@@ -101,6 +105,8 @@ export function resolveConfig(config: ComputerUseConfig = {}): ResolvedComputerU
   const maxDepth = integer('maxDepth', config.maxDepth ?? 14, 1, 64)
   const maxTextBytes = integer('maxTextBytes', config.maxTextBytes ?? 64000, 1024, 1048576)
   const maxScreenshotBytes = integer('maxScreenshotBytes', config.maxScreenshotBytes ?? 33554432, 1024, 268435456)
+  const maxComputerUseSteps = integer('maxComputerUseSteps', config.maxComputerUseSteps ?? 12, 1, 50)
+  const maxActionsPerStep = integer('maxActionsPerStep', config.maxActionsPerStep ?? 8, 1, 20)
   const artifactRoot = (config.artifactRoot ?? '.dsh-computer-use/artifacts').trim()
   if (artifactRoot.length === 0 || artifactRoot.startsWith('/') || artifactRoot.split(/[\\/]+/u).includes('..')) {
     throw new ComputerUseError('COMPUTER_PROVIDER_FAILURE', 'artifactRoot must be a non-empty workspace-relative path without ..')
@@ -139,6 +145,8 @@ export function resolveConfig(config: ComputerUseConfig = {}): ResolvedComputerU
     maxDepth,
     maxTextBytes,
     maxScreenshotBytes,
+    maxComputerUseSteps,
+    maxActionsPerStep,
     artifactRoot,
     helper: {
       ...(helperPath === undefined ? {} : { path: helperPath }),

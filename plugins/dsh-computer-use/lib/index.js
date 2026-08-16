@@ -39,6 +39,8 @@ function resolveConfig(config = {}) {
   const maxDepth = integer("maxDepth", config.maxDepth ?? 14, 1, 64);
   const maxTextBytes = integer("maxTextBytes", config.maxTextBytes ?? 64e3, 1024, 1048576);
   const maxScreenshotBytes = integer("maxScreenshotBytes", config.maxScreenshotBytes ?? 33554432, 1024, 268435456);
+  const maxComputerUseSteps = integer("maxComputerUseSteps", config.maxComputerUseSteps ?? 12, 1, 50);
+  const maxActionsPerStep = integer("maxActionsPerStep", config.maxActionsPerStep ?? 8, 1, 20);
   const artifactRoot = (config.artifactRoot ?? ".dsh-computer-use/artifacts").trim();
   if (artifactRoot.length === 0 || artifactRoot.startsWith("/") || artifactRoot.split(/[\\/]+/u).includes("..")) {
     throw new ComputerUseError("COMPUTER_PROVIDER_FAILURE", "artifactRoot must be a non-empty workspace-relative path without ..");
@@ -77,6 +79,8 @@ function resolveConfig(config = {}) {
     maxDepth,
     maxTextBytes,
     maxScreenshotBytes,
+    maxComputerUseSteps,
+    maxActionsPerStep,
     artifactRoot,
     helper: {
       ...helperPath === void 0 ? {} : { path: helperPath },
@@ -545,6 +549,7 @@ var MacOSBackend = class {
 
 // src/service.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
+import { readFile as readFile2 } from "node:fs/promises";
 import { setTimeout as delay2 } from "node:timers/promises";
 import { Service } from "@deepseek-ai/cordis";
 
@@ -552,7 +557,7 @@ import { Service } from "@deepseek-ai/cordis";
 import { randomUUID } from "node:crypto";
 import { lstat as lstat2, mkdir, realpath as realpath2, stat as stat2 } from "node:fs/promises";
 import { basename, isAbsolute, relative, resolve as resolve2, sep } from "node:path";
-var COMPUTER_SCREENSHOT_DESCRIPTION = "Current macOS application window observation. For OCR, visual grounding, or pixel inspection use the Telos multimodal/vision path with this exact screenshot path; do not recreate OCR with bash, tesseract, or an ad hoc script.";
+var COMPUTER_SCREENSHOT_DESCRIPTION = "Current macOS application window after the latest Computer Use step. The image is embedded directly in this Tool result; ground the next action only from this fresh frame and do not call vision_glance or recreate OCR with scripts.";
 function isWithin(root, candidate) {
   const rel = relative(root, candidate);
   return rel === "" || !rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel);
@@ -1211,6 +1216,7 @@ function targetIndex(action) {
     case "type-text":
     case "press-key":
     case "drag":
+    case "move":
     case "wait":
       return void 0;
   }
@@ -1225,6 +1231,7 @@ function targetHandle(action) {
     case "type-text":
     case "press-key":
     case "drag":
+    case "move":
     case "wait":
       return void 0;
   }
@@ -1239,6 +1246,7 @@ function allowsTargetRebind(action) {
     case "type-text":
     case "press-key":
     case "drag":
+    case "move":
     case "wait":
       return false;
   }
@@ -1253,6 +1261,7 @@ function requiresPointerInput(action, element) {
       return element !== void 0 && !element.actions.includes("AXPress") && action.allowCoordinateFallback === true;
     case "scroll":
     case "drag":
+    case "move":
       return true;
     case "set-value":
     case "type-text":
@@ -1272,7 +1281,7 @@ function cursorAction(action, element, window, app) {
     targetWindowFrame: { ...window.frame }
   };
   const elementPoint = element?.frame === void 0 ? void 0 : { x: element.frame.x + element.frame.width / 2, y: element.frame.y + element.frame.height / 2 };
-  const coordinateSpace = action.kind === "click" || action.kind === "scroll" || action.kind === "drag" ? action.coordinateSpace : void 0;
+  const coordinateSpace = action.kind === "click" || action.kind === "scroll" || action.kind === "drag" || action.kind === "move" ? action.coordinateSpace : void 0;
   const windowPoint = (x, y) => {
     if (x === void 0 || y === void 0 || window === void 0) return void 0;
     return coordinateSpace === "screen" ? { x, y } : { x: window.frame.x + x, y: window.frame.y + y };
@@ -1288,11 +1297,147 @@ function cursorAction(action, element, window, app) {
       const to = windowPoint(action.toX, action.toY);
       return from === void 0 || to === void 0 ? void 0 : { kind: "drag", from, to, ...target };
     }
+    case "move": {
+      const point = windowPoint(action.x, action.y);
+      return point === void 0 ? void 0 : { kind: "move", to: point, ...target };
+    }
     case "set-value":
     case "type-text":
     case "press-key":
     case "perform-action":
       return void 0;
+  }
+}
+var COMPUTER_KEY_MODIFIERS = /* @__PURE__ */ new Map([
+  ["CMD", "command"],
+  ["COMMAND", "command"],
+  ["CTRL", "control"],
+  ["CONTROL", "control"],
+  ["ALT", "option"],
+  ["OPTION", "option"],
+  ["SHIFT", "shift"]
+]);
+function normalizedComputerKey(value) {
+  const key = value.trim().toUpperCase();
+  const aliases = {
+    ENTER: "return",
+    RETURN: "return",
+    ESC: "escape",
+    ESCAPE: "escape",
+    BACKSPACE: "delete",
+    DELETE: "delete",
+    TAB: "tab",
+    SPACE: "space",
+    ARROWUP: "up",
+    ARROWDOWN: "down",
+    ARROWLEFT: "left",
+    ARROWRIGHT: "right",
+    HOME: "home",
+    END: "end",
+    PAGEUP: "pageup",
+    PAGEDOWN: "pagedown"
+  };
+  return aliases[key] ?? key.toLocaleLowerCase();
+}
+function rejectPointerModifiers(action) {
+  if ("keys" in action && action.keys !== void 0 && action.keys.length > 0) {
+    throw new ComputerUseError(
+      "COMPUTER_ACTION_BLOCKED",
+      `${action.type} modifier keys are not supported by the targeted macOS pointer route`
+    );
+  }
+}
+function actionRequests(action, observationId) {
+  switch (action.type) {
+    case "click":
+      rejectPointerModifiers(action);
+      return [{
+        kind: "click",
+        observationId,
+        x: action.x,
+        y: action.y,
+        coordinateSpace: "window",
+        button: action.button ?? "left",
+        clickCount: 1
+      }];
+    case "double_click":
+      rejectPointerModifiers(action);
+      return [{
+        kind: "click",
+        observationId,
+        x: action.x,
+        y: action.y,
+        coordinateSpace: "window",
+        button: action.button ?? "left",
+        clickCount: 2
+      }];
+    case "scroll": {
+      rejectPointerModifiers(action);
+      const horizontal = Math.abs(action.scroll_x) > Math.abs(action.scroll_y);
+      const delta = horizontal ? action.scroll_x : action.scroll_y;
+      if (!Number.isFinite(delta) || delta === 0) {
+        throw new ComputerUseError("COMPUTER_ACTION_BLOCKED", "scroll requires one non-zero finite scroll_x or scroll_y delta");
+      }
+      const direction = horizontal ? delta < 0 ? "left" : "right" : delta < 0 ? "up" : "down";
+      return [{
+        kind: "scroll",
+        observationId,
+        x: action.x,
+        y: action.y,
+        coordinateSpace: "window",
+        direction,
+        pages: Math.min(10, Math.max(1, Math.ceil(Math.abs(delta) / 500)))
+      }];
+    }
+    case "type":
+      if (action.text === "") return [];
+      return [{ kind: "type-text", observationId, text: action.text }];
+    case "keypress": {
+      if (action.keys.length === 0) {
+        throw new ComputerUseError("COMPUTER_ACTION_BLOCKED", "keypress requires at least one key");
+      }
+      if (action.keys.length === 1 && action.keys[0].includes("+")) {
+        const parts = action.keys[0].split("+").map((part) => part.trim()).filter(Boolean);
+        return actionRequests({ type: "keypress", keys: parts }, observationId);
+      }
+      const modifiers = [];
+      const ordinary = [];
+      for (const raw of action.keys) {
+        const modifier = COMPUTER_KEY_MODIFIERS.get(raw.trim().toUpperCase());
+        if (modifier === void 0) ordinary.push(normalizedComputerKey(raw));
+        else modifiers.push(modifier);
+      }
+      if (ordinary.length === 1) {
+        return [{ kind: "press-key", observationId, key: ordinary[0], ...modifiers.length === 0 ? {} : { modifiers } }];
+      }
+      if (modifiers.length > 0) {
+        throw new ComputerUseError("COMPUTER_ACTION_BLOCKED", "keypress modifiers must accompany exactly one ordinary key");
+      }
+      return ordinary.map((key) => ({ kind: "press-key", observationId, key }));
+    }
+    case "drag": {
+      rejectPointerModifiers(action);
+      if (action.path.length < 2) {
+        throw new ComputerUseError("COMPUTER_ACTION_BLOCKED", "drag path requires at least two points");
+      }
+      const from = action.path[0];
+      const to = action.path[action.path.length - 1];
+      return [{
+        kind: "drag",
+        observationId,
+        fromX: from.x,
+        fromY: from.y,
+        toX: to.x,
+        toY: to.y,
+        coordinateSpace: "window"
+      }];
+    }
+    case "move":
+      rejectPointerModifiers(action);
+      return [{ kind: "move", observationId, x: action.x, y: action.y, coordinateSpace: "window" }];
+    case "wait":
+    case "screenshot":
+      return [];
   }
 }
 var ComputerUseService = class extends Service {
@@ -1303,6 +1448,7 @@ var ComputerUseService = class extends Service {
   leases;
   confirmations;
   lifecycle = new AbortController();
+  host;
   healthState = {
     ready: false,
     accessibility: "unavailable",
@@ -1311,6 +1457,7 @@ var ComputerUseService = class extends Service {
   /** Register `ctx.computerUse` using one validated backend and configuration generation. */
   constructor(ctx, backend, config) {
     super(ctx, "computerUse");
+    this.host = ctx;
     this.backend = backend;
     this.config = config;
     this.leases = new ComputerLeaseManager(ctx, () => this.config);
@@ -1382,7 +1529,9 @@ var ComputerUseService = class extends Service {
       name: target.name,
       pid: target.pid ?? 0
     }, "control", "computer_open_app", context.callId, signal);
-    return await this.backend.openApp(target, this.config.interaction.focusPolicy === "activate", signal);
+    const result = await this.backend.openApp(target, this.config.interaction.focusPolicy === "activate", signal);
+    this.state(context.agent).computerUseStepsByApp.set(`${result.app.bundleId}:${result.app.pid}`, 0);
+    return result;
   }
   /** Obtain a fresh, scoped observation after enforcing the app read lease. */
   async observe(request, context) {
@@ -1404,6 +1553,9 @@ var ComputerUseService = class extends Service {
   }
   /** Execute one observation-bound action and always return a fresh post-action observation. */
   async act(action, context) {
+    return await this.actWithScreenshot(action, context);
+  }
+  async actWithScreenshot(action, context, postScreenshot) {
     const signal = AbortSignal.any([context.signal, this.lifecycle.signal]);
     const stored = this.requireObservation(action.observationId, context.agent);
     if (action.kind === "wait") return await this.wait(stored, action, context, signal);
@@ -1511,7 +1663,10 @@ var ComputerUseService = class extends Service {
     } while (unchangedSamples < MAX_UNCHANGED_SETTLE_SAMPLES && Date.now() - started < this.config.maxSettleMs);
     const observation = await this.capture(
       stored.backend.app,
-      { app: { bundleId: stored.backend.app.bundleId, pid: stored.backend.app.pid }, screenshot: stored.public.screenshot === void 0 ? "none" : "optional" },
+      {
+        app: { bundleId: stored.backend.app.bundleId, pid: stored.backend.app.pid },
+        screenshot: postScreenshot ?? (stored.public.screenshot === void 0 ? "none" : "optional")
+      },
       context,
       "computer_action",
       latest
@@ -1526,6 +1681,90 @@ var ComputerUseService = class extends Service {
       observation
     };
   }
+  /**
+   * Run one screenshot-grounded action batch and return a new screenshot.
+   * This is the custom-harness form of the OpenAI Computer Use loop: callers
+   * begin with an empty batch, then ground each subsequent batch only in the
+   * returned frame.
+   */
+  async computerUse(request, context) {
+    const signal = AbortSignal.any([context.signal, this.lifecycle.signal]);
+    if (request.actions.length > this.config.maxActionsPerStep) {
+      throw new ComputerUseError(
+        "COMPUTER_ACTION_BLOCKED",
+        `computer_use accepts at most ${String(this.config.maxActionsPerStep)} ordered actions per screenshot`
+      );
+    }
+    if (request.observationId === void 0) {
+      if (request.actions.length !== 0) {
+        throw new ComputerUseError(
+          "COMPUTER_STALE_OBSERVATION",
+          "the first computer_use call must use actions=[] so actions can be grounded in its returned screenshot"
+        );
+      }
+      const opened = await this.openApp({ app: request.app }, context);
+      await this.leases.ensure(context.agent, opened.app, "read", "computer_use", context.callId, signal);
+      const key2 = `${opened.app.bundleId}:${opened.app.pid}`;
+      this.state(context.agent).computerUseStepsByApp.set(key2, 0);
+      const observation2 = await this.capture(
+        opened.app,
+        { app: { bundleId: opened.app.bundleId, pid: opened.app.pid }, screenshot: "required", full: true },
+        context,
+        "computer_use"
+      );
+      return { step: 0, actions: [], observation: observation2 };
+    }
+    const initial = this.requireObservation(request.observationId, context.agent);
+    const selector = request.app;
+    if (selector.bundleId !== void 0 && selector.bundleId !== initial.backend.app.bundleId || selector.pid !== void 0 && selector.pid !== initial.backend.app.pid || selector.name !== void 0 && selector.name.localeCompare(initial.backend.app.name, void 0, { sensitivity: "accent" }) !== 0) {
+      throw new ComputerUseError("COMPUTER_STALE_OBSERVATION", "computer_use app selector does not match the referenced screenshot");
+    }
+    const key = `${initial.backend.app.bundleId}:${initial.backend.app.pid}`;
+    const state2 = this.state(context.agent);
+    const step = (state2.computerUseStepsByApp.get(key) ?? 0) + 1;
+    if (step > this.config.maxComputerUseSteps) {
+      throw new ComputerUseError(
+        "COMPUTER_TIMEOUT",
+        `computer_use stopped after ${String(this.config.maxComputerUseSteps)} screenshot/action steps; report the blocker instead of retrying`
+      );
+    }
+    state2.computerUseStepsByApp.set(key, step);
+    let currentId = request.observationId;
+    const outcomes = [];
+    for (const callAction of request.actions) {
+      signal.throwIfAborted();
+      if (callAction.type === "wait") {
+        const waitMs = callAction.ms ?? 500;
+        if (!Number.isInteger(waitMs) || waitMs < 0 || waitMs > 2e3) {
+          throw new ComputerUseError("COMPUTER_TIMEOUT", "computer_use wait.ms must be an integer between 0 and 2000");
+        }
+        if (waitMs > 0) await delay2(waitMs, void 0, { signal });
+        outcomes.push({ type: callAction.type, status: "completed", channel: "wait" });
+        continue;
+      }
+      if (callAction.type === "screenshot") {
+        outcomes.push({ type: callAction.type, status: "completed", channel: "screenshot" });
+        continue;
+      }
+      const requests = actionRequests(callAction, currentId);
+      let channel = "wait";
+      for (const action of requests) {
+        const rebound = { ...action, observationId: currentId };
+        const result = await this.actWithScreenshot(rebound, context, "none");
+        currentId = result.observation.observationId;
+        channel = result.channel;
+      }
+      outcomes.push({ type: callAction.type, status: "completed", channel });
+    }
+    const latest = this.requireObservation(currentId, context.agent);
+    const observation = await this.capture(
+      latest.backend.app,
+      { app: { bundleId: latest.backend.app.bundleId, pid: latest.backend.app.pid }, screenshot: "required", full: true },
+      context,
+      "computer_use"
+    );
+    return { step, actions: outcomes, observation };
+  }
   /** Release all scoped observations and confirmations for one disposed Agent. */
   releaseAgent(agent) {
     this.agents.delete(agent);
@@ -1535,7 +1774,7 @@ var ComputerUseService = class extends Service {
   state(agent) {
     let state2 = this.agents.get(agent);
     if (state2 === void 0) {
-      state2 = { observations: /* @__PURE__ */ new Map(), latestByApp: /* @__PURE__ */ new Map() };
+      state2 = { observations: /* @__PURE__ */ new Map(), latestByApp: /* @__PURE__ */ new Map(), computerUseStepsByApp: /* @__PURE__ */ new Map() };
       this.agents.set(agent, state2);
     }
     return state2;
@@ -1583,13 +1822,25 @@ var ComputerUseService = class extends Service {
     const full = request.full === true || previous === void 0;
     const createdAt = Date.now();
     const observationId = ComputerObservationId(randomUUID3());
-    const artifact = backend.screenshot === void 0 ? void 0 : await describeScreenshot(
+    const describedArtifact = backend.screenshot === void 0 ? void 0 : await describeScreenshot(
       backend.screenshot.path,
       backend.screenshot.width,
       backend.screenshot.height,
       this.config.maxScreenshotBytes,
       sourceTool
     );
+    let artifact;
+    if (describedArtifact !== void 0) {
+      const saved = await this.host.attachments.saveImage({
+        data: await readFile2(describedArtifact.path),
+        mediaType: "image/png",
+        name: describedArtifact.filename
+      });
+      if (saved.mediaType !== "image/png") {
+        throw new ComputerUseError("COMPUTER_PROVIDER_FAILURE", "attachment storage changed the verified screenshot media type");
+      }
+      artifact = { ...describedArtifact, attachment: { ...saved, mediaType: "image/png" } };
+    }
     const observation = {
       observationId,
       app: backend.app,
@@ -1660,6 +1911,15 @@ import { defineTool } from "@deepseek-ai/dsh-tools";
 function renderJson(_args, value) {
   return [{ type: "text", text: JSON.stringify(value, null, 2) }];
 }
+function renderComputerResult(args, value) {
+  const blocks = renderJson(args, value);
+  const record = value;
+  const attachment = record.observation?.screenshot?.attachment ?? record.screenshot?.attachment;
+  if (attachment !== void 0) {
+    blocks.push({ type: "image", attachment });
+  }
+  return blocks;
+}
 function contextOf(exec) {
   const agent = exec.agent;
   if (agent === void 0) throw new Error(`${exec.name}: an Agent Session is required`);
@@ -1725,11 +1985,23 @@ var artifactSchema = {
     mimeType: { type: "string", enum: ["image/png"], required: true },
     kind: { type: "string", enum: ["image"], required: true },
     description: { type: "string", required: true },
-    sourceTool: { type: "string", enum: ["computer_observe", "computer_action"], required: true },
+    sourceTool: { type: "string", enum: ["computer_observe", "computer_action", "computer_use"], required: true },
     previewIntent: { type: "string", enum: ["image"], required: true },
     bytes: { type: "integer", required: true },
     width: { type: "integer", required: true },
-    height: { type: "integer", required: true }
+    height: { type: "integer", required: true },
+    attachment: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        attachmentId: { type: "string", required: true },
+        mediaType: { type: "string", enum: ["image/png"], required: true },
+        bytes: { type: "integer", required: true },
+        width: { type: "integer", required: true },
+        height: { type: "integer", required: true },
+        name: { type: "string" }
+      }
+    }
   }
 };
 var observationSchema = {
@@ -1777,7 +2049,7 @@ var actionResultSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    action: { type: "string", enum: ["click", "set-value", "type-text", "press-key", "scroll", "drag", "perform-action", "wait"], required: true },
+    action: { type: "string", enum: ["click", "set-value", "type-text", "press-key", "scroll", "drag", "move", "perform-action", "wait"], required: true },
     channel: { type: "string", enum: ["accessibility", "coordinates", "keyboard", "wait"], required: true },
     activation: { type: "string", enum: ["not-requested", "already-frontmost", "activated"], required: true },
     pointerInput: { type: "boolean", required: true },
@@ -1878,9 +2150,39 @@ function elementTarget(args) {
 function actionOutput() {
   return {
     schema: actionResultSchema,
-    render: renderJson
+    render: renderComputerResult
   };
 }
+var computerCallActionSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    type: {
+      type: "string",
+      enum: ["click", "double_click", "scroll", "type", "wait", "keypress", "drag", "move", "screenshot"],
+      required: true
+    },
+    x: { type: "number" },
+    y: { type: "number" },
+    button: { type: "string", enum: ["left", "right", "middle"] },
+    keys: { type: "array", items: { type: "string" } },
+    scroll_x: { type: "number" },
+    scroll_y: { type: "number" },
+    text: { type: "string" },
+    ms: { type: "integer" },
+    path: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          x: { type: "number", required: true },
+          y: { type: "number", required: true }
+        }
+      }
+    }
+  }
+};
 function createComputerUseTools(service) {
   const listApps = defineTool({
     name: "computer_list_apps",
@@ -1907,7 +2209,7 @@ function createComputerUseTools(service) {
   });
   const openApp = defineTool({
     name: "computer_open_app",
-    description: "Launch an installed macOS app or activate its existing process in one deterministic call. For requests to open, launch, show, switch to, or bring an app forward, call this directly first; do not use computer_list_apps, computer_observe, AXRaise, screenshots, vision, or coordinate clicks merely to activate an app. Foreground activation occurs only when host focusPolicy is activate.",
+    description: "Launch an installed macOS app or activate its existing process in one deterministic call. When host focusPolicy is activate, this returns only after a visible normal app window is ready or fails clearly; it never treats the menu bar as an app window. For requests to open, launch, show, switch to, or bring an app forward, call this directly first; do not use computer_list_apps, computer_observe, AXRaise, screenshots, vision, or coordinate clicks merely to activate an app.",
     parameters: {
       app: { ...appSelectorSchema, required: true }
     },
@@ -1936,21 +2238,65 @@ function createComputerUseTools(service) {
     execute: (args, exec) => service.openApp({ app: args.app }, contextOf(exec)),
     presentCall: () => ({ card: "generic", title: "Open macOS app", kind: "execute" })
   });
+  const computerUse = defineTool({
+    name: "computer_use",
+    description: "Preferred visual control loop for macOS apps, following the OpenAI Computer Use custom-harness pattern. First call with the target app and actions=[]; this opens/restores the app and returns a fresh screenshot directly in the Tool result. Then send one bounded ordered actions[] batch grounded only in that screenshot, using its observationId. The result always includes the next fresh screenshot. Repeat until complete. Do not call vision_glance, Bash screenshot/OCR, AppleScript, or the individual computer_* action tools inside this loop. Stop and report a blocker after an error; the host enforces a finite step budget. Purchases, credential entry, destructive actions, or other high-impact operations must use the existing confirmation flow instead of this batch tool.",
+    parameters: {
+      app: { ...appSelectorSchema, required: true },
+      observationId: { type: "string", description: "Omit only on the first call. Later calls must use the id from the immediately preceding screenshot." },
+      actions: {
+        type: "array",
+        items: computerCallActionSchema,
+        required: true,
+        description: "Ordered OpenAI-style UI actions grounded only in the referenced screenshot. Use [] to obtain the initial screenshot."
+      }
+    },
+    output: {
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          step: { type: "integer", required: true },
+          actions: {
+            type: "array",
+            required: true,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                type: { type: "string", enum: ["click", "double_click", "scroll", "type", "wait", "keypress", "drag", "move", "screenshot"], required: true },
+                status: { type: "string", enum: ["completed"], required: true },
+                channel: { type: "string", enum: ["accessibility", "coordinates", "keyboard", "wait", "screenshot"], required: true }
+              }
+            }
+          },
+          observation: { ...observationSchema, required: true }
+        }
+      },
+      render: renderComputerResult
+    },
+    execute: (args, exec) => service.computerUse({
+      app: args.app,
+      ...args.observationId === void 0 ? {} : { observationId: ComputerObservationId(args.observationId) },
+      actions: args.actions
+    }, contextOf(exec)),
+    presentCall: () => ({ card: "generic", title: "Use macOS app visually", kind: "execute" })
+  });
   const observe = defineTool({
     name: "computer_observe",
-    description: "Read a fresh Accessibility observation for one exact running app. Element indexes belong only to the returned observationId. Prefer the tree; request a screenshot only for pixel-only facts. This tool does not launch or activate apps: use computer_open_app first when the user asks to open or switch to an app.",
+    description: "Compatibility and diagnostics tool for reading a fresh Accessibility observation for one exact running app. Prefer computer_use for screenshot-grounded visual workflows because it returns the screenshot in-band and keeps one bounded action/observation loop. Element indexes belong only to the returned observationId. This tool does not launch or activate apps: use computer_open_app first when the user only asks to open or switch to an app.",
     parameters: {
       app: { ...appSelectorSchema, required: true },
       screenshot: { type: "string", enum: ["none", "optional", "required"], description: "Default none for low latency. Required fails when Screen Recording is unavailable." },
       full: { type: "boolean", description: "Return a full tree instead of a diff from the previous observation." }
     },
-    output: { schema: observationSchema, render: renderJson },
+    output: { schema: observationSchema, render: renderComputerResult },
     execute: (args, exec) => service.observe(args, contextOf(exec)),
     presentCall: () => ({ card: "generic", title: "Observe macOS app", kind: "read" })
   });
   const click = defineTool({
     name: "computer_click",
-    description: "Click an observed element, preferring AXPress, or use a window-relative or screen-global coordinate when host pointer policy allows it. Use computer_open_app instead of clicks to activate an app. For safe recovery after harmless tree reordering, pass targetHandle and allowRebind=true. After one stale-state failure, obtain one fresh observation and do not repeat the same guessed coordinate.",
+    description: "Compatibility primitive for one click. Prefer computer_use for screenshot-grounded visual workflows. Click an observed element, preferring AXPress, or use a window-relative or screen-global coordinate when host pointer policy allows it. Use computer_open_app instead of clicks to activate an app. For safe recovery after harmless tree reordering, pass targetHandle and allowRebind=true. After one stale-state failure, obtain one fresh observation and do not repeat the same guessed coordinate.",
     parameters: {
       observationId: { type: "string", required: true },
       elementIndex: { type: "integer" },
@@ -1980,7 +2326,7 @@ function createComputerUseTools(service) {
   });
   const setValue = defineTool({
     name: "computer_set_value",
-    description: "Set one observed editable Accessibility value without using the clipboard. Supply elementIndex or targetHandle; targetHandle plus allowRebind=true permits deterministic fail-closed recovery after harmless tree reordering.",
+    description: "Compatibility primitive for one Accessibility value change. Prefer computer_use for screenshot-grounded visual workflows. Set one observed editable value without using the clipboard. Supply elementIndex or targetHandle; targetHandle plus allowRebind=true permits deterministic fail-closed recovery after harmless tree reordering.",
     parameters: {
       observationId: { type: "string", required: true },
       elementIndex: { type: "integer" },
@@ -1995,7 +2341,7 @@ function createComputerUseTools(service) {
   });
   const typeText = defineTool({
     name: "computer_type_text",
-    description: "Type Unicode into the currently focused control without reading or replacing the clipboard. Focus a control using fresh state first; keyboard fallback may require host-authorized foreground activation. The result does not echo the supplied text.",
+    description: "Compatibility primitive for one text entry. Prefer computer_use for screenshot-grounded visual workflows. Type Unicode into the currently focused control without reading or replacing the clipboard. Focus a control using fresh state first; keyboard fallback may require host-authorized foreground activation. The result does not echo the supplied text.",
     parameters: {
       observationId: { type: "string", required: true },
       text: { type: "string", required: true },
@@ -2007,7 +2353,7 @@ function createComputerUseTools(service) {
   });
   const pressKey = defineTool({
     name: "computer_press_key",
-    description: "Press one validated key or chord by routing it to the selected app process. The default host policy preserves the current foreground app; read the returned fresh observation.",
+    description: "Compatibility primitive for one keypress. Prefer computer_use for screenshot-grounded visual workflows. Press one validated key or chord by routing it to the selected app process. The default host policy preserves the current foreground app; read the returned fresh observation.",
     parameters: {
       observationId: { type: "string", required: true },
       key: { type: "string", enum: keyNames, required: true },
@@ -2020,7 +2366,7 @@ function createComputerUseTools(service) {
   });
   const scroll = defineTool({
     name: "computer_scroll",
-    description: "Scroll by routing a wheel event only to the selected app process at an observed element or window-relative/screen-global coordinate. The system cursor is not moved.",
+    description: "Compatibility primitive for one scroll. Prefer computer_use for screenshot-grounded visual workflows. Route a wheel event only to the selected app process at an observed element or window-relative/screen-global coordinate. The system cursor is not moved.",
     parameters: {
       observationId: { type: "string", required: true },
       elementIndex: { type: "integer" },
@@ -2048,7 +2394,7 @@ function createComputerUseTools(service) {
   });
   const drag = defineTool({
     name: "computer_drag",
-    description: "Drag by routing mouse events only to the selected app process between two points in the observed-window or screen-global coordinate space. The system cursor is not moved.",
+    description: "Compatibility primitive for one drag. Prefer computer_use for screenshot-grounded visual workflows. Route mouse events only to the selected app process between two points in the observed-window or screen-global coordinate space. The system cursor is not moved.",
     parameters: {
       observationId: { type: "string", required: true },
       fromX: { type: "number", required: true },
@@ -2069,6 +2415,26 @@ function createComputerUseTools(service) {
       ...args.coordinateSpace === void 0 ? {} : { coordinateSpace: args.coordinateSpace }
     }, contextOf(exec)),
     presentCall: () => ({ card: "generic", title: "Drag in macOS app", kind: "execute" })
+  });
+  const move = defineTool({
+    name: "computer_move",
+    description: "Compatibility primitive for one target-process pointer move. Prefer computer_use for screenshot-grounded visual workflows.",
+    parameters: {
+      observationId: { type: "string", required: true },
+      x: { type: "number", required: true },
+      y: { type: "number", required: true },
+      coordinateSpace: { type: "string", enum: ["window", "screen"] },
+      ...sensitiveParameters
+    },
+    output: actionOutput(),
+    execute: (args, exec) => service.act({
+      kind: "move",
+      ...actionBase(args),
+      x: args.x,
+      y: args.y,
+      ...args.coordinateSpace === void 0 ? {} : { coordinateSpace: args.coordinateSpace }
+    }, contextOf(exec)),
+    presentCall: () => ({ card: "generic", title: "Move in macOS app", kind: "execute" })
   });
   const perform = defineTool({
     name: "computer_perform_action",
@@ -2136,12 +2502,12 @@ function createComputerUseTools(service) {
     }, contextOf(exec)),
     presentCall: () => ({ card: "generic", title: "Confirm sensitive app action", kind: "execute" })
   });
-  return [listApps, openApp, observe, click, setValue, typeText, pressKey, scroll, drag, perform, wait, confirm];
+  return [listApps, openApp, computerUse, observe, click, setValue, typeText, pressKey, scroll, drag, move, perform, wait, confirm];
 }
 
 // src/index.ts
 var name = "telos-computer-use";
-var inject = ["subprocess", "approval", "sessions", "agents", "tools"];
+var inject = ["subprocess", "approval", "sessions", "agents", "tools", "attachments"];
 function apply(ctx, config = {}) {
   if (process.platform !== "darwin") {
     throw new ComputerUseError("COMPUTER_UNSUPPORTED_PLATFORM", `telos-computer-use supports macOS only; current platform is ${process.platform}`);

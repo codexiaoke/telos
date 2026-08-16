@@ -144,6 +144,24 @@ private func postPointerEvent(
     )
 }
 
+func targetedMove(
+    to point: CGPoint,
+    target: TargetedPointerTarget
+) throws {
+    let source = try targetedPointerSource()
+    let moved = try pointerEvent(source: source, type: .mouseMoved, button: .left)
+    try postPointerEvent(
+        moved,
+        target: target,
+        point: point,
+        clickState: 0,
+        buttonNumber: 0,
+        subtype: 0,
+        gesturePhase: 2,
+        clickGroup: clickGroup()
+    )
+}
+
 func targetedClick(
     at point: CGPoint,
     button: CGMouseButton,

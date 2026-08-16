@@ -55,3 +55,20 @@ Portions of `apps/desktop/src/renderer/src/components/agent-orb/orbEngine.ts` ar
 - Local license copy: `licenses/thinking-orbs-MIT.txt`
 
 The code has been rewritten and reduced for Telos. Telos does not depend on the `thinking-orbs` npm package.
+
+## dsh-computer-use native helper
+
+The macOS Accessibility native helper in `plugins/dsh-computer-use/native/macos`
+is adapted from [dsh-computer-use](https://github.com/Anionex/dsh-computer-use)
+by anionex.
+
+- License: MIT
+- Local license copy: `licenses/dsh-computer-use-MIT.txt`
+
+Telos owns the TypeScript Computer Use Service, provider, tools, and build
+integration, and adapts the Swift Accessibility/CoreGraphics/ScreenCaptureKit
+helper source. The native binary is committed under
+`plugins/dsh-computer-use/native/macos/bin` and pinned by
+`plugins/dsh-computer-use/native/macos/manifest.json`; the plugin refuses to run
+a helper whose SHA-256 differs. Telos does not depend on the `@anionex/dsh-computer-use`
+npm package.

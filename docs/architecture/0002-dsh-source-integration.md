@@ -5,7 +5,7 @@
 
 ## Context
 
-DeepSeek Harness is the first Agent Runtime selected for Telos. It is not the personal domain core and does not own the Telos UI. At adoption time DSH is a developer preview that warns of compatibility-breaking changes, publishes from a single `master` branch without stable Git tags, and reports version `0.1.0-rc.5` at commit `47f943859bef60e4160492346772ded9b24f765a`.
+DeepSeek Harness is the Agent Runtime selected for Telos. It is not the personal domain core and does not own the Telos UI. At adoption time DSH is a developer preview that warns of compatibility-breaking changes, publishes from a single `master` branch without stable Git tags, and reports version `0.1.0-rc.5` at commit `47f943859bef60e4160492346772ded9b24f765a`.
 
 Telos needs inspectable source, reproducible builds, controlled upgrades, and a clean path for contributing generic improvements upstream. Installing DSH itself from npm or copying its source into the Telos history would weaken those properties.
 
@@ -84,7 +84,7 @@ git add third_party/deepseek-harness
 
 ## Compatibility policy
 
-The Telos Runtime Contract is stable from the product's perspective. `runtime-dsh` advertises the capabilities supported by its pinned DSH version and maps unsupported operations explicitly rather than faking them.
+The Telos runtime adapter contract is stable from the product's perspective. `runtime-dsh` advertises the capabilities supported by its pinned DSH version and maps unsupported operations explicitly rather than faking them.
 
 The initial DSH SDK protocol has known gaps that the adapter must account for:
 

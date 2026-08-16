@@ -19,9 +19,9 @@ silently leaving an active copy in a Telos projection.
 
 The implementation is split into two product-owned packages:
 
-- `@telos/personal-core`: runtime-neutral domain contracts, SQLite authority,
+- `@telos/personal-core`: DSH-independent domain contracts, SQLite authority,
   indexes, projections, recall planning, deletion, and evaluation fixtures;
-- `@telos/dsh-continuity`: the replaceable DSH adapter, memory tools, live
+- `@telos/dsh-continuity`: the Telos-owned DSH adapter, memory tools, live
   hooks, per-session receipts, and Web Client contributions.
 
 Removing the DSH plugin must leave the pinned default DSH composition usable.
@@ -303,7 +303,7 @@ The Client face:
 
 V1 management operations may use bounded unary Remote methods. Whole-graph
 streams do not masquerade as Remote calls; the future Telos Local Gateway owns
-streaming and multi-runtime coordination.
+streaming and gateway-level coordination.
 
 ## User experience
 
@@ -364,8 +364,9 @@ Implementation is complete only when:
 
 ### Install one community memory plugin as Telos truth
 
-This couples personal continuity to one replaceable Runtime and cannot unify
-future goals, permissions, connectors, and action receipts. Community plugins
+This would cede Telos personal truth to a third-party plugin whose storage and
+schema are not Telos-owned, and it cannot unify future goals, permissions,
+connectors, and action receipts. Community plugins
 remain design references and possible providers behind a Telos contract.
 
 ### Use a graph database as the sole authority

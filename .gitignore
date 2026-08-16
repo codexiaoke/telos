@@ -9,3 +9,4 @@ coverage/
 .env.*
 !.env.example
 .local/
+.dsh-computer-use/

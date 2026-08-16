@@ -2,7 +2,7 @@
   "name": "telos",
   "version": "0.1.4",
   "private": true,
-  "description": "A local-first personal intelligence system with replaceable agent runtimes.",
+  "description": "A local-first personal intelligence system built on the DeepSeek Harness agent runtime.",
   "packageManager": "pnpm@11.17.0",
   "engines": {
     "node": ">=22.12.0"

@@ -33,7 +33,7 @@ Will be the renderer's single local API and event-stream boundary. The UI will n
 
 ### DeepSeek Harness
 
-Will be an optional headless Agent Runtime for in-flight model calls, planning loops, tool execution, and runtime plugins. It will be pinned as an upstream dependency and accessed through a Telos compatibility adapter rather than copied into this repository. It does not own the Telos UI, personal truth, user policy, or durable permissions.
+Will be the headless Agent Runtime for in-flight model calls, planning loops, tool execution, and runtime plugins. It will be pinned as an upstream dependency and accessed through a Telos compatibility adapter rather than copied into this repository. It does not own the Telos UI, personal truth, user policy, or durable permissions.
 
 ### Telos Personal Core
 

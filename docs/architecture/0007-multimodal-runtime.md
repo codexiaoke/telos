@@ -159,7 +159,7 @@ An edit, transcode, crop, redaction, transcript correction, or regenerated
 artifact produces a new asset or observation version connected by a derivation
 edge. It does not overwrite the source.
 
-### Runtime projections are replaceable
+### DSH projections are replaceable
 
 The DSH adapter may render a Telos asset as an `ImageBlock`, bounded text,
 keyframes, or a tool-accessible reference. Those are projections of canonical
@@ -205,14 +205,14 @@ Telos Renderer / DSH Client Plugin
   -> fixed media cards and permission surfaces
   -> ordinary DSH session prompt with stable asset references
 
-@telos/dsh-multimodal (replaceable Host adapter)
+@telos/dsh-multimodal (Telos-owned Host adapter)
   -> DSH prompt/reference projection
   -> DSH session and workspace binding
   -> logical LlmAdapter provider
   -> DSH attachment compatibility provider
   -> bounded media tools
 
-@telos/multimodal-core (runtime-neutral authority)
+@telos/multimodal-core (DSH-independent authority)
   -> asset catalog and blob store
   -> processing jobs and scheduler
   -> processor and model capability registry

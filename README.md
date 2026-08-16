@@ -28,7 +28,7 @@ Telos 面向的是一个人长期使用的 AI，而不是一次性问答。它�
 ```text
 自由对话
   + 可见、可纠正、可删除的个人状态
-  + 可替换的 Agent Runtime 与模型
+  + 固定版本、可审计的 DSH Runtime 集成与可替换的模型
   + 有权限、有记录、可撤销的现实行动
   = 能跨会话、跨模型、跨时间持续协作的个人智能
 ```
@@ -53,9 +53,9 @@ Telos 不是固定流程工作台。你可以像使用个人聊天 AI 一样自�
 
 编辑工作台提供文件树、Monaco 编辑器和持续保留的 Agent 会话。当前文件或选区可作为隐藏上下文发送给 Agent；写盘后显示 Diff，并支持接受、拒绝、撤销以及未保存内容与外部变化冲突处理。
 
-### Runtime 可替换，产品状态不外包
+### Runtime 隔离集成，产品状态不外包
 
-DeepSeek Harness（DSH）是当前第一个完整 Agent Runtime，负责会话、投影、工具循环和插件运行。个人记忆、目标、权限、连续性与桌面产品界面归 Telos 所有，未来可以接入其他模型和 Runtime。
+DeepSeek Harness（DSH）是 Telos 当前唯一的 Agent Runtime，负责会话、投影、工具循环和插件运行。Telos 通过固定 commit 的 Submodule 与隔离适配层接入 DSH；个人记忆、目标、权限、连续性与桌面产品界面归 Telos 所有。模型与 Provider 可以在设置中替换；是否接入其他 Runtime 由作者决定，不属于当前产品承诺。
 
 ### 本地优先且行为可审计
 
@@ -128,7 +128,7 @@ DeepSeek Harness（DSH）是当前第一个完整 Agent Runtime，负责会话�
 
 - 全新的主题、动效和 Agent 运行状态反馈；
 - 普通模式与开发者模式分层，隐藏 Runtime 日志、原始工具参数和调试轨迹；
-- 更多可替换 Runtime、模型 Provider、MCP 服务与连接器；
+- 更多模型 Provider、MCP 服务与连接器（Agent Runtime 继续固定为 DSH）；
 - 浏览器、移动端、语音入口和跨设备连续性；
 - 更稳定的插件 API、兼容性测试与 DSH 上游同步自动化。
 
@@ -142,11 +142,10 @@ Desktop / Browser / IDE / Mobile / Voice
  goals / memory / knowledge / policy / receipts
                  │
                  ▼
-       Runtime & capability contracts
+       DSH 隔离适配层（固定版本）
                  │
-        ┌────────┴────────┐
-        ▼                 ▼
- DeepSeek Harness    future runtimes
+                 ▼
+ DeepSeek Harness（当前唯一的 Agent Runtime）
         │
         ▼
  models / files / terminal / browser / connectors
@@ -157,7 +156,7 @@ Desktop / Browser / IDE / Mobile / Voice
 | 个人目标、记忆、知识、权限和连续性 | 模型推理、工具循环和专业 Agent 执行 |
 | 桌面生命周期与产品界面 | DSH Host、Session、Projection 和默认插件 |
 | 长期任务状态、操作收据和审计 | OpenCLI、MCP、连接器等具体能力 |
-| Runtime 契约和升级兼容边界 | 可替换模型、Runtime 和外部服务实现 |
+| DSH 适配契约和升级兼容边界 | 可替换模型、Provider 和外部服务实现 |
 
 普通 Telos 功能不得直接修改 `third_party/deepseek-harness`。DSH 通过固定提交的 Submodule 从源码构建，Telos 通过稳定适配层和 overlay 接入，避免成为不可维护的 DSH WebUI Fork。
 
@@ -293,6 +292,7 @@ scripts/                         构建、审计、打包与发布脚本
 - [Desktop distribution and lifecycle](./docs/architecture/0005-desktop-distribution-and-lifecycle.md)
 - [Multimodal runtime](./docs/architecture/0007-multimodal-runtime.md)
 - [Work report plugin](./docs/architecture/0007-dsh-work-report-plugin.md)
+- [Computer Use and browser control](./docs/architecture/0008-computer-use-and-browser-control.md)
 - [DSH upstream synchronization](./docs/maintenance/dsh-upstream-sync.md)
 - [Third-party notices](./THIRD_PARTY_NOTICES.md)
 

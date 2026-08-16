@@ -242,7 +242,7 @@ describe('ComputerUseService', () => {
       app: { bundleId: APP.bundleId, pid: APP.pid },
       observationId: initial.observation.observationId,
       actions: [
-        { type: 'click', x: 100, y: 80 },
+        { type: 'click', x: 100, y: 35 },
         { type: 'type', text: 'hello' },
       ],
     }, context(workspace))
@@ -251,6 +251,33 @@ describe('ComputerUseService', () => {
     expect(result.observation.screenshot?.attachment?.attachmentId).toBe('attachment-computer-use')
     expect(backend.actCount).toBe(2)
     expect(semanticClick).toBe(true)
+  })
+
+  it('does not snap a visual click to a distant accessibility control', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'telos-computer-use-no-snap-'))
+    let semanticClick = false
+    const backend = fakeBackend({
+      observe: async () => ({
+        ...baseObservation(),
+        elements: [{ ...baseObservation().elements[0]!, frame: { x: 50, y: 50, width: 100, height: 60 } }],
+      }),
+      act: async request => {
+        if (request.action.kind === 'click') semanticClick = request.element !== undefined
+        return { channel: 'coordinates', activation: 'not-requested', pointerInput: true, pointerRouting: 'target-process' }
+      },
+    })
+    const service = new ComputerUseService(fakeCtx(), backend, resolveConfig({
+      allowAllApps: true,
+      settleMs: 0,
+      maxSettleMs: 100,
+    }))
+    const initial = await service.computerUse({ app: { name: APP.name }, actions: [] }, context(workspace))
+    await service.computerUse({
+      app: { bundleId: APP.bundleId, pid: APP.pid },
+      observationId: initial.observation.observationId,
+      actions: [{ type: 'click', x: 100, y: 10 }],
+    }, context(workspace))
+    expect(semanticClick).toBe(false)
   })
 
   it('requires the initial screenshot before accepting coordinates', async () => {

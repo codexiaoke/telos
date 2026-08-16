@@ -48,6 +48,16 @@ declare module '@deepseek-ai/cordis' {
 }
 
 const MAX_UNCHANGED_SETTLE_SAMPLES = 2
+const SEMANTIC_CLICK_SNAP_DISTANCE = 24
+
+function distanceFromPointToFrame(
+  point: { x: number; y: number },
+  frame: NonNullable<BackendObservation['elements'][number]['frame']>,
+): number {
+  const dx = Math.max(frame.x - point.x, 0, point.x - (frame.x + frame.width))
+  const dy = Math.max(frame.y - point.y, 0, point.y - (frame.y + frame.height))
+  return Math.hypot(dx, dy)
+}
 
 function observationTransitioned(before: BackendObservation, after: BackendObservation): boolean {
   if (before.stateHash !== after.stateHash || before.frontmost !== after.frontmost) return true
@@ -257,11 +267,11 @@ function actionRequests(
           .filter(element => element.enabled !== false
             && element.actions.includes('AXPress')
             && element.frame !== undefined
-            && point.x >= element.frame.x
-            && point.x <= element.frame.x + element.frame.width
-            && point.y >= element.frame.y
-            && point.y <= element.frame.y + element.frame.height)
+            && distanceFromPointToFrame(point, element.frame) <= SEMANTIC_CLICK_SNAP_DISTANCE)
           .sort((left, right) => {
+            const leftDistance = distanceFromPointToFrame(point, left.frame!)
+            const rightDistance = distanceFromPointToFrame(point, right.frame!)
+            if (leftDistance !== rightDistance) return leftDistance - rightDistance
             const leftArea = (left.frame?.width ?? Number.POSITIVE_INFINITY) * (left.frame?.height ?? Number.POSITIVE_INFINITY)
             const rightArea = (right.frame?.width ?? Number.POSITIVE_INFINITY) * (right.frame?.height ?? Number.POSITIVE_INFINITY)
             return leftArea - rightArea

@@ -1182,6 +1182,12 @@ function resolveComputerTarget(original, fresh, expected, allowRebind) {
 
 // src/service.ts
 var MAX_UNCHANGED_SETTLE_SAMPLES = 2;
+var SEMANTIC_CLICK_SNAP_DISTANCE = 24;
+function distanceFromPointToFrame(point, frame) {
+  const dx = Math.max(frame.x - point.x, 0, point.x - (frame.x + frame.width));
+  const dy = Math.max(frame.y - point.y, 0, point.y - (frame.y + frame.height));
+  return Math.hypot(dx, dy);
+}
 function observationTransitioned(before, after) {
   if (before.stateHash !== after.stateHash || before.frontmost !== after.frontmost) return true;
   const beforeWindow = before.window;
@@ -1353,7 +1359,10 @@ function actionRequests(action, observationId, observation) {
       rejectPointerModifiers(action);
       const window = observation.window;
       const point = window === void 0 ? void 0 : { x: window.frame.x + action.x, y: window.frame.y + action.y };
-      const semanticTarget = point === void 0 || (action.button ?? "left") !== "left" ? void 0 : observation.elements.filter((element) => element.enabled !== false && element.actions.includes("AXPress") && element.frame !== void 0 && point.x >= element.frame.x && point.x <= element.frame.x + element.frame.width && point.y >= element.frame.y && point.y <= element.frame.y + element.frame.height).sort((left, right) => {
+      const semanticTarget = point === void 0 || (action.button ?? "left") !== "left" ? void 0 : observation.elements.filter((element) => element.enabled !== false && element.actions.includes("AXPress") && element.frame !== void 0 && distanceFromPointToFrame(point, element.frame) <= SEMANTIC_CLICK_SNAP_DISTANCE).sort((left, right) => {
+        const leftDistance = distanceFromPointToFrame(point, left.frame);
+        const rightDistance = distanceFromPointToFrame(point, right.frame);
+        if (leftDistance !== rightDistance) return leftDistance - rightDistance;
         const leftArea = (left.frame?.width ?? Number.POSITIVE_INFINITY) * (left.frame?.height ?? Number.POSITIVE_INFINITY);
         const rightArea = (right.frame?.width ?? Number.POSITIVE_INFINITY) * (right.frame?.height ?? Number.POSITIVE_INFINITY);
         return leftArea - rightArea;

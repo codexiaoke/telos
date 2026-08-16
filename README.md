@@ -262,6 +262,7 @@ packages/continuity-bench/       连续性量化验收
 plugins/dsh-continuity/          连续记忆 Host / Client 插件
 plugins/dsh-multimodal/          图片路由与多模态设置
 plugins/dsh-mcp-manager/         MCP 管理
+plugins/dsh-personalization/     全局个性化指令设置
 plugins/dsh-workbench-files/     编辑工作台文件能力
 plugins/dsh-work-report/         本地工作报告
 

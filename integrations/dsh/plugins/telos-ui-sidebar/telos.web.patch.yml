@@ -29,6 +29,10 @@
       name: '@telos/dsh-multimodal'
       config:
         storePath: !!js dshHomePath('telos', 'multimodal-settings.json')
+    - id: telos-personalization
+      name: '@telos/dsh-personalization'
+      config:
+        instructionsPath: !!js dshHomePath('AGENTS.md')
     - id: telos-multi-root-workspace
       name: '@telos/dsh-multi-root-workspace'
       config:

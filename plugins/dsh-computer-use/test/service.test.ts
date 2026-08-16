@@ -37,7 +37,13 @@ function fakeBackend(overrides: Partial<ComputerUseBackend> = {}): ComputerUseBa
     resolveApp: async () => APP,
     listApps: async () => [],
     resolveLaunchTarget: async () => ({ ...APP, path: '/Applications/Example.app' }),
-    openApp: async (_target, activate) => ({ app: APP, launched: false, activation: activate ? 'activated' : 'not-requested' }),
+    openApp: async (_target, activate) => ({
+      app: APP,
+      launched: false,
+      activation: activate ? 'activated' : 'not-requested',
+      windowReady: true,
+      window: { title: 'Main', frame: { x: 0, y: 0, width: 800, height: 600 }, id: 7 },
+    }),
     observe: async () => {
       backend.observeCount += 1
       hash += 1
@@ -95,7 +101,13 @@ describe('ComputerUseService', () => {
       openApp: async (_target, activate) => {
         opened = true
         expect(activate).toBe(true)
-        return { app: APP, launched: true, activation: 'activated' }
+        return {
+          app: APP,
+          launched: true,
+          activation: 'activated',
+          windowReady: true,
+          window: { title: 'Main', frame: { x: 0, y: 0, width: 800, height: 600 }, id: 7 },
+        }
       },
     })
     const service = new ComputerUseService(fakeCtx(), backend, resolveConfig({
@@ -106,6 +118,8 @@ describe('ComputerUseService', () => {
       app: APP,
       launched: true,
       activation: 'activated',
+      windowReady: true,
+      window: { title: 'Main', frame: { x: 0, y: 0, width: 800, height: 600 }, id: 7 },
     })
     expect(opened).toBe(true)
   })
@@ -114,7 +128,7 @@ describe('ComputerUseService', () => {
     const backend = fakeBackend({
       openApp: async (_target, activate) => {
         expect(activate).toBe(false)
-        return { app: APP, launched: false, activation: 'not-requested' }
+        return { app: APP, launched: false, activation: 'not-requested', windowReady: false }
       },
     })
     const service = new ComputerUseService(fakeCtx(), backend, resolveConfig({ allowAllApps: true }))

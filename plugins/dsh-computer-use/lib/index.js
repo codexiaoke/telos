@@ -1918,7 +1918,17 @@ function createComputerUseTools(service) {
         properties: {
           app: { ...appSchema, required: true },
           launched: { type: "boolean", required: true },
-          activation: { type: "string", enum: ["not-requested", "already-frontmost", "activated"], required: true }
+          activation: { type: "string", enum: ["not-requested", "already-frontmost", "activated"], required: true },
+          windowReady: { type: "boolean", required: true },
+          window: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              title: { type: "string" },
+              frame: { ...rectSchema, required: true },
+              id: { type: "integer", required: true }
+            }
+          }
         }
       },
       render: renderJson

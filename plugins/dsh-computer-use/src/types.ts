@@ -57,6 +57,14 @@ export interface ComputerOpenAppResult {
   app: ComputerAppIdentity
   launched: boolean
   activation: 'not-requested' | 'already-frontmost' | 'activated'
+  /** True only after macOS reports a visible, normal application window. */
+  windowReady: boolean
+  /** Ready window selected for subsequent screenshot and coordinate work. */
+  window?: {
+    title?: string
+    frame: ComputerRect
+    id: number
+  }
 }
 
 /** Bounded application row returned by discovery. */

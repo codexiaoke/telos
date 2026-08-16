@@ -33,6 +33,18 @@ private struct ObservationSnapshot {
     let elements: [ElementRecord]
 }
 
+private struct ApplicationWindowInfo {
+    let id: Int
+    let title: String?
+    let frame: CGRect
+
+    var json: [String: Any] {
+        var value: [String: Any] = ["id": id, "frame": rectJSON(frame)]
+        if let title, !title.isEmpty { value["title"] = title }
+        return value
+    }
+}
+
 private func fail(_ code: String, _ message: String) -> HelperError {
     HelperError(code: code, message: message)
 }
@@ -280,6 +292,23 @@ private func resolveLaunchTarget(_ selector: [String: Any]) throws -> [String: A
     return ["bundleId": resolvedBundleId, "name": resolvedName, "path": url.path]
 }
 
+private func requestApplicationOpen(
+    at url: URL,
+    activateRequested: Bool
+) async throws -> NSRunningApplication {
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.activates = activateRequested
+    configuration.addsToRecentItems = false
+    configuration.createsNewApplicationInstance = false
+    return try await withCheckedThrowingContinuation { continuation in
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { opened, error in
+            if let error { continuation.resume(throwing: error) }
+            else if let opened { continuation.resume(returning: opened) }
+            else { continuation.resume(throwing: fail("COMPUTER_ACTION_BLOCKED", "macOS did not return the launched application")) }
+        }
+    }
+}
+
 private func openApplication(_ target: [String: Any], activateRequested: Bool, timeoutMs: Int) async throws -> [String: Any] {
     let bundleId = try string(target["bundleId"], "target.bundleId")
     let expectedName = try string(target["name"], "target.name")
@@ -294,25 +323,15 @@ private func openApplication(_ target: [String: Any], activateRequested: Bool, t
     }
 
     let launched = existing.isEmpty
-    let app: NSRunningApplication
+    let bundleURL = URL(fileURLWithPath: path).standardizedFileURL
+    guard let bundle = Bundle(url: bundleURL), bundle.bundleIdentifier == bundleId else {
+        throw fail("COMPUTER_APP_NOT_FOUND", "the resolved application path no longer matches the requested bundleId")
+    }
+    var app: NSRunningApplication
     if let current = existing.first {
         app = current
     } else {
-        let url = URL(fileURLWithPath: path).standardizedFileURL
-        guard let bundle = Bundle(url: url), bundle.bundleIdentifier == bundleId else {
-            throw fail("COMPUTER_APP_NOT_FOUND", "the resolved application path no longer matches the requested bundleId")
-        }
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = activateRequested
-        configuration.addsToRecentItems = false
-        configuration.createsNewApplicationInstance = false
-        app = try await withCheckedThrowingContinuation { continuation in
-            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { opened, error in
-                if let error { continuation.resume(throwing: error) }
-                else if let opened { continuation.resume(returning: opened) }
-                else { continuation.resume(throwing: fail("COMPUTER_ACTION_BLOCKED", "macOS did not return the launched application")) }
-            }
-        }
+        app = try await requestApplicationOpen(at: bundleURL, activateRequested: activateRequested)
     }
 
     guard app.bundleIdentifier == bundleId else {
@@ -325,12 +344,37 @@ private func openApplication(_ target: [String: Any], activateRequested: Bool, t
             try activate(app, timeoutMs: timeoutMs)
             activation = "activated"
         }
+        restoreApplicationWindows(app)
+        if visibleApplicationWindow(app) == nil && !launched {
+            // Sending the ordinary reopen event is the generic macOS way to
+            // restore an app whose process is alive but whose last window was
+            // minimized or closed. It avoids app-specific menus/scripts.
+            app = try await requestApplicationOpen(at: bundleURL, activateRequested: true)
+            if !app.isActive { try activate(app, timeoutMs: timeoutMs) }
+            restoreApplicationWindows(app)
+        }
     } else {
         activation = "not-requested"
     }
+    let readyWindow = activateRequested
+        ? waitForVisibleApplicationWindow(app, timeoutMs: timeoutMs)
+        : visibleApplicationWindow(app)
+    if activateRequested && readyWindow == nil {
+        throw fail(
+            "COMPUTER_TARGET_UNAVAILABLE",
+            "the application is running and frontmost but has no visible normal window; open or restore a window before computer control"
+        )
+    }
     var appValue = try appJSON(app)
     if appValue["name"] as? String == bundleId { appValue["name"] = expectedName }
-    return ["app": appValue, "launched": launched, "activation": activation]
+    var result: [String: Any] = [
+        "app": appValue,
+        "launched": launched,
+        "activation": activation,
+        "windowReady": readyWindow != nil,
+    ]
+    if let readyWindow { result["window"] = readyWindow.json }
+    return result
 }
 
 private func axCopy(_ element: AXUIElement, _ attribute: CFString) -> Any? {
@@ -424,16 +468,83 @@ private func jsonString(_ value: String) -> String {
     return String(encoded.dropFirst().dropLast())
 }
 
+private func applicationWindows(_ appElement: AXUIElement) -> [AXUIElement] {
+    guard let value = axCopy(appElement, kAXWindowsAttribute as CFString) as? [AXUIElement] else { return [] }
+    return value
+}
+
+private func isWindowElement(_ element: AXUIElement) -> Bool {
+    axString(element, kAXRoleAttribute as CFString) == (kAXWindowRole as String)
+}
+
 private func chosenWindow(_ appElement: AXUIElement) -> AXUIElement? {
     if let focused = axCopy(appElement, kAXFocusedWindowAttribute as CFString) as AnyObject?,
-       CFGetTypeID(focused) == AXUIElementGetTypeID() {
+       CFGetTypeID(focused) == AXUIElementGetTypeID(),
+       isWindowElement(focused as! AXUIElement) {
         return (focused as! AXUIElement)
     }
     if let main = axCopy(appElement, kAXMainWindowAttribute as CFString) as AnyObject?,
-       CFGetTypeID(main) == AXUIElementGetTypeID() {
+       CFGetTypeID(main) == AXUIElementGetTypeID(),
+       isWindowElement(main as! AXUIElement) {
         return (main as! AXUIElement)
     }
-    return axChildren(appElement).first
+    // Never use the first application child here: many apps expose their menu
+    // bar before any window, which previously produced a misleading 33px
+    // "window" and poisoned every screenshot/coordinate operation.
+    return applicationWindows(appElement).first
+}
+
+private func visibleApplicationWindow(_ app: NSRunningApplication) -> ApplicationWindowInfo? {
+    guard let windows = CGWindowListCopyWindowInfo(
+        [.optionOnScreenOnly, .excludeDesktopElements],
+        kCGNullWindowID
+    ) as? [[String: Any]] else { return nil }
+    let candidates = windows.compactMap { window -> ApplicationWindowInfo? in
+        guard (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == app.processIdentifier,
+              (window[kCGWindowLayer as String] as? NSNumber)?.intValue == 0,
+              let id = (window[kCGWindowNumber as String] as? NSNumber)?.intValue,
+              let bounds = window[kCGWindowBounds as String] as? [String: Any],
+              let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary),
+              frame.width >= 64,
+              frame.height >= 64 else { return nil }
+        let alpha = (window[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1
+        guard alpha > 0 else { return nil }
+        return ApplicationWindowInfo(
+            id: id,
+            title: window[kCGWindowName as String] as? String,
+            frame: frame
+        )
+    }
+    return candidates.max { left, right in
+        left.frame.width * left.frame.height < right.frame.width * right.frame.height
+    }
+}
+
+private func restoreApplicationWindows(_ app: NSRunningApplication) {
+    let application = AXUIElementCreateApplication(app.processIdentifier)
+    for window in applicationWindows(application) {
+        if axBool(window, kAXMinimizedAttribute as CFString) == true {
+            _ = AXUIElementSetAttributeValue(
+                window,
+                kAXMinimizedAttribute as CFString,
+                kCFBooleanFalse
+            )
+        }
+        _ = AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+    }
+}
+
+private func waitForVisibleApplicationWindow(
+    _ app: NSRunningApplication,
+    timeoutMs: Int
+) -> ApplicationWindowInfo? {
+    let boundedTimeoutMs = min(max(timeoutMs, 250), 5_000)
+    let deadline = DispatchTime.now().uptimeNanoseconds + UInt64(boundedTimeoutMs) * 1_000_000
+    repeat {
+        if let window = visibleApplicationWindow(app) { return window }
+        usleep(25_000)
+    } while DispatchTime.now().uptimeNanoseconds < deadline
+    return nil
 }
 
 private func windowNumber(_ element: AXUIElement) -> Int? {
@@ -488,10 +599,12 @@ private func observeSnapshot(app: NSRunningApplication, limits: [String: Any]) t
     let appElement = AXUIElementCreateApplication(app.processIdentifier)
     let rootWindow = chosenWindow(appElement)
     let root = rootWindow ?? appElement
-    let frame = rootWindow.flatMap(axFrame)
-    let title = rootWindow.flatMap { axString($0, kAXTitleAttribute as CFString) }
+    let fallbackWindow = visibleApplicationWindow(app)
+    let frame = rootWindow.flatMap(axFrame) ?? fallbackWindow?.frame
+    let title = rootWindow.flatMap { axString($0, kAXTitleAttribute as CFString) } ?? fallbackWindow?.title
     let windowId = rootWindow.flatMap(windowNumber)
         ?? windowNumber(app: app, frame: frame, title: title)
+        ?? fallbackWindow?.id
     var windowJSON: [String: Any]?
     if let frame {
         var json: [String: Any] = ["frame": rectJSON(frame)]

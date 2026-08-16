@@ -4,7 +4,7 @@
   "commit": "47f943859bef60e4160492346772ded9b24f765a",
   "source": "packages/client/ui-sidebar/lib/client.js",
   "sourceSha256": "aadb1dcc9555a2b9d9a10633b9deca7d2bd747607c9272d533fc2c76d55ccc64",
-  "generatedSha256": "e60229931588f3b56cb35bfc11f535b13af600c867f3adf7c16f1189cb3e5039",
+  "generatedSha256": "b18f5c26dff08d40c79d5bef3750748eb799184f430957a6571ef5c0097b3514",
   "transformations": [
     "replace module id",
     "canonicalize path-dependent CSS module prefix",

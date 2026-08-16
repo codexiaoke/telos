@@ -1,6 +1,6 @@
 {
   "name": "telos",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "A local-first personal intelligence system with replaceable agent runtimes.",
   "packageManager": "pnpm@11.17.0",

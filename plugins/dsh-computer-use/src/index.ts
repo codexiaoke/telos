@@ -6,7 +6,6 @@ import type {} from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/dsh-tools'
 import { resolveConfig, type ComputerUseConfig } from './config.js'
-import { ComputerUseError } from './errors.js'
 import { MacOSBackend } from './providers/macos.js'
 import { ComputerUseService } from './service.js'
 import { createComputerUseTools } from './tools.js'
@@ -18,10 +17,14 @@ export * from './types.js'
 export const name = 'telos-computer-use'
 export const inject = ['subprocess', 'approval', 'sessions', 'agents', 'tools', 'attachments']
 
+export function supportsComputerUsePlatform(platform: NodeJS.Platform = process.platform): boolean {
+  return platform === 'darwin'
+}
+
 export function apply(ctx: Context, config: ComputerUseConfig = {}): void {
-  if (process.platform !== 'darwin') {
-    throw new ComputerUseError('COMPUTER_UNSUPPORTED_PLATFORM', `telos-computer-use supports macOS only; current platform is ${process.platform}`)
-  }
+  // The desktop profile is shared across platforms. Unsupported platforms load
+  // the bundle inertly so the rest of Telos can still start and be packaged.
+  if (!supportsComputerUsePlatform()) return
   const resolved = resolveConfig(config)
   const backend = new MacOSBackend(ctx, resolved)
   const service = new ComputerUseService(ctx, backend, resolved)

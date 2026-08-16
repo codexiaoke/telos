@@ -15,7 +15,7 @@ describe('desktop release publication', () => {
     expect(workflow).not.toContain('gh release create "$RELEASE_TAG" --draft')
   })
 
-  it('fails closed unless macOS artifacts are Developer ID signed and notarized', () => {
+  it('publishes only Developer ID signed and notarized macOS artifacts', () => {
     const workflow = readFileSync(resolve(root, '.github/workflows/desktop-release.yml'), 'utf8')
     const builder = readFileSync(resolve(root, 'apps/desktop/electron-builder.yml'), 'utf8')
 
@@ -40,5 +40,18 @@ describe('desktop release publication', () => {
     expect(workflow).toContain('xcrun stapler validate')
     expect(workflow).toContain('xattr -w com.apple.quarantine')
     expect(workflow).toContain('spctl --assess --type execute')
+    expect(workflow).toContain("startsWith(github.ref, 'refs/tags/')")
+    expect(workflow).toContain("steps.mac-signing.outputs.mode != 'developer-id'")
+  })
+
+  it('allows manual ad-hoc macOS packages without weakening tag releases', () => {
+    const workflow = readFileSync(resolve(root, '.github/workflows/desktop-release.yml'), 'utf8')
+
+    expect(workflow).toContain("github.event_name == 'workflow_dispatch'")
+    expect(workflow).toContain('--config.mac.identity=-')
+    expect(workflow).toContain('--config.mac.notarize=false')
+    expect(workflow).toContain('--config.dmg.sign=false')
+    expect(workflow).toContain('Signature=adhoc')
+    expect(workflow).toContain('steps.mac-signing.outputs.mode')
   })
 })

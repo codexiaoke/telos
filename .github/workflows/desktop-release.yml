@@ -105,7 +105,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build complete DSH runtime
         run: pnpm dsh:build
-      - name: Require macOS signing and notarization credentials
+      - name: Detect macOS signing mode
+        id: mac-signing
         if: runner.os == 'macOS'
         shell: bash
         env:
@@ -120,12 +121,19 @@ jobs:
             if [[ -z "${!name}" ]]; then missing+=("$name"); fi
           done
           if (( ${#missing[@]} > 0 )); then
-            echo "Missing required macOS release secrets: ${missing[*]}" >&2
-            echo "Unsigned or unnotarized macOS artifacts will not be published." >&2
-            exit 1
+            echo "mode=ad-hoc" >> "$GITHUB_OUTPUT"
+            echo "Manual build will use an ad-hoc signature because these secrets are missing: ${missing[*]}"
+          else
+            echo "mode=developer-id" >> "$GITHUB_OUTPUT"
           fi
+      - name: Require signed and notarized macOS artifacts for tag publication
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/') && steps.mac-signing.outputs.mode != 'developer-id'
+        shell: bash
+        run: |
+          echo "Unsigned or unnotarized macOS artifacts will not be published." >&2
+          exit 1
       - name: Package signed and notarized macOS desktop
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && steps.mac-signing.outputs.mode == 'developer-id'
         shell: bash
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
@@ -136,7 +144,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: node scripts/package-desktop.mjs --config.extraMetadata.version=${{ needs.metadata.outputs.version }}
       - name: Verify macOS signature, notarization ticket, and Gatekeeper acceptance
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && steps.mac-signing.outputs.mode == 'developer-id'
         shell: bash
         run: |
           app_path="$(find dist -maxdepth 2 -type d -name 'Telos.app' -print -quit)"
@@ -165,24 +173,62 @@ jobs:
           for dmg in "${dmgs[@]}"; do
             codesign --verify --strict --verbose=2 "$dmg"
           done
+      - name: Package ad-hoc signed macOS desktop for manual testing
+        if: runner.os == 'macOS' && github.event_name == 'workflow_dispatch' && steps.mac-signing.outputs.mode == 'ad-hoc'
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: >-
+          node scripts/package-desktop.mjs
+          --config.extraMetadata.version=${{ needs.metadata.outputs.version }}
+          --config.mac.identity=-
+          --config.mac.hardenedRuntime=false
+          --config.mac.notarize=false
+          --config.dmg.sign=false
+      - name: Verify ad-hoc macOS application signature
+        if: runner.os == 'macOS' && github.event_name == 'workflow_dispatch' && steps.mac-signing.outputs.mode == 'ad-hoc'
+        shell: bash
+        run: |
+          app_path="$(find dist -maxdepth 2 -type d -name 'Telos.app' -print -quit)"
+          if [[ -z "$app_path" ]]; then
+            echo "Packaged Telos.app was not found." >&2
+            exit 1
+          fi
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          signature="$(codesign --display --verbose=4 "$app_path" 2>&1)"
+          if [[ "$signature" != *"Signature=adhoc"* ]]; then
+            echo "Telos.app does not have the expected ad-hoc signature." >&2
+            echo "$signature" >&2
+            exit 1
+          fi
       - name: Package Windows desktop
         if: runner.os == 'Windows'
         shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: node scripts/package-desktop.mjs --config.extraMetadata.version=${{ needs.metadata.outputs.version }}
-      - uses: actions/upload-artifact@v4
+      - name: Upload macOS desktop artifacts
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
         with:
-          name: Telos-${{ needs.metadata.outputs.version }}-${{ matrix.artifact }}
+          name: Telos-${{ needs.metadata.outputs.version }}-${{ matrix.artifact }}-${{ steps.mac-signing.outputs.mode }}
           compression-level: 0
           if-no-files-found: error
           path: |
             dist/*.dmg
             dist/*.zip
+            dist/latest*.yml
+            dist/*.blockmap
+      - name: Upload Windows desktop artifacts
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Telos-${{ needs.metadata.outputs.version }}-${{ matrix.artifact }}
+          compression-level: 0
+          if-no-files-found: error
+          path: |
             dist/*.exe
             dist/*.7z
-            dist/*.AppImage
-            dist/*.deb
             dist/latest*.yml
             dist/*.blockmap
 

@@ -2553,10 +2553,11 @@ function createComputerUseTools(service) {
 // src/index.ts
 var name = "telos-computer-use";
 var inject = ["subprocess", "approval", "sessions", "agents", "tools", "attachments"];
+function supportsComputerUsePlatform(platform = process.platform) {
+  return platform === "darwin";
+}
 function apply(ctx, config = {}) {
-  if (process.platform !== "darwin") {
-    throw new ComputerUseError("COMPUTER_UNSUPPORTED_PLATFORM", `telos-computer-use supports macOS only; current platform is ${process.platform}`);
-  }
+  if (!supportsComputerUsePlatform()) return;
   const resolved = resolveConfig(config);
   const backend = new MacOSBackend(ctx, resolved);
   const service = new ComputerUseService(ctx, backend, resolved);
@@ -2576,5 +2577,6 @@ export {
   apply,
   computerUseError,
   inject,
-  name
+  name,
+  supportsComputerUsePlatform
 };

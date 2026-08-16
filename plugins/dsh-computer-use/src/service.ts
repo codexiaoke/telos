@@ -242,14 +242,36 @@ function rejectPointerModifiers(action: ComputerCallAction): void {
 function actionRequests(
   action: ComputerCallAction,
   observationId: ComputerObservationId,
+  observation: BackendObservation,
 ): ComputerActionRequest[] {
   switch (action.type) {
-    case 'click':
+    case 'click': {
       rejectPointerModifiers(action)
+      const window = observation.window
+      const point = window === undefined
+        ? undefined
+        : { x: window.frame.x + action.x, y: window.frame.y + action.y }
+      const semanticTarget = point === undefined || (action.button ?? 'left') !== 'left'
+        ? undefined
+        : observation.elements
+          .filter(element => element.enabled !== false
+            && element.actions.includes('AXPress')
+            && element.frame !== undefined
+            && point.x >= element.frame.x
+            && point.x <= element.frame.x + element.frame.width
+            && point.y >= element.frame.y
+            && point.y <= element.frame.y + element.frame.height)
+          .sort((left, right) => {
+            const leftArea = (left.frame?.width ?? Number.POSITIVE_INFINITY) * (left.frame?.height ?? Number.POSITIVE_INFINITY)
+            const rightArea = (right.frame?.width ?? Number.POSITIVE_INFINITY) * (right.frame?.height ?? Number.POSITIVE_INFINITY)
+            return leftArea - rightArea
+          })[0]
       return [{
         kind: 'click', observationId, x: action.x, y: action.y,
         coordinateSpace: 'window', button: action.button ?? 'left', clickCount: 1,
+        ...(semanticTarget === undefined ? {} : { elementIndex: semanticTarget.index, allowCoordinateFallback: true }),
       }]
+    }
     case 'double_click':
       rejectPointerModifiers(action)
       return [{
@@ -281,7 +303,7 @@ function actionRequests(
       }
       if (action.keys.length === 1 && action.keys[0]!.includes('+')) {
         const parts = action.keys[0]!.split('+').map(part => part.trim()).filter(Boolean)
-        return actionRequests({ type: 'keypress', keys: parts }, observationId)
+        return actionRequests({ type: 'keypress', keys: parts }, observationId, observation)
       }
       const modifiers: ComputerKeyModifier[] = []
       const ordinary: string[] = []
@@ -646,10 +668,11 @@ export class ComputerUseService extends Service {
       signal.throwIfAborted()
       if (callAction.type === 'wait') {
         const waitMs = callAction.ms ?? 500
-        if (!Number.isInteger(waitMs) || waitMs < 0 || waitMs > 2_000) {
-          throw new ComputerUseError('COMPUTER_TIMEOUT', 'computer_use wait.ms must be an integer between 0 and 2000')
+        if (!Number.isInteger(waitMs) || waitMs < 0) {
+          throw new ComputerUseError('COMPUTER_TIMEOUT', 'computer_use wait.ms must be a non-negative integer')
         }
-        if (waitMs > 0) await delay(waitMs, undefined, { signal })
+        const boundedWaitMs = Math.min(waitMs, 2_000)
+        if (boundedWaitMs > 0) await delay(boundedWaitMs, undefined, { signal })
         outcomes.push({ type: callAction.type, status: 'completed', channel: 'wait' })
         continue
       }
@@ -657,7 +680,11 @@ export class ComputerUseService extends Service {
         outcomes.push({ type: callAction.type, status: 'completed', channel: 'screenshot' })
         continue
       }
-      const requests = actionRequests(callAction, currentId)
+      const requests = actionRequests(
+        callAction,
+        currentId,
+        this.requireObservation(currentId, context.agent).backend,
+      )
       let channel: ComputerActionResult['channel'] = 'wait'
       for (const action of requests) {
         const rebound = { ...action, observationId: currentId } as ComputerActionRequest

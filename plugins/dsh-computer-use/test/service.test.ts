@@ -209,13 +209,23 @@ describe('ComputerUseService', () => {
 
   it('runs an OpenAI-style screenshot and batched-action feedback step', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'telos-computer-use-step-'))
+    let semanticClick = false
     const backend = fakeBackend({
       observe: async (_app, options) => {
         backend.observeCount += 1
         const observation = { ...baseObservation(), stateHash: `h${String(backend.observeCount)}` }
         if (options.screenshotPath === undefined) return observation
         await writeFile(options.screenshotPath, Buffer.from([0x89, 0x50, 0x4e, 0x47]))
-        return { ...observation, screenshot: { path: options.screenshotPath, width: 800, height: 600 } }
+        return {
+          ...observation,
+          elements: [{ ...observation.elements[0]!, frame: { x: 50, y: 50, width: 100, height: 60 } }],
+          screenshot: { path: options.screenshotPath, width: 800, height: 600 },
+        }
+      },
+      act: async request => {
+        backend.actCount += 1
+        if (request.action.kind === 'click') semanticClick = request.element?.index === 0
+        return { channel: 'accessibility', activation: 'not-requested', pointerInput: false, pointerRouting: 'none' }
       },
     })
     const service = new ComputerUseService(fakeCtx(), backend, resolveConfig({
@@ -240,6 +250,7 @@ describe('ComputerUseService', () => {
     expect(result.actions.map(action => action.type)).toEqual(['click', 'type'])
     expect(result.observation.screenshot?.attachment?.attachmentId).toBe('attachment-computer-use')
     expect(backend.actCount).toBe(2)
+    expect(semanticClick).toBe(true)
   })
 
   it('requires the initial screenshot before accepting coordinates', async () => {

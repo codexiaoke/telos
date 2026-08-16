@@ -57,7 +57,7 @@ export interface ComputerOpenAppRequest {
 export interface ComputerOpenAppResult {
   app: ComputerAppIdentity
   launched: boolean
-  activation: 'not-requested' | 'already-frontmost' | 'activated'
+  activation: 'not-requested' | 'already-frontmost' | 'activated' | 'raised'
   /** True only after macOS reports a visible, normal application window. */
   windowReady: boolean
   /** Ready window selected for subsequent screenshot and coordinate work. */
@@ -310,7 +310,7 @@ export interface ComputerActionResult {
   action: ComputerActionRequest['kind']
   channel: 'accessibility' | 'coordinates' | 'keyboard' | 'wait'
   /** Verifiable target-app foreground state transition requested by the helper for this action. */
-  activation: 'not-requested' | 'already-frontmost' | 'activated'
+  activation: 'not-requested' | 'already-frontmost' | 'activated' | 'raised'
   /** Whether the helper emitted mouse, drag, or scroll-wheel input to the target process. */
   pointerInput: boolean
   /** Pointer-event route selected by the helper; global HID routing is not supported. */

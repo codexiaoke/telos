@@ -79,7 +79,7 @@ export interface BackendActionRequest {
 /** Provider action outcome before the Service obtains the mandatory post-action observation. */
 export interface BackendActionResult {
   channel: 'accessibility' | 'coordinates' | 'keyboard'
-  activation: 'not-requested' | 'already-frontmost' | 'activated'
+  activation: 'not-requested' | 'already-frontmost' | 'activated' | 'raised'
   pointerInput: boolean
   pointerRouting: 'none' | 'target-process'
 }

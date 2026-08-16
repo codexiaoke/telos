@@ -36,7 +36,16 @@ describe('Computer Use tools', () => {
     expect(render).toBeTypeOf('function')
     const blocks = render?.({}, { observation: { screenshot: { attachment } } })
     expect(blocks).toEqual([
-      { type: 'text', text: JSON.stringify({ observation: { screenshot: { attachment } } }, null, 2) },
+      {
+        type: 'text',
+        text: JSON.stringify({
+          observation: {
+            screenshot: {},
+            tree: { mode: 'full', text: '[visual frame embedded; accessibility tree retained by host]', truncated: false },
+            elements: [],
+          },
+        }, null, 2),
+      },
       { type: 'image', attachment },
     ])
   })

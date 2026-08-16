@@ -339,10 +339,10 @@ private func openApplication(_ target: [String: Any], activateRequested: Bool, t
     }
     let activation: String
     if activateRequested {
-        if app.isActive { activation = "already-frontmost" }
+        if isApplicationFrontmost(app) { activation = "already-frontmost" }
         else {
-            try activate(app, timeoutMs: timeoutMs)
-            activation = "activated"
+            restoreApplicationWindows(app)
+            activation = try activate(app, timeoutMs: timeoutMs)
         }
         restoreApplicationWindows(app)
         if visibleApplicationWindow(app) == nil && !launched {
@@ -350,7 +350,7 @@ private func openApplication(_ target: [String: Any], activateRequested: Bool, t
             // restore an app whose process is alive but whose last window was
             // minimized or closed. It avoids app-specific menus/scripts.
             app = try await requestApplicationOpen(at: bundleURL, activateRequested: true)
-            if !app.isActive { try activate(app, timeoutMs: timeoutMs) }
+            if !isApplicationFrontmost(app) { _ = try activate(app, timeoutMs: timeoutMs) }
             restoreApplicationWindows(app)
         }
     } else {
@@ -477,6 +477,19 @@ private func isWindowElement(_ element: AXUIElement) -> Bool {
     axString(element, kAXRoleAttribute as CFString) == (kAXWindowRole as String)
 }
 
+private func ancestorWindow(_ element: AXUIElement) -> AXUIElement? {
+    var current = element
+    var visited = Set<CFHashCode>()
+    for _ in 0..<16 {
+        if isWindowElement(current) { return current }
+        guard visited.insert(CFHash(current)).inserted,
+              let parent = axCopy(current, kAXParentAttribute as CFString) as AnyObject?,
+              CFGetTypeID(parent) == AXUIElementGetTypeID() else { return nil }
+        current = parent as! AXUIElement
+    }
+    return nil
+}
+
 private func chosenWindow(_ appElement: AXUIElement) -> AXUIElement? {
     if let focused = axCopy(appElement, kAXFocusedWindowAttribute as CFString) as AnyObject?,
        CFGetTypeID(focused) == AXUIElementGetTypeID(),
@@ -487,6 +500,22 @@ private func chosenWindow(_ appElement: AXUIElement) -> AXUIElement? {
        CFGetTypeID(main) == AXUIElementGetTypeID(),
        isWindowElement(main as! AXUIElement) {
         return (main as! AXUIElement)
+    }
+    if let focused = axCopy(appElement, kAXFocusedUIElementAttribute as CFString) as AnyObject?,
+       CFGetTypeID(focused) == AXUIElementGetTypeID() {
+        let focusedElement = focused as! AXUIElement
+        if let topLevel = axCopy(focusedElement, kAXTopLevelUIElementAttribute as CFString) as AnyObject?,
+           CFGetTypeID(topLevel) == AXUIElementGetTypeID(),
+           isWindowElement(topLevel as! AXUIElement) {
+            return (topLevel as! AXUIElement)
+        }
+        if let window = ancestorWindow(focusedElement) { return window }
+    }
+    // Some apps expose login dialogs only as direct application children and
+    // omit them from AXWindows/AXMainWindow until the app becomes active. Keep
+    // the safe role filter so the menu bar can never become the window again.
+    if let childWindow = axChildren(appElement).first(where: isWindowElement) {
+        return childWindow
     }
     // Never use the first application child here: many apps expose their menu
     // bar before any window, which previously produced a misleading 33px
@@ -697,7 +726,7 @@ private func observeSnapshot(app: NSRunningApplication, limits: [String: Any]) t
     return ObservationSnapshot(
         app: app,
         appJSON: appData,
-        frontmost: app.isActive,
+        frontmost: isApplicationFrontmost(app),
         window: rootWindow,
         windowJSON: windowJSON,
         stateHash: sha256(state),
@@ -743,11 +772,38 @@ private func captureWindow(_ snapshot: ObservationSnapshot, path: String, requir
         if required { throw fail("COMPUTER_TARGET_UNAVAILABLE", "no capturable window belongs to the selected application") }
         return nil
     }
+    // Capture the final display compositor and crop it to the selected window.
+    // Some GPU-backed apps (notably WeChat) expose a valid SCWindow but return
+    // an empty frame through desktopIndependentWindow. Display-style capture is
+    // the same surface a screen-sharing Computer Use harness observes.
+    guard let display = content.displays.max(by: { left, right in
+        left.frame.intersection(selected.frame).width * left.frame.intersection(selected.frame).height
+            < right.frame.intersection(selected.frame).width * right.frame.intersection(selected.frame).height
+    }) else {
+        if required { throw fail("COMPUTER_TARGET_UNAVAILABLE", "no capturable display contains the selected application window") }
+        return nil
+    }
+    let clipped = selected.frame.intersection(display.frame)
+    guard !clipped.isNull, clipped.width >= 1, clipped.height >= 1 else {
+        if required { throw fail("COMPUTER_TARGET_UNAVAILABLE", "the selected application window is outside all capturable displays") }
+        return nil
+    }
+    guard let application = content.applications.first(where: { $0.processID == snapshot.app.processIdentifier }) else {
+        if required { throw fail("COMPUTER_TARGET_UNAVAILABLE", "the selected application is unavailable to display capture") }
+        return nil
+    }
     let configuration = SCStreamConfiguration()
-    configuration.width = max(1, Int(selected.frame.width.rounded()))
-    configuration.height = max(1, Int(selected.frame.height.rounded()))
+    configuration.sourceRect = CGRect(
+        x: clipped.minX - display.frame.minX,
+        y: clipped.minY - display.frame.minY,
+        width: clipped.width,
+        height: clipped.height
+    )
+    configuration.width = max(1, Int(clipped.width.rounded()))
+    configuration.height = max(1, Int(clipped.height.rounded()))
+    configuration.scalesToFit = true
     configuration.showsCursor = false
-    let filter = SCContentFilter(desktopIndependentWindow: selected)
+    let filter = SCContentFilter(display: display, including: [application], exceptingWindows: [])
     let image: CGImage
     do {
         image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
@@ -785,20 +841,47 @@ private func observationJSON(_ snapshot: ObservationSnapshot, screenshot: [Strin
     return result
 }
 
-private func activate(_ app: NSRunningApplication, timeoutMs: Int) throws {
+private func activate(_ app: NSRunningApplication, timeoutMs: Int) throws -> String {
     if app.isHidden { _ = app.unhide() }
+    restoreApplicationWindows(app)
+    let applicationElement = AXUIElementCreateApplication(app.processIdentifier)
+    _ = AXUIElementSetAttributeValue(
+        applicationElement,
+        kAXFrontmostAttribute as CFString,
+        kCFBooleanTrue
+    )
     let accepted = app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
     guard accepted else {
         throw fail("COMPUTER_ACTION_BLOCKED", "macOS rejected foreground activation for the selected application")
     }
     let boundedTimeoutMs = min(timeoutMs, 5_000)
     let deadline = DispatchTime.now().uptimeNanoseconds + UInt64(boundedTimeoutMs) * 1_000_000
-    while !app.isActive {
-        if DispatchTime.now().uptimeNanoseconds >= deadline {
+    let raisedDeadline = DispatchTime.now().uptimeNanoseconds + 300_000_000
+    var lastRaise = DispatchTime.now().uptimeNanoseconds
+    while !isApplicationFrontmost(app) {
+        let now = DispatchTime.now().uptimeNanoseconds
+        if now >= raisedDeadline, visibleApplicationWindow(app) != nil {
+            return "raised"
+        }
+        if now >= deadline {
             throw fail("COMPUTER_ACTION_BLOCKED", "the selected application did not become frontmost within the bounded 5 second activation window")
+        }
+        if now - lastRaise >= 250_000_000 {
+            restoreApplicationWindows(app)
+            _ = AXUIElementSetAttributeValue(
+                applicationElement,
+                kAXFrontmostAttribute as CFString,
+                kCFBooleanTrue
+            )
+            lastRaise = now
         }
         usleep(10_000)
     }
+    return "activated"
+}
+
+private func isApplicationFrontmost(_ app: NSRunningApplication) -> Bool {
+    app.isActive || NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier
 }
 
 private func targetedEventSource() throws -> CGEventSource {
@@ -1059,10 +1142,10 @@ private func inputContext(
     guard effectiveFocusPolicy == "activate" else {
         return (snapshot, record, "not-requested")
     }
-    if app.isActive {
+    if isApplicationFrontmost(app) {
         return (snapshot, record, "already-frontmost")
     }
-    try activate(app, timeoutMs: timeoutMs)
+    let activation = try activate(app, timeoutMs: timeoutMs)
     let refreshed = try observeSnapshot(app: app, limits: limits)
     let refreshedRecord: ElementRecord?
     if request["element"] != nil {
@@ -1079,7 +1162,7 @@ private func inputContext(
         }
         refreshedRecord = nil
     }
-    return (refreshed, refreshedRecord, "activated")
+    return (refreshed, refreshedRecord, activation)
 }
 
 private func actionResult(
@@ -1189,7 +1272,7 @@ private func performAction(_ request: [String: Any]) throws -> [String: Any] {
             actionKind: kind,
             timeoutMs: actionTimeoutMs,
         )
-        if current.activation == "activated", setSelectedText(text, app: app) {
+        if current.activation != "not-requested", setSelectedText(text, app: app) {
             return actionResult(channel: "accessibility", activation: current.activation, pointerInput: false)
         }
         try typeTextWithKeyboard(text, app: app)
@@ -1329,7 +1412,7 @@ private func handle(_ request: [String: Any]) async throws -> Any {
     case "list-apps":
         return try runningApps().map { app -> [String: Any] in
             var json = try appJSON(app)
-            json["frontmost"] = app.isActive
+            json["frontmost"] = isApplicationFrontmost(app)
             json["accessibility"] = permissionAccessibility()
             json["screenRecording"] = permissionScreenRecording()
             return json

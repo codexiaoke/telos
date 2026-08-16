@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -202,7 +202,7 @@ describe.skipIf(process.platform !== 'darwin')('native never-active fixture', ()
 
   it('operates the background fixture without stealing focus or moving the cursor', async () => {
     if (!existsSync(HELPER.pathname) || !existsSync(FIXTURE_APP.pathname) || !existsSync(MONITOR.pathname)) return
-    const health = await invoke<{ accessibility: string }>({ command: 'health' })
+    const health = await invoke<{ accessibility: string; screenRecording: string }>({ command: 'health' })
     if (health.ok !== true || health.value?.accessibility !== 'granted') return
 
     const transcriptRoot = mkdtempSync(join(tmpdir(), 'telos-fixture-'))
@@ -227,12 +227,36 @@ describe.skipIf(process.platform !== 'darwin')('native never-active fixture', ()
         options: { screenshot: 'none', ...LIMITS },
       })
       expect(observation.ok).toBe(true)
-      const observationValue = observation.value
+      let observationValue = observation.value
       if (observation.ok !== true || observationValue === undefined) return
+      const windowDeadline = Date.now() + 5_000
+      while (observationValue.elements.find(element => element.title === 'Targeted pointer probe' && element.frame !== undefined) === undefined
+        && Date.now() < windowDeadline) {
+        await delay(50)
+        const refreshed = await invoke<BackendObservation>({
+          command: 'observe',
+          app: { bundleId: BUNDLE_ID, pid: app.pid },
+          options: { screenshot: 'none', ...LIMITS },
+        })
+        if (refreshed.value !== undefined) observationValue = refreshed.value
+      }
+
+      if (health.value?.screenRecording === 'granted') {
+        const screenshotPath = join(transcriptRoot, 'display-compositor.png')
+        const captured = await invoke<BackendObservation>({
+          command: 'observe',
+          app: { bundleId: BUNDLE_ID, pid: app.pid },
+          options: { screenshot: 'required', screenshotPath, ...LIMITS },
+        })
+        expect(captured.ok).toBe(true)
+        expect(captured.value?.screenshot?.path).toBe(screenshotPath)
+        expect(statSync(screenshotPath).size).toBeGreaterThan(1_000)
+        if (captured.value !== undefined) observationValue = captured.value
+      }
 
       const target = observationValue.elements.find(element => element.title === 'Targeted pointer probe')
-        ?? observationValue.elements[0]
       if (target === undefined) return
+      expect(target.frame, JSON.stringify(target)).toBeDefined()
 
       const { action: acted, monitor, sourcePid } = await monitorInput(beforeSend => invoke<{ activation: string; pointerRouting: string }>({
         command: 'act',
@@ -247,7 +271,7 @@ describe.skipIf(process.platform !== 'darwin')('native never-active fixture', ()
           limits: LIMITS,
         },
       }, undefined, beforeSend))
-      expect(acted.ok).toBe(true)
+      expect(acted.ok, JSON.stringify(acted)).toBe(true)
       expect(acted.value?.activation).toBe('not-requested')
       expect(acted.value?.pointerRouting).toBe('target-process')
       expectNoForegroundOrCursorInterference(monitor, app.pid, sourcePid)

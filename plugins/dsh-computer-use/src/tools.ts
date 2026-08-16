@@ -18,9 +18,23 @@ function renderJson(_args: unknown, value: unknown): ContentBlock[] {
 }
 
 function renderComputerResult(args: unknown, value: unknown): ContentBlock[] {
-  const blocks = renderJson(args, value)
   const record = value as { observation?: { screenshot?: { attachment?: ImageAttachmentRef } }; screenshot?: { attachment?: ImageAttachmentRef } }
   const attachment = record.observation?.screenshot?.attachment ?? record.screenshot?.attachment
+  const modelValue = record.observation?.screenshot?.attachment === undefined
+    ? value
+    : {
+        ...(value as Record<string, unknown>),
+        observation: {
+          ...(record.observation as Record<string, unknown>),
+          tree: { mode: 'full', text: '[visual frame embedded; accessibility tree retained by host]', truncated: false },
+          elements: [],
+        },
+      }
+  const json = JSON.stringify(modelValue, (key, nested) => {
+    if (key === 'path' || key === 'filename' || key === 'attachment') return undefined
+    return nested
+  }, 2)
+  const blocks: ContentBlock[] = [{ type: 'text', text: json }]
   if (attachment !== undefined) {
     blocks.push({ type: 'image', attachment })
   }
@@ -165,7 +179,7 @@ const actionResultSchema = {
   properties: {
     action: { type: 'string', enum: ['click', 'set-value', 'type-text', 'press-key', 'scroll', 'drag', 'move', 'perform-action', 'wait'], required: true },
     channel: { type: 'string', enum: ['accessibility', 'coordinates', 'keyboard', 'wait'], required: true },
-    activation: { type: 'string', enum: ['not-requested', 'already-frontmost', 'activated'], required: true },
+    activation: { type: 'string', enum: ['not-requested', 'already-frontmost', 'activated', 'raised'], required: true },
     pointerInput: { type: 'boolean', required: true },
     pointerRouting: { type: 'string', enum: ['none', 'target-process'], required: true },
     resolution: {
@@ -233,7 +247,7 @@ const computerCallActionSchema = {
     scroll_x: { type: 'number' },
     scroll_y: { type: 'number' },
     text: { type: 'string' },
-    ms: { type: 'integer' },
+    ms: { type: 'integer', description: 'Optional wait duration. The host caps this at 2000 ms to keep the loop responsive.' },
     path: {
       type: 'array',
       items: {
@@ -276,7 +290,7 @@ export function createComputerUseTools(service: ComputerUseService): ToolDefinit
 
   const openApp = defineTool({
     name: 'computer_open_app',
-    description: 'Launch an installed macOS app or activate its existing process in one deterministic call. When host focusPolicy is activate, this returns only after a visible normal app window is ready or fails clearly; it never treats the menu bar as an app window. For requests to open, launch, show, switch to, or bring an app forward, call this directly first; do not use computer_list_apps, computer_observe, AXRaise, screenshots, vision, or coordinate clicks merely to activate an app.',
+    description: 'Use only when the task ends after launching, showing, switching to, or bringing an app forward. If the user also wants any interaction inside the app, do not call this first: start directly with computer_use actions=[], which opens/restores the app itself. When host focusPolicy is activate, this returns after a visible normal app window is activated or raised; it never treats the menu bar as an app window.',
     parameters: {
       app: { ...appSelectorSchema, required: true },
     },
@@ -287,7 +301,7 @@ export function createComputerUseTools(service: ComputerUseService): ToolDefinit
         properties: {
           app: { ...appSchema, required: true },
           launched: { type: 'boolean', required: true },
-          activation: { type: 'string', enum: ['not-requested', 'already-frontmost', 'activated'], required: true },
+          activation: { type: 'string', enum: ['not-requested', 'already-frontmost', 'activated', 'raised'], required: true },
           windowReady: { type: 'boolean', required: true },
           window: {
             type: 'object',
@@ -353,7 +367,7 @@ export function createComputerUseTools(service: ComputerUseService): ToolDefinit
 
   const observe = defineTool({
     name: 'computer_observe',
-    description: 'Compatibility and diagnostics tool for reading a fresh Accessibility observation for one exact running app. Prefer computer_use for screenshot-grounded visual workflows because it returns the screenshot in-band and keeps one bounded action/observation loop. Element indexes belong only to the returned observationId. This tool does not launch or activate apps: use computer_open_app first when the user only asks to open or switch to an app.',
+    description: 'Diagnostics-only compatibility tool for a user who explicitly asks to inspect the Accessibility tree. Never use this during a visual UI task: computer_use already returns the current screenshot in-band and owns the bounded action/observation loop. Element indexes belong only to the returned observationId. This tool does not launch or activate apps.',
     parameters: {
       app: { ...appSelectorSchema, required: true },
       screenshot: { type: 'string', enum: ['none', 'optional', 'required'], description: 'Default none for low latency. Required fails when Screen Recording is unavailable.' },

@@ -1347,10 +1347,17 @@ function rejectPointerModifiers(action) {
     );
   }
 }
-function actionRequests(action, observationId) {
+function actionRequests(action, observationId, observation) {
   switch (action.type) {
-    case "click":
+    case "click": {
       rejectPointerModifiers(action);
+      const window = observation.window;
+      const point = window === void 0 ? void 0 : { x: window.frame.x + action.x, y: window.frame.y + action.y };
+      const semanticTarget = point === void 0 || (action.button ?? "left") !== "left" ? void 0 : observation.elements.filter((element) => element.enabled !== false && element.actions.includes("AXPress") && element.frame !== void 0 && point.x >= element.frame.x && point.x <= element.frame.x + element.frame.width && point.y >= element.frame.y && point.y <= element.frame.y + element.frame.height).sort((left, right) => {
+        const leftArea = (left.frame?.width ?? Number.POSITIVE_INFINITY) * (left.frame?.height ?? Number.POSITIVE_INFINITY);
+        const rightArea = (right.frame?.width ?? Number.POSITIVE_INFINITY) * (right.frame?.height ?? Number.POSITIVE_INFINITY);
+        return leftArea - rightArea;
+      })[0];
       return [{
         kind: "click",
         observationId,
@@ -1358,8 +1365,10 @@ function actionRequests(action, observationId) {
         y: action.y,
         coordinateSpace: "window",
         button: action.button ?? "left",
-        clickCount: 1
+        clickCount: 1,
+        ...semanticTarget === void 0 ? {} : { elementIndex: semanticTarget.index, allowCoordinateFallback: true }
       }];
+    }
     case "double_click":
       rejectPointerModifiers(action);
       return [{
@@ -1398,7 +1407,7 @@ function actionRequests(action, observationId) {
       }
       if (action.keys.length === 1 && action.keys[0].includes("+")) {
         const parts = action.keys[0].split("+").map((part) => part.trim()).filter(Boolean);
-        return actionRequests({ type: "keypress", keys: parts }, observationId);
+        return actionRequests({ type: "keypress", keys: parts }, observationId, observation);
       }
       const modifiers = [];
       const ordinary = [];
@@ -1735,10 +1744,11 @@ var ComputerUseService = class extends Service {
       signal.throwIfAborted();
       if (callAction.type === "wait") {
         const waitMs = callAction.ms ?? 500;
-        if (!Number.isInteger(waitMs) || waitMs < 0 || waitMs > 2e3) {
-          throw new ComputerUseError("COMPUTER_TIMEOUT", "computer_use wait.ms must be an integer between 0 and 2000");
+        if (!Number.isInteger(waitMs) || waitMs < 0) {
+          throw new ComputerUseError("COMPUTER_TIMEOUT", "computer_use wait.ms must be a non-negative integer");
         }
-        if (waitMs > 0) await delay2(waitMs, void 0, { signal });
+        const boundedWaitMs = Math.min(waitMs, 2e3);
+        if (boundedWaitMs > 0) await delay2(boundedWaitMs, void 0, { signal });
         outcomes.push({ type: callAction.type, status: "completed", channel: "wait" });
         continue;
       }
@@ -1746,7 +1756,11 @@ var ComputerUseService = class extends Service {
         outcomes.push({ type: callAction.type, status: "completed", channel: "screenshot" });
         continue;
       }
-      const requests = actionRequests(callAction, currentId);
+      const requests = actionRequests(
+        callAction,
+        currentId,
+        this.requireObservation(currentId, context.agent).backend
+      );
       let channel = "wait";
       for (const action of requests) {
         const rebound = { ...action, observationId: currentId };
@@ -1912,9 +1926,21 @@ function renderJson(_args, value) {
   return [{ type: "text", text: JSON.stringify(value, null, 2) }];
 }
 function renderComputerResult(args, value) {
-  const blocks = renderJson(args, value);
   const record = value;
   const attachment = record.observation?.screenshot?.attachment ?? record.screenshot?.attachment;
+  const modelValue = record.observation?.screenshot?.attachment === void 0 ? value : {
+    ...value,
+    observation: {
+      ...record.observation,
+      tree: { mode: "full", text: "[visual frame embedded; accessibility tree retained by host]", truncated: false },
+      elements: []
+    }
+  };
+  const json = JSON.stringify(modelValue, (key, nested) => {
+    if (key === "path" || key === "filename" || key === "attachment") return void 0;
+    return nested;
+  }, 2);
+  const blocks = [{ type: "text", text: json }];
   if (attachment !== void 0) {
     blocks.push({ type: "image", attachment });
   }
@@ -2051,7 +2077,7 @@ var actionResultSchema = {
   properties: {
     action: { type: "string", enum: ["click", "set-value", "type-text", "press-key", "scroll", "drag", "move", "perform-action", "wait"], required: true },
     channel: { type: "string", enum: ["accessibility", "coordinates", "keyboard", "wait"], required: true },
-    activation: { type: "string", enum: ["not-requested", "already-frontmost", "activated"], required: true },
+    activation: { type: "string", enum: ["not-requested", "already-frontmost", "activated", "raised"], required: true },
     pointerInput: { type: "boolean", required: true },
     pointerRouting: { type: "string", enum: ["none", "target-process"], required: true },
     resolution: {
@@ -2169,7 +2195,7 @@ var computerCallActionSchema = {
     scroll_x: { type: "number" },
     scroll_y: { type: "number" },
     text: { type: "string" },
-    ms: { type: "integer" },
+    ms: { type: "integer", description: "Optional wait duration. The host caps this at 2000 ms to keep the loop responsive." },
     path: {
       type: "array",
       items: {
@@ -2209,7 +2235,7 @@ function createComputerUseTools(service) {
   });
   const openApp = defineTool({
     name: "computer_open_app",
-    description: "Launch an installed macOS app or activate its existing process in one deterministic call. When host focusPolicy is activate, this returns only after a visible normal app window is ready or fails clearly; it never treats the menu bar as an app window. For requests to open, launch, show, switch to, or bring an app forward, call this directly first; do not use computer_list_apps, computer_observe, AXRaise, screenshots, vision, or coordinate clicks merely to activate an app.",
+    description: "Use only when the task ends after launching, showing, switching to, or bringing an app forward. If the user also wants any interaction inside the app, do not call this first: start directly with computer_use actions=[], which opens/restores the app itself. When host focusPolicy is activate, this returns after a visible normal app window is activated or raised; it never treats the menu bar as an app window.",
     parameters: {
       app: { ...appSelectorSchema, required: true }
     },
@@ -2220,7 +2246,7 @@ function createComputerUseTools(service) {
         properties: {
           app: { ...appSchema, required: true },
           launched: { type: "boolean", required: true },
-          activation: { type: "string", enum: ["not-requested", "already-frontmost", "activated"], required: true },
+          activation: { type: "string", enum: ["not-requested", "already-frontmost", "activated", "raised"], required: true },
           windowReady: { type: "boolean", required: true },
           window: {
             type: "object",
@@ -2284,7 +2310,7 @@ function createComputerUseTools(service) {
   });
   const observe = defineTool({
     name: "computer_observe",
-    description: "Compatibility and diagnostics tool for reading a fresh Accessibility observation for one exact running app. Prefer computer_use for screenshot-grounded visual workflows because it returns the screenshot in-band and keeps one bounded action/observation loop. Element indexes belong only to the returned observationId. This tool does not launch or activate apps: use computer_open_app first when the user only asks to open or switch to an app.",
+    description: "Diagnostics-only compatibility tool for a user who explicitly asks to inspect the Accessibility tree. Never use this during a visual UI task: computer_use already returns the current screenshot in-band and owns the bounded action/observation loop. Element indexes belong only to the returned observationId. This tool does not launch or activate apps.",
     parameters: {
       app: { ...appSelectorSchema, required: true },
       screenshot: { type: "string", enum: ["none", "optional", "required"], description: "Default none for low latency. Required fails when Screen Recording is unavailable." },

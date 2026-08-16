@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, shell } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { configureApplicationProfile } from './application/application-profile.js'
 import { DshWebSupervisor } from './application/dsh-web-supervisor.js'
 import { prepareTelosDshWebPatch } from './application/dsh-web-overlay.js'
 import {
@@ -34,11 +35,16 @@ import { createManualUpdateFeedback } from './update/manual-update-feedback.js'
 import { UpdateService } from './update/update-service.js'
 
 app.setName('Telos')
+const applicationProfile = configureApplicationProfile(app)
 app.setAppLogsPath()
 
 const logger = configureApplicationLogger(app.isPackaged)
 const RELEASE_PAGE_URL = 'https://github.com/codexiaoke/telos/releases/latest'
-logger.info('Telos main process starting', { version: app.getVersion(), packaged: app.isPackaged })
+logger.info('Telos main process starting', {
+  version: app.getVersion(),
+  packaged: app.isPackaged,
+  profile: applicationProfile.kind,
+})
 autoUpdater.logger = logger
 const updateConfigurationAvailable = app.isPackaged && existsSync(join(process.resourcesPath, 'app-update.yml'))
 if (app.isPackaged && !updateConfigurationAvailable) {

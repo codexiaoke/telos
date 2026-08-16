@@ -17,6 +17,7 @@ const personalizationRoot = resolve(repositoryRoot, 'plugins/dsh-personalization
 const multiRootWorkspaceRoot = resolve(repositoryRoot, 'plugins/dsh-multi-root-workspace')
 const workbenchFilesRoot = resolve(repositoryRoot, 'plugins/dsh-workbench-files')
 const workReportRoot = resolve(repositoryRoot, 'plugins/dsh-work-report')
+const computerUseRoot = resolve(repositoryRoot, 'plugins/dsh-computer-use')
 const patchPath = resolve(sidebarRoot, 'telos.web.patch.yml')
 const temporaryRoot = mkdtempSync(join(tmpdir(), 'telos-dsh-parity-'))
 
@@ -244,7 +245,7 @@ try {
     .map((row) => row.id)
     .filter((id) => !defaultById.has(id))
   assert(
-    isDeepStrictEqual(addedIds, ['telos-directory-picker-native', 'telos-ui-sidebar', 'telos-continuity', 'telos-mcp-manager', 'telos-multimodal', 'telos-personalization', 'telos-multi-root-workspace', 'telos-workbench-files', 'telos-work-report']),
+    isDeepStrictEqual(addedIds, ['telos-directory-picker-native', 'telos-ui-sidebar', 'telos-continuity', 'telos-mcp-manager', 'telos-multimodal', 'telos-personalization', 'telos-multi-root-workspace', 'telos-workbench-files', 'telos-work-report', 'telos-computer-use']),
     `unexpected Telos-only rows: ${addedIds.join(', ')}`,
   )
   const telosSidebar = effectiveById.get('telos-ui-sidebar')
@@ -318,6 +319,23 @@ try {
     }),
     'Telos work report storage configuration changed',
   )
+  const telosComputerUse = effectiveById.get('telos-computer-use')
+  assert(telosComputerUse?.name === '@telos/dsh-computer-use', 'Telos computer use package name changed')
+  assert(telosComputerUse.disabled !== true, 'Telos computer use plugin is disabled')
+  assert(
+    isDeepStrictEqual(telosComputerUse.config, {
+      observationTtlMs: 0,
+      allowAllApps: true,
+      interaction: {
+        focusPolicy: 'activate',
+        keyboardPolicy: 'activate',
+        pointerInputPolicy: 'targeted',
+        cursorVisualization: 'hidden',
+        cursorAutoHideMs: 0,
+      },
+    }),
+    'Telos computer use interaction configuration changed',
+  )
   const continuityManifest = JSON.parse(readFileSync(resolve(continuityRoot, 'package.json'), 'utf8'))
   assert(continuityManifest.name === '@telos/dsh-continuity', 'continuity manifest identity changed')
   assert(continuityManifest.private === true, 'continuity package must stay private')
@@ -387,8 +405,8 @@ try {
     'work report Client dependency edges changed',
   )
   assert(
-    effectiveRows.length === defaultRows.length + 9,
-    `expected ${String(defaultRows.length + 9)} effective rows, found ${String(effectiveRows.length)}`,
+    effectiveRows.length === defaultRows.length + 10,
+    `expected ${String(defaultRows.length + 10)} effective rows, found ${String(effectiveRows.length)}`,
   )
 
   // Reading the tracked file here makes the same patch consumed by Electron
@@ -401,11 +419,16 @@ try {
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-multi-root-workspace'), 'tracked multi-root workspace patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-workbench-files'), 'tracked workbench files patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-work-report'), 'tracked work report patch is incomplete')
+  assert(readFileSync(patchPath, 'utf8').includes('id: telos-computer-use'), 'tracked computer use patch is incomplete')
+  assert(
+    readFileSync(resolve(computerUseRoot, 'lib/index.js'), 'utf8').includes('computer_open_app'),
+    'computer use build is missing deterministic app launch',
+  )
 
   process.stdout.write(`[PASS] DSH default Web rows: ${String(defaultRows.length)}\n`)
   process.stdout.write(`[PASS] Unchanged upstream rows: ${String(defaultRows.length - 2)}\n`)
   process.stdout.write('[PASS] Explained upstream delta: ui-sidebar and directory-picker disabled\n')
-  process.stdout.write('[PASS] Explained Telos additions: native picker backend, multi-root workspace, sidebar, continuity, MCP manager, multimodal settings, personalization, workbench files, and work report enabled\n')
+  process.stdout.write('[PASS] Explained Telos additions: native picker backend, multi-root workspace, sidebar, continuity, MCP manager, multimodal settings, personalization, workbench files, work report, and computer use enabled\n')
   process.stdout.write('[PASS] Profile resolves the Telos Renderer derivative and all Telos Host plugins\n')
   process.stdout.write(`[PASS] Required functional surfaces: ${String(requiredSurfaceIds.length)}\n`)
   process.stdout.write('Telos effective DSH Web composition is structurally equivalent to the pinned default.\n')

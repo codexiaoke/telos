@@ -67,6 +67,15 @@ const personalizationBuild = spawnSync(personalizationCommand.executable, person
 if (personalizationBuild.error) throw personalizationBuild.error
 if (personalizationBuild.status !== 0) process.exit(personalizationBuild.status ?? 1)
 
+const companionCommand = corepackInvocation(['pnpm', '--filter', '@telos/dsh-companion', 'build'])
+const companionBuild = spawnSync(companionCommand.executable, companionCommand.args, {
+  cwd: repositoryRoot,
+  env: process.env,
+  stdio: 'inherit',
+})
+if (companionBuild.error) throw companionBuild.error
+if (companionBuild.status !== 0) process.exit(companionBuild.status ?? 1)
+
 const multiRootWorkspaceCommand = corepackInvocation(['pnpm', '--filter', '@telos/dsh-multi-root-workspace', 'build'])
 const multiRootWorkspaceBuild = spawnSync(multiRootWorkspaceCommand.executable, multiRootWorkspaceCommand.args, {
   cwd: repositoryRoot,
@@ -112,6 +121,9 @@ accessSync(resolve(repositoryRoot, 'plugins/dsh-multimodal/lib/BUILD.json'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-personalization/lib/index.js'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-personalization/lib/client.js'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-personalization/lib/BUILD.json'))
+accessSync(resolve(repositoryRoot, 'plugins/dsh-companion/lib/index.js'))
+accessSync(resolve(repositoryRoot, 'plugins/dsh-companion/lib/client.js'))
+accessSync(resolve(repositoryRoot, 'plugins/dsh-companion/lib/BUILD.json'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-multi-root-workspace/lib/index.js'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-multi-root-workspace/lib/client.js'))
 accessSync(resolve(repositoryRoot, 'plugins/dsh-multi-root-workspace/lib/BUILD.json'))

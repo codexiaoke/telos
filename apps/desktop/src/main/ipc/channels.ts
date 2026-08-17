@@ -12,4 +12,9 @@ export const IPC_CHANNELS = {
   companionConfig: 'telos:companion:config',
   companionMenu: 'telos:companion:menu',
   companionRendererError: 'telos:companion:renderer-error',
+  companionSettingsGet: 'telos:companion:settings:get',
+  companionSettingsUpdate: 'telos:companion:settings:update',
+  companionSettingsImport: 'telos:companion:settings:import',
+  companionSettingsRemove: 'telos:companion:settings:remove',
+  companionSettingsChanged: 'telos:companion:settings:changed',
 } as const

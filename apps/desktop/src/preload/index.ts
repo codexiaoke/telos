@@ -7,7 +7,13 @@ import type {
 } from '@telos/runtime-contracts'
 import type { DshWebSnapshot } from '../shared/dsh-web.js'
 import type { EditorPanelPreferences } from '../shared/workbench-preferences.js'
-import type { CompanionConfig, CompanionSnapshot } from '../shared/companion.js'
+import type {
+  CompanionConfig,
+  CompanionImportKind,
+  CompanionSettingsPatch,
+  CompanionSettingsView,
+  CompanionSnapshot,
+} from '../shared/companion.js'
 
 const CHANNELS = {
   appInfo: 'telos:system:get-app-info',
@@ -23,6 +29,11 @@ const CHANNELS = {
   companionConfig: 'telos:companion:config',
   companionMenu: 'telos:companion:menu',
   companionRendererError: 'telos:companion:renderer-error',
+  companionSettingsGet: 'telos:companion:settings:get',
+  companionSettingsUpdate: 'telos:companion:settings:update',
+  companionSettingsImport: 'telos:companion:settings:import',
+  companionSettingsRemove: 'telos:companion:settings:remove',
+  companionSettingsChanged: 'telos:companion:settings:changed',
 } as const
 
 export interface AppInfo {
@@ -74,6 +85,21 @@ const api = {
     },
     showMenu: (): void => ipcRenderer.send(CHANNELS.companionMenu),
     reportRendererError: (message: string): void => ipcRenderer.send(CHANNELS.companionRendererError, message),
+    getSettings: (): Promise<CompanionSettingsView> => ipcRenderer.invoke(CHANNELS.companionSettingsGet),
+    updateSettings: (patch: CompanionSettingsPatch): Promise<CompanionSettingsView> => (
+      ipcRenderer.invoke(CHANNELS.companionSettingsUpdate, patch)
+    ),
+    importPet: (kind: CompanionImportKind): Promise<CompanionSettingsView> => (
+      ipcRenderer.invoke(CHANNELS.companionSettingsImport, kind)
+    ),
+    removePet: (id: string): Promise<CompanionSettingsView> => (
+      ipcRenderer.invoke(CHANNELS.companionSettingsRemove, id)
+    ),
+    onSettingsChanged: (observer: (view: CompanionSettingsView) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, view: CompanionSettingsView): void => observer(view)
+      ipcRenderer.on(CHANNELS.companionSettingsChanged, listener)
+      return () => ipcRenderer.removeListener(CHANNELS.companionSettingsChanged, listener)
+    },
   },
 }
 

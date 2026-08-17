@@ -6,7 +6,9 @@ import {
   protocol,
   shell,
   type IpcMainEvent,
+  type IpcMainInvokeEvent,
   type MenuItemConstructorOptions,
+  type WebContents,
 } from 'electron'
 import {
   CustomPetStore,
@@ -22,7 +24,14 @@ import {
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DshWebSupervisor } from '../application/dsh-web-supervisor.js'
-import type { CompanionConfig, CompanionSnapshot } from '../../shared/companion.js'
+import type {
+  CompanionConfig,
+  CompanionImportKind,
+  CompanionPetOption,
+  CompanionSettingsPatch,
+  CompanionSettingsView,
+  CompanionSnapshot,
+} from '../../shared/companion.js'
 import { IPC_CHANNELS } from '../ipc/channels.js'
 
 const PET_SIZES: Record<PetSettings['size'], { width: number; height: number }> = {
@@ -45,6 +54,7 @@ export interface CompanionControllerOptions {
   preloadPath: string
   rendererPath: string
   logger: CompanionLogger
+  getWorkbenchWebContents: () => WebContents | undefined
 }
 
 /**
@@ -88,6 +98,10 @@ export class CompanionController {
     this.installLive2DProtocol()
     ipcMain.on(IPC_CHANNELS.companionMenu, this.handleMenu)
     ipcMain.on(IPC_CHANNELS.companionRendererError, this.handleRendererError)
+    ipcMain.handle(IPC_CHANNELS.companionSettingsGet, this.handleSettingsGet)
+    ipcMain.handle(IPC_CHANNELS.companionSettingsUpdate, this.handleSettingsUpdate)
+    ipcMain.handle(IPC_CHANNELS.companionSettingsImport, this.handleSettingsImport)
+    ipcMain.handle(IPC_CHANNELS.companionSettingsRemove, this.handleSettingsRemove)
   }
 
   start(supervisor: DshWebSupervisor): void {
@@ -126,6 +140,10 @@ export class CompanionController {
     this.disconnect()
     ipcMain.removeListener(IPC_CHANNELS.companionMenu, this.handleMenu)
     ipcMain.removeListener(IPC_CHANNELS.companionRendererError, this.handleRendererError)
+    ipcMain.removeHandler(IPC_CHANNELS.companionSettingsGet)
+    ipcMain.removeHandler(IPC_CHANNELS.companionSettingsUpdate)
+    ipcMain.removeHandler(IPC_CHANNELS.companionSettingsImport)
+    ipcMain.removeHandler(IPC_CHANNELS.companionSettingsRemove)
     protocol.unhandle('petwhale-live2d')
     this.window?.destroy()
     this.window = undefined
@@ -288,12 +306,23 @@ export class CompanionController {
 
   private notify(): void {
     for (const observer of this.observers) observer()
+    const workbench = this.options.getWorkbenchWebContents()
+    if (workbench !== undefined && !workbench.isDestroyed()) {
+      workbench.send(IPC_CHANNELS.companionSettingsChanged, this.settingsView())
+    }
   }
 
   private toggleVisible(): void {
     const window = this.openWindow()
     if (window.isVisible()) window.hide()
     else window.showInactive()
+    this.notify()
+  }
+
+  private setVisible(visible: boolean): void {
+    const window = this.openWindow()
+    if (visible) window.showInactive()
+    else window.hide()
     this.notify()
   }
 
@@ -306,6 +335,10 @@ export class CompanionController {
 
   private toggleSize(): void {
     const size = this.settings.size === 'large' ? 'small' : 'large'
+    this.setSize(size)
+  }
+
+  private setSize(size: PetSettings['size']): void {
     this.settings = { ...this.settings, size }
     this.saveSettings()
     const window = this.window
@@ -322,6 +355,91 @@ export class CompanionController {
     this.saveSettings()
     this.pushConfig()
     this.notify()
+  }
+
+  private settingsView(): CompanionSettingsView {
+    const customById = new Map<PetChoiceId, CustomPetRecord>(this.customPets.map(pet => [pet.id, pet]))
+    const pets: CompanionPetOption[] = petMenuOptions(this.settings.pet, this.customPets).map((option) => {
+      const custom = customById.get(option.id)
+      return {
+        id: option.id,
+        label: option.label,
+        kind: custom?.type ?? (option.id === 'orb' ? 'orb' : 'sprite'),
+        removable: custom !== undefined,
+      }
+    })
+    return {
+      visible: this.window !== undefined && !this.window.isDestroyed() && this.window.isVisible(),
+      connected: this.connected,
+      pet: this.settings.pet,
+      locked: this.settings.locked,
+      size: this.settings.size,
+      pets,
+    }
+  }
+
+  private assertSettingsSender(event: IpcMainInvokeEvent): void {
+    const workbench = this.options.getWorkbenchWebContents()
+    if (workbench === undefined || workbench.isDestroyed() || event.sender.id !== workbench.id) {
+      throw new Error('Companion settings are only available from the Telos workbench')
+    }
+  }
+
+  private parseSettingsPatch(value: unknown): CompanionSettingsPatch {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      throw new TypeError('Companion settings patch must be an object')
+    }
+    const input = value as Record<string, unknown>
+    const allowed = new Set(['visible', 'locked', 'size', 'pet'])
+    if (Object.keys(input).some(key => !allowed.has(key))) throw new TypeError('Unknown companion setting')
+    if (input.visible !== undefined && typeof input.visible !== 'boolean') throw new TypeError('Invalid visibility')
+    if (input.locked !== undefined && typeof input.locked !== 'boolean') throw new TypeError('Invalid lock state')
+    if (input.size !== undefined && input.size !== 'small' && input.size !== 'large') throw new TypeError('Invalid size')
+    if (input.pet !== undefined && !this.settingsView().pets.some(option => option.id === input.pet)) {
+      throw new TypeError('Unknown pet')
+    }
+    return input as CompanionSettingsPatch
+  }
+
+  private readonly handleSettingsGet = (event: IpcMainInvokeEvent): CompanionSettingsView => {
+    this.assertSettingsSender(event)
+    return this.settingsView()
+  }
+
+  private readonly handleSettingsUpdate = (
+    event: IpcMainInvokeEvent,
+    value: unknown,
+  ): CompanionSettingsView => {
+    this.assertSettingsSender(event)
+    const patch = this.parseSettingsPatch(value)
+    if (patch.visible !== undefined) this.setVisible(patch.visible)
+    if (patch.locked !== undefined) this.setLocked(patch.locked)
+    if (patch.size !== undefined) this.setSize(patch.size)
+    if (patch.pet !== undefined) this.setPet(patch.pet)
+    return this.settingsView()
+  }
+
+  private readonly handleSettingsImport = async (
+    event: IpcMainInvokeEvent,
+    kind: unknown,
+  ): Promise<CompanionSettingsView> => {
+    this.assertSettingsSender(event)
+    if (kind !== 'image' && kind !== 'live2d') throw new TypeError('Unknown companion import kind')
+    if ((kind as CompanionImportKind) === 'image') await this.importImage()
+    else await this.importLive2D()
+    return this.settingsView()
+  }
+
+  private readonly handleSettingsRemove = async (
+    event: IpcMainInvokeEvent,
+    id: unknown,
+  ): Promise<CompanionSettingsView> => {
+    this.assertSettingsSender(event)
+    if (typeof id !== 'string') throw new TypeError('Invalid custom pet id')
+    const pet = this.customPets.find(candidate => candidate.id === id)
+    if (pet === undefined) throw new TypeError('Custom pet does not exist')
+    await this.removePet(pet)
+    return this.settingsView()
   }
 
   private async importImage(): Promise<void> {

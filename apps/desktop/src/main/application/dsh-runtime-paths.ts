@@ -57,6 +57,12 @@ export function resolveTelosDshPersonalizationPackageRoot(): string {
     : join(developmentRepositoryRoot(), 'plugins/dsh-personalization')
 }
 
+export function resolveTelosDshCompanionPackageRoot(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'dsh-overlays/telos-companion')
+    : join(developmentRepositoryRoot(), 'plugins/dsh-companion')
+}
+
 export function resolveTelosDshMultiRootWorkspacePackageRoot(): string {
   return app.isPackaged
     ? join(process.resourcesPath, 'dsh-overlays/telos-multi-root-workspace')

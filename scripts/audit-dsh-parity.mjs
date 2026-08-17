@@ -14,6 +14,7 @@ const continuityRoot = resolve(repositoryRoot, 'plugins/dsh-continuity')
 const mcpManagerRoot = resolve(repositoryRoot, 'plugins/dsh-mcp-manager')
 const multimodalRoot = resolve(repositoryRoot, 'plugins/dsh-multimodal')
 const personalizationRoot = resolve(repositoryRoot, 'plugins/dsh-personalization')
+const companionRoot = resolve(repositoryRoot, 'plugins/dsh-companion')
 const multiRootWorkspaceRoot = resolve(repositoryRoot, 'plugins/dsh-multi-root-workspace')
 const workbenchFilesRoot = resolve(repositoryRoot, 'plugins/dsh-workbench-files')
 const workReportRoot = resolve(repositoryRoot, 'plugins/dsh-work-report')
@@ -87,6 +88,10 @@ try {
     resolve(personalizationRoot, 'lib/index.js'),
     resolve(personalizationRoot, 'lib/client.js'),
     resolve(personalizationRoot, 'lib/BUILD.json'),
+    resolve(companionRoot, 'package.json'),
+    resolve(companionRoot, 'lib/index.js'),
+    resolve(companionRoot, 'lib/client.js'),
+    resolve(companionRoot, 'lib/BUILD.json'),
     resolve(multiRootWorkspaceRoot, 'package.json'),
     resolve(multiRootWorkspaceRoot, 'lib/index.js'),
     resolve(multiRootWorkspaceRoot, 'lib/client.js'),
@@ -131,6 +136,7 @@ try {
   const installedMcpManager = resolve(profileRoot, 'node_modules/@telos/dsh-mcp-manager')
   const installedMultimodal = resolve(profileRoot, 'node_modules/@telos/dsh-multimodal')
   const installedPersonalization = resolve(profileRoot, 'node_modules/@telos/dsh-personalization')
+  const installedCompanion = resolve(profileRoot, 'node_modules/@telos/dsh-companion')
   const installedMultiRootWorkspace = resolve(profileRoot, 'node_modules/@telos/dsh-multi-root-workspace')
   const installedWorkbenchFiles = resolve(profileRoot, 'node_modules/@telos/dsh-workbench-files')
   const installedWorkReport = resolve(profileRoot, 'node_modules/@telos/dsh-work-report')
@@ -141,6 +147,7 @@ try {
   cpSync(mcpManagerRoot, installedMcpManager, { recursive: true })
   cpSync(multimodalRoot, installedMultimodal, { recursive: true })
   cpSync(personalizationRoot, installedPersonalization, { recursive: true })
+  cpSync(companionRoot, installedCompanion, { recursive: true })
   cpSync(multiRootWorkspaceRoot, installedMultiRootWorkspace, { recursive: true })
   cpSync(workbenchFilesRoot, installedWorkbenchFiles, { recursive: true })
   cpSync(workReportRoot, installedWorkReport, { recursive: true })
@@ -171,6 +178,11 @@ try {
   assert(
     realpathSync(resolvedPersonalizationManifest) === realpathSync(resolve(installedPersonalization, 'package.json')),
     `Profile-local personalization plugin does not win package resolution: ${resolvedPersonalizationManifest}`,
+  )
+  const resolvedCompanionManifest = profileRequire.resolve('@telos/dsh-companion/package.json')
+  assert(
+    realpathSync(resolvedCompanionManifest) === realpathSync(resolve(installedCompanion, 'package.json')),
+    `Profile-local companion plugin does not win package resolution: ${resolvedCompanionManifest}`,
   )
   const resolvedMultiRootWorkspaceManifest = profileRequire.resolve('@telos/dsh-multi-root-workspace/package.json')
   assert(
@@ -245,7 +257,7 @@ try {
     .map((row) => row.id)
     .filter((id) => !defaultById.has(id))
   assert(
-    isDeepStrictEqual(addedIds, ['telos-directory-picker-native', 'telos-ui-sidebar', 'telos-continuity', 'telos-mcp-manager', 'telos-multimodal', 'telos-personalization', 'telos-multi-root-workspace', 'telos-workbench-files', 'telos-work-report', 'telos-computer-use']),
+    isDeepStrictEqual(addedIds, ['telos-directory-picker-native', 'telos-ui-sidebar', 'telos-continuity', 'telos-mcp-manager', 'telos-multimodal', 'telos-personalization', 'telos-companion', 'telos-multi-root-workspace', 'telos-workbench-files', 'telos-work-report', 'telos-computer-use']),
     `unexpected Telos-only rows: ${addedIds.join(', ')}`,
   )
   const telosSidebar = effectiveById.get('telos-ui-sidebar')
@@ -298,6 +310,9 @@ try {
     }),
     'Telos personalization instructions path changed',
   )
+  const telosCompanion = effectiveById.get('telos-companion')
+  assert(telosCompanion?.name === '@telos/dsh-companion', 'Telos companion package name changed')
+  assert(telosCompanion.disabled !== true, 'Telos companion Settings plugin is disabled')
   const telosWorkbenchFiles = effectiveById.get('telos-workbench-files')
   assert(telosWorkbenchFiles?.name === '@telos/dsh-workbench-files', 'Telos workbench files package name changed')
   assert(telosWorkbenchFiles.disabled !== true, 'Telos workbench files plugin is disabled')
@@ -384,6 +399,16 @@ try {
     ]),
     'personalization Client dependency edges changed',
   )
+  const companionManifest = JSON.parse(readFileSync(resolve(companionRoot, 'package.json'), 'utf8'))
+  assert(companionManifest.name === '@telos/dsh-companion', 'companion manifest identity changed')
+  assert(companionManifest.private === true, 'companion package must stay private')
+  assert(
+    isDeepStrictEqual(companionManifest.dsh?.client?.inject, [
+      '@deepseek-ai/dsh-client-runtime',
+      '@deepseek-ai/dsh-client-ui-settings',
+    ]),
+    'companion Client dependency edges changed',
+  )
   const multiRootWorkspaceManifest = JSON.parse(readFileSync(resolve(multiRootWorkspaceRoot, 'package.json'), 'utf8'))
   assert(multiRootWorkspaceManifest.name === '@telos/dsh-multi-root-workspace', 'multi-root workspace manifest identity changed')
   assert(multiRootWorkspaceManifest.private === true, 'multi-root workspace package must stay private')
@@ -407,8 +432,8 @@ try {
     'work report Client dependency edges changed',
   )
   assert(
-    effectiveRows.length === defaultRows.length + 10,
-    `expected ${String(defaultRows.length + 10)} effective rows, found ${String(effectiveRows.length)}`,
+    effectiveRows.length === defaultRows.length + 11,
+    `expected ${String(defaultRows.length + 11)} effective rows, found ${String(effectiveRows.length)}`,
   )
 
   // Reading the tracked file here makes the same patch consumed by Electron
@@ -418,6 +443,7 @@ try {
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-mcp-manager'), 'tracked MCP manager patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-multimodal'), 'tracked multimodal patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-personalization'), 'tracked personalization patch is incomplete')
+  assert(readFileSync(patchPath, 'utf8').includes('id: telos-companion'), 'tracked companion patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-multi-root-workspace'), 'tracked multi-root workspace patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-workbench-files'), 'tracked workbench files patch is incomplete')
   assert(readFileSync(patchPath, 'utf8').includes('id: telos-work-report'), 'tracked work report patch is incomplete')
@@ -434,7 +460,7 @@ try {
   process.stdout.write(`[PASS] DSH default Web rows: ${String(defaultRows.length)}\n`)
   process.stdout.write(`[PASS] Unchanged upstream rows: ${String(defaultRows.length - 2)}\n`)
   process.stdout.write('[PASS] Explained upstream delta: ui-sidebar and directory-picker disabled\n')
-  process.stdout.write('[PASS] Explained Telos additions: native picker backend, multi-root workspace, sidebar, continuity, MCP manager, multimodal settings, personalization, workbench files, work report, and computer use enabled\n')
+  process.stdout.write('[PASS] Explained Telos additions: native picker backend, multi-root workspace, sidebar, continuity, MCP manager, multimodal settings, personalization, companion settings, workbench files, work report, and computer use enabled\n')
   process.stdout.write('[PASS] Profile resolves the Telos Renderer derivative and all Telos Host plugins\n')
   process.stdout.write(`[PASS] Required functional surfaces: ${String(requiredSurfaceIds.length)}\n`)
   process.stdout.write('Telos effective DSH Web composition is structurally equivalent to the pinned default.\n')

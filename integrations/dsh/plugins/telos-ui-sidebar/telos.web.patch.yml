@@ -33,6 +33,8 @@
       name: '@telos/dsh-personalization'
       config:
         instructionsPath: !!js dshHomePath('AGENTS.md')
+    - id: telos-companion
+      name: '@telos/dsh-companion'
     - id: telos-multi-root-workspace
       name: '@telos/dsh-multi-root-workspace'
       config:

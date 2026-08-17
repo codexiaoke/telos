@@ -10,6 +10,7 @@ const TELOS_CONTINUITY_PACKAGE = '@telos/dsh-continuity'
 const TELOS_MCP_MANAGER_PACKAGE = '@telos/dsh-mcp-manager'
 const TELOS_MULTIMODAL_PACKAGE = '@telos/dsh-multimodal'
 const TELOS_PERSONALIZATION_PACKAGE = '@telos/dsh-personalization'
+const TELOS_COMPANION_PACKAGE = '@telos/dsh-companion'
 const TELOS_MULTI_ROOT_WORKSPACE_PACKAGE = '@telos/dsh-multi-root-workspace'
 const TELOS_WORKBENCH_FILES_PACKAGE = '@telos/dsh-workbench-files'
 const TELOS_WORK_REPORT_PACKAGE = '@telos/dsh-work-report'
@@ -22,6 +23,7 @@ export interface TelosDshWebOverlaySources {
   mcpManagerPackageRoot: string
   multimodalPackageRoot: string
   personalizationPackageRoot: string
+  companionPackageRoot: string
   multiRootWorkspacePackageRoot: string
   workbenchFilesPackageRoot: string
   workReportPackageRoot: string
@@ -98,6 +100,7 @@ export function prepareTelosDshWebPatch(
   removeLegacyFlatPackage(dshHome, TELOS_MCP_MANAGER_PACKAGE)
   removeLegacyFlatPackage(dshHome, TELOS_MULTIMODAL_PACKAGE)
   removeLegacyFlatPackage(dshHome, TELOS_PERSONALIZATION_PACKAGE)
+  removeLegacyFlatPackage(dshHome, TELOS_COMPANION_PACKAGE)
   removeLegacyFlatPackage(dshHome, TELOS_MULTI_ROOT_WORKSPACE_PACKAGE)
   removeLegacyFlatPackage(dshHome, TELOS_WORKBENCH_FILES_PACKAGE)
   removeLegacyFlatPackage(dshHome, TELOS_WORK_REPORT_PACKAGE)
@@ -108,6 +111,7 @@ export function prepareTelosDshWebPatch(
   installProfilePackage(dshHome, sources.mcpManagerPackageRoot, TELOS_MCP_MANAGER_PACKAGE, ['lib/index.js', 'lib/client.js'])
   installProfilePackage(dshHome, sources.multimodalPackageRoot, TELOS_MULTIMODAL_PACKAGE, ['lib/index.js', 'lib/client.js'])
   installProfilePackage(dshHome, sources.personalizationPackageRoot, TELOS_PERSONALIZATION_PACKAGE, ['lib/index.js', 'lib/client.js'])
+  installProfilePackage(dshHome, sources.companionPackageRoot, TELOS_COMPANION_PACKAGE, ['lib/index.js', 'lib/client.js'])
   installProfilePackage(dshHome, sources.multiRootWorkspacePackageRoot, TELOS_MULTI_ROOT_WORKSPACE_PACKAGE, ['lib/index.js', 'lib/client.js'])
   installProfilePackage(dshHome, sources.workbenchFilesPackageRoot, TELOS_WORKBENCH_FILES_PACKAGE, ['lib/index.js'])
   installProfilePackage(dshHome, sources.workReportPackageRoot, TELOS_WORK_REPORT_PACKAGE, ['lib/index.js', 'lib/client.js'])

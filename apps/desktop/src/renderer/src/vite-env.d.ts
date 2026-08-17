@@ -8,7 +8,13 @@ import type {
 } from '@telos/runtime-contracts'
 import type { DshWebSnapshot } from '../../shared/dsh-web'
 import type { EditorPanelPreferences } from '../../shared/workbench-preferences'
-import type { CompanionConfig, CompanionSnapshot } from '../../shared/companion'
+import type {
+  CompanionConfig,
+  CompanionImportKind,
+  CompanionSettingsPatch,
+  CompanionSettingsView,
+  CompanionSnapshot,
+} from '../../shared/companion'
 
 interface TelosAppInfo {
   name: string
@@ -41,6 +47,11 @@ declare global {
         onConfig: (observer: (config: CompanionConfig) => void) => () => void
         showMenu: () => void
         reportRendererError: (message: string) => void
+        getSettings: () => Promise<CompanionSettingsView>
+        updateSettings: (patch: CompanionSettingsPatch) => Promise<CompanionSettingsView>
+        importPet: (kind: CompanionImportKind) => Promise<CompanionSettingsView>
+        removePet: (id: string) => Promise<CompanionSettingsView>
+        onSettingsChanged: (observer: (view: CompanionSettingsView) => void) => () => void
       }
     }
   }

@@ -13,6 +13,7 @@ import {
   resolveTelosDshMcpManagerPackageRoot,
   resolveTelosDshMultimodalPackageRoot,
   resolveTelosDshPersonalizationPackageRoot,
+  resolveTelosDshCompanionPackageRoot,
   resolveTelosDshMultiRootWorkspacePackageRoot,
   resolveTelosDshWorkbenchFilesPackageRoot,
   resolveTelosDshWorkReportPackageRoot,
@@ -174,6 +175,7 @@ async function startApplication(): Promise<void> {
     mcpManagerPackageRoot: resolveTelosDshMcpManagerPackageRoot(),
     multimodalPackageRoot: resolveTelosDshMultimodalPackageRoot(),
     personalizationPackageRoot: resolveTelosDshPersonalizationPackageRoot(),
+    companionPackageRoot: resolveTelosDshCompanionPackageRoot(),
     multiRootWorkspacePackageRoot: resolveTelosDshMultiRootWorkspacePackageRoot(),
     workbenchFilesPackageRoot: resolveTelosDshWorkbenchFilesPackageRoot(),
     workReportPackageRoot: resolveTelosDshWorkReportPackageRoot(),
@@ -191,6 +193,11 @@ async function startApplication(): Promise<void> {
     preloadPath: join(__dirname, '../preload/index.js'),
     rendererPath: join(__dirname, '../renderer/pet.html'),
     logger,
+    getWorkbenchWebContents: () => (
+      mainWindow !== undefined && !mainWindow.isDestroyed()
+        ? mainWindow.webContents
+        : undefined
+    ),
   })
   companion.start(dshWeb)
   registerDshWebHandlers({

@@ -24,19 +24,30 @@ import {
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DshWebSupervisor } from '../application/dsh-web-supervisor.js'
-import type {
-  CompanionConfig,
-  CompanionImportKind,
-  CompanionPetOption,
-  CompanionSettingsPatch,
-  CompanionSettingsView,
-  CompanionSnapshot,
+import {
+  COMPANION_SIZE_PERCENT_DEFAULT,
+  COMPANION_SIZE_PERCENT_LEGACY_SMALL,
+  COMPANION_SIZE_PERCENT_MAX,
+  COMPANION_SIZE_PERCENT_MIN,
+  COMPANION_SIZE_PERCENT_STEP,
+  normalizeCompanionSizePercent,
+  type CompanionConfig,
+  type CompanionImportKind,
+  type CompanionPetOption,
+  type CompanionSettingsPatch,
+  type CompanionSettingsView,
+  type CompanionSnapshot,
 } from '../../shared/companion.js'
 import { IPC_CHANNELS } from '../ipc/channels.js'
 
-const PET_SIZES: Record<PetSettings['size'], { width: number; height: number }> = {
-  small: { width: 200, height: 253 },
-  large: { width: 300, height: 380 },
+const PET_BASE_SIZE = { width: 300, height: 380 } as const
+
+function petWindowSize(sizePercent: number): { width: number; height: number } {
+  const scale = sizePercent / 100
+  return {
+    width: Math.round(PET_BASE_SIZE.width * scale),
+    height: Math.round(PET_BASE_SIZE.height * scale),
+  }
 }
 
 const LIVE2D_PROPRIETARY_LICENSE_URL =
@@ -68,6 +79,7 @@ export class CompanionController {
   private readonly live2dLicensePath: string
   private readonly pets: CustomPetStore
   private settings: PetSettings
+  private sizePercent: number
   private customPets: CustomPetRecord[]
   private tracker = new PetStateTracker()
   private window: BrowserWindow | undefined
@@ -87,7 +99,9 @@ export class CompanionController {
     this.live2dLicensePath = join(root, 'live2d-license.json')
     this.pets = new CustomPetStore(join(root, 'custom-pets'))
     this.customPets = this.pets.load()
-    this.settings = this.loadSettings()
+    const persisted = this.loadSettings()
+    this.settings = persisted.settings
+    this.sizePercent = persisted.sizePercent
     if (
       this.settings.pet.startsWith('custom:')
       && !this.customPets.some(pet => pet.id === this.settings.pet)
@@ -150,18 +164,26 @@ export class CompanionController {
     this.observers.clear()
   }
 
-  private loadSettings(): PetSettings {
+  private loadSettings(): { settings: PetSettings; sizePercent: number } {
     try {
-      return normalizePetSettings(JSON.parse(readFileSync(this.settingsPath, 'utf8')))
+      const value = JSON.parse(readFileSync(this.settingsPath, 'utf8')) as { sizePercent?: unknown }
+      const settings = normalizePetSettings(value)
+      return {
+        settings,
+        sizePercent: normalizeCompanionSizePercent(value.sizePercent, settings.size),
+      }
     } catch {
-      return { ...DEFAULT_PET_SETTINGS }
+      return {
+        settings: { ...DEFAULT_PET_SETTINGS },
+        sizePercent: COMPANION_SIZE_PERCENT_DEFAULT,
+      }
     }
   }
 
   private saveSettings(): void {
     try {
       mkdirSync(this.rootPath, { recursive: true })
-      writeFileSync(this.settingsPath, JSON.stringify(this.settings, null, 2))
+      writeFileSync(this.settingsPath, JSON.stringify({ ...this.settings, sizePercent: this.sizePercent }, null, 2))
     } catch (error) {
       this.options.logger.error('Failed to persist companion settings', error)
     }
@@ -192,7 +214,7 @@ export class CompanionController {
   private openWindow(): BrowserWindow {
     if (this.window !== undefined && !this.window.isDestroyed()) return this.window
     const position = this.loadPosition()
-    const size = PET_SIZES[this.settings.size]
+    const size = petWindowSize(this.sizePercent)
     const window = new BrowserWindow({
       ...size,
       ...position,
@@ -335,15 +357,23 @@ export class CompanionController {
 
   private toggleSize(): void {
     const size = this.settings.size === 'large' ? 'small' : 'large'
-    this.setSize(size)
+    this.setSizePercent(
+      size === 'small' ? COMPANION_SIZE_PERCENT_LEGACY_SMALL : COMPANION_SIZE_PERCENT_DEFAULT,
+    )
   }
 
-  private setSize(size: PetSettings['size']): void {
-    this.settings = { ...this.settings, size }
+  private setSizePercent(value: number): void {
+    const sizePercent = normalizeCompanionSizePercent(value)
+    this.sizePercent = sizePercent
+    this.settings = {
+      ...this.settings,
+      size: sizePercent < COMPANION_SIZE_PERCENT_DEFAULT ? 'small' : 'large',
+    }
     this.saveSettings()
     const window = this.window
     if (window !== undefined && !window.isDestroyed()) {
-      window.setSize(PET_SIZES[size].width, PET_SIZES[size].height)
+      const size = petWindowSize(sizePercent)
+      window.setSize(size.width, size.height)
     }
     this.pushConfig()
     this.notify()
@@ -373,7 +403,10 @@ export class CompanionController {
       connected: this.connected,
       pet: this.settings.pet,
       locked: this.settings.locked,
-      size: this.settings.size,
+      sizePercent: this.sizePercent,
+      minSizePercent: COMPANION_SIZE_PERCENT_MIN,
+      maxSizePercent: COMPANION_SIZE_PERCENT_MAX,
+      stepSizePercent: COMPANION_SIZE_PERCENT_STEP,
       pets,
     }
   }
@@ -390,11 +423,19 @@ export class CompanionController {
       throw new TypeError('Companion settings patch must be an object')
     }
     const input = value as Record<string, unknown>
-    const allowed = new Set(['visible', 'locked', 'size', 'pet'])
+    const allowed = new Set(['visible', 'locked', 'sizePercent', 'pet'])
     if (Object.keys(input).some(key => !allowed.has(key))) throw new TypeError('Unknown companion setting')
     if (input.visible !== undefined && typeof input.visible !== 'boolean') throw new TypeError('Invalid visibility')
     if (input.locked !== undefined && typeof input.locked !== 'boolean') throw new TypeError('Invalid lock state')
-    if (input.size !== undefined && input.size !== 'small' && input.size !== 'large') throw new TypeError('Invalid size')
+    if (
+      input.sizePercent !== undefined
+      && (
+        typeof input.sizePercent !== 'number'
+        || !Number.isInteger(input.sizePercent)
+        || input.sizePercent < COMPANION_SIZE_PERCENT_MIN
+        || input.sizePercent > COMPANION_SIZE_PERCENT_MAX
+      )
+    ) throw new TypeError('Invalid size percentage')
     if (input.pet !== undefined && !this.settingsView().pets.some(option => option.id === input.pet)) {
       throw new TypeError('Unknown pet')
     }
@@ -414,7 +455,7 @@ export class CompanionController {
     const patch = this.parseSettingsPatch(value)
     if (patch.visible !== undefined) this.setVisible(patch.visible)
     if (patch.locked !== undefined) this.setLocked(patch.locked)
-    if (patch.size !== undefined) this.setSize(patch.size)
+    if (patch.sizePercent !== undefined) this.setSizePercent(patch.sizePercent)
     if (patch.pet !== undefined) this.setPet(patch.pet)
     return this.settingsView()
   }

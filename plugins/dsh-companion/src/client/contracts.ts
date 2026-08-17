@@ -1,5 +1,4 @@
 export type CompanionPetId = 'orb' | 'whale' | 'cat' | `custom:${string}`
-export type CompanionSize = 'small' | 'large'
 export type CompanionImportKind = 'image' | 'live2d'
 
 export interface CompanionPetOption {
@@ -14,14 +13,17 @@ export interface CompanionSettingsView {
   connected: boolean
   pet: CompanionPetId
   locked: boolean
-  size: CompanionSize
+  sizePercent: number
+  minSizePercent: number
+  maxSizePercent: number
+  stepSizePercent: number
   pets: readonly CompanionPetOption[]
 }
 
 export interface CompanionSettingsPatch {
   visible?: boolean
   locked?: boolean
-  size?: CompanionSize
+  sizePercent?: number
   pet?: CompanionPetId
 }
 

@@ -45,6 +45,17 @@ function CompanionSettingsSection({ controller }) {
     void controller.refresh();
   }, [controller]);
   const view = state.view;
+  const [draftSizePercent, setDraftSizePercent] = (0, import_react.useState)();
+  (0, import_react.useEffect)(() => {
+    if (view !== void 0) setDraftSizePercent(view.sizePercent);
+  }, [view?.sizePercent]);
+  (0, import_react.useEffect)(() => {
+    if (view === void 0 || draftSizePercent === void 0 || draftSizePercent === view.sizePercent) return;
+    const timer = window.setTimeout(() => {
+      void controller.updateSettings({ sizePercent: draftSizePercent });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [controller, draftSizePercent, view?.sizePercent]);
   if (view === void 0) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", { "aria-label": "\u684C\u9762\u5BA0\u7269\u8BBE\u7F6E", className: "telosCompanionSettings", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "telosCompanionEmpty", children: state.error ?? "\u6B63\u5728\u8BFB\u53D6\u684C\u9762\u5BA0\u7269\u72B6\u6001\u2026" }) });
   }
@@ -96,25 +107,29 @@ function CompanionSettingsSection({ controller }) {
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "telosCompanionRange", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "\u663E\u793A\u5C3A\u5BF8" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { children: "\u8C03\u6574\u900F\u660E\u5BA0\u7269\u7A97\u53E3\u5927\u5C0F" })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { children: "\u62D6\u52A8\u8C03\u6574\u5BA0\u7269\u5927\u5C0F" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-          "select",
-          {
-            disabled: state.loading,
-            onChange: (event) => {
-              void controller.updateSettings({ size: event.target.value });
-            },
-            value: view.size,
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "small", children: "\u5C0F\u5C3A\u5BF8" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "large", children: "\u5927\u5C3A\u5BF8" })
-            ]
-          }
-        )
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "telosCompanionRangeControl", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              "aria-label": "\u5BA0\u7269\u5927\u5C0F",
+              max: view.maxSizePercent,
+              min: view.minSizePercent,
+              onChange: (event) => setDraftSizePercent(event.currentTarget.valueAsNumber),
+              step: view.stepSizePercent,
+              type: "range",
+              value: draftSizePercent ?? view.sizePercent
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("output", { children: [
+            draftSizePercent ?? view.sizePercent,
+            "%"
+          ] })
+        ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "telosCompanionSwitch", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
@@ -224,7 +239,7 @@ var COMPANION_CLIENT_CSS = `
 .telosCompanionSettings button{min-height:32px;padding:5px 11px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:inherit;cursor:pointer}.telosCompanionSettings button[data-primary]{border-color:transparent;background:var(--dsw-alias-brand-primary);color:#fff}.telosCompanionSettings button[data-danger]{color:var(--dsw-alias-state-error-primary)}.telosCompanionSettings button:disabled{cursor:not-allowed;opacity:.5}
 .telosCompanionStatus{display:grid;gap:4px;margin-bottom:14px;padding:14px 16px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}.telosCompanionStatus[data-visible]{border-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 42%,var(--dsw-alias-border-l1))}.telosCompanionStatus strong{font-size:13px}.telosCompanionStatus span,.telosCompanionCard small,.telosCompanionCustomList small{color:var(--dsw-alias-label-tertiary);font-size:11px}
 .telosCompanionBanner{margin-bottom:12px;padding:9px 12px;border-radius:8px;background:var(--dsw-alias-bg-layer-2);font-size:12px}.telosCompanionBanner[data-error]{color:var(--dsw-alias-state-error-primary)}
-.telosCompanionCard{display:grid;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1);overflow:hidden}.telosCompanionCard>label{display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,360px);align-items:center;gap:20px;padding:14px 16px;border-bottom:1px solid var(--dsw-alias-border-l1)}.telosCompanionCard>label:last-child{border-bottom:0}.telosCompanionCard label>span{display:grid;gap:3px}.telosCompanionSettings select{box-sizing:border-box;width:100%;min-height:36px;padding:6px 9px;border:1px solid var(--dsw-alias-border-l1);border-radius:7px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font:inherit}.telosCompanionSettings select:focus,.telosCompanionSettings button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}.telosCompanionSwitch input{justify-self:end;width:18px;height:18px;accent-color:var(--dsw-alias-brand-primary)}
+.telosCompanionCard{display:grid;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1);overflow:hidden}.telosCompanionCard>label{display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,360px);align-items:center;gap:20px;padding:14px 16px;border-bottom:1px solid var(--dsw-alias-border-l1)}.telosCompanionCard>label:last-child{border-bottom:0}.telosCompanionCard label>span{display:grid;gap:3px}.telosCompanionSettings select{box-sizing:border-box;width:100%;min-height:36px;padding:6px 9px;border:1px solid var(--dsw-alias-border-l1);border-radius:7px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font:inherit}.telosCompanionSettings select:focus,.telosCompanionSettings button:focus-visible,.telosCompanionRange input:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}.telosCompanionSwitch input{justify-self:end;width:18px;height:18px;accent-color:var(--dsw-alias-brand-primary)}.telosCompanionRangeControl{grid-template-columns:minmax(160px,1fr) 48px;align-items:center;gap:12px}.telosCompanionRange input{width:100%;height:24px;margin:0;accent-color:var(--dsw-alias-brand-primary);cursor:pointer}.telosCompanionRange output{justify-self:end;color:var(--dsw-alias-label-secondary);font-size:12px;font-variant-numeric:tabular-nums}
 .telosCompanionImport{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-top:24px}.telosCompanionImport>div:last-child{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.telosCompanionCustomList{display:grid;gap:8px;margin-top:14px}.telosCompanionCustomList>div{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 12px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px}.telosCompanionCustomList span{display:grid;gap:2px}
 .telosCompanionEmpty{padding:18px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-1)}
 @media(max-width:720px){.telosCompanionHeader,.telosCompanionImport{display:grid}.telosCompanionCard>label{grid-template-columns:1fr}.telosCompanionImport>div:last-child{justify-content:flex-start}}

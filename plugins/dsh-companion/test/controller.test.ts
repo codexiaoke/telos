@@ -6,7 +6,10 @@ const view: CompanionSettingsView = {
   visible: false,
   connected: true,
   locked: false,
-  size: 'large',
+  sizePercent: 100,
+  minSizePercent: 50,
+  maxSizePercent: 150,
+  stepSizePercent: 5,
   pet: 'orb',
   pets: [{ id: 'orb', label: 'Orb', kind: 'orb', removable: false }],
 }

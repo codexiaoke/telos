@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { CompanionPetOption } from './contracts.js'
 import type { CompanionClientController } from './controller.js'
 
@@ -15,6 +15,17 @@ export function CompanionSettingsSection({ controller }: CompanionInjected) {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot)
   useEffect(() => { void controller.refresh() }, [controller])
   const view = state.view
+  const [draftSizePercent, setDraftSizePercent] = useState<number>()
+  useEffect(() => {
+    if (view !== undefined) setDraftSizePercent(view.sizePercent)
+  }, [view?.sizePercent])
+  useEffect(() => {
+    if (view === undefined || draftSizePercent === undefined || draftSizePercent === view.sizePercent) return
+    const timer = window.setTimeout(() => {
+      void controller.updateSettings({ sizePercent: draftSizePercent })
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [controller, draftSizePercent, view?.sizePercent])
 
   if (view === undefined) {
     return <section aria-label="桌面宠物设置" className="telosCompanionSettings">
@@ -56,16 +67,20 @@ export function CompanionSettingsSection({ controller }: CompanionInjected) {
           {view.pets.map(pet => <option key={pet.id} value={pet.id}>{pet.label} · {KIND_LABEL[pet.kind]}</option>)}
         </select>
       </label>
-      <label>
-        <span><strong>显示尺寸</strong><small>调整透明宠物窗口大小</small></span>
-        <select
-          disabled={state.loading}
-          onChange={event => { void controller.updateSettings({ size: event.target.value as typeof view.size }) }}
-          value={view.size}
-        >
-          <option value="small">小尺寸</option>
-          <option value="large">大尺寸</option>
-        </select>
+      <label className="telosCompanionRange">
+        <span><strong>显示尺寸</strong><small>拖动调整宠物大小</small></span>
+        <span className="telosCompanionRangeControl">
+          <input
+            aria-label="宠物大小"
+            max={view.maxSizePercent}
+            min={view.minSizePercent}
+            onChange={event => setDraftSizePercent(event.currentTarget.valueAsNumber)}
+            step={view.stepSizePercent}
+            type="range"
+            value={draftSizePercent ?? view.sizePercent}
+          />
+          <output>{draftSizePercent ?? view.sizePercent}%</output>
+        </span>
       </label>
       <label className="telosCompanionSwitch">
         <span><strong>锁定位置</strong><small>锁定后不再响应桌面拖拽</small></span>

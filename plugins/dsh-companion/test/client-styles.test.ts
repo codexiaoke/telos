@@ -6,5 +6,6 @@ describe('companion Settings styles', () => {
     expect(COMPANION_CLIENT_CSS).toContain('var(--dsw-alias-bg-layer-1)')
     expect(COMPANION_CLIENT_CSS).toContain('var(--dsw-alias-label-primary)')
     expect(COMPANION_CLIENT_CSS).toContain('button:focus-visible')
+    expect(COMPANION_CLIENT_CSS).toContain('.telosCompanionRange input')
   })
 })

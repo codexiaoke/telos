@@ -34,26 +34,26 @@ window.__ModuleLoader__.load({
 		}
 		var SidebarRoot_module_css_default = {
 			"panelIcon": "telosSidebar_panelIcon",
-			"toggle": "telosSidebar_toggle",
-			"newSessionLabel": "telosSidebar_newSessionLabel",
-			"rail-fade-in": "telosSidebar_rail-fade-in",
-			"railIn": "telosSidebar_railIn",
-			"root": "telosSidebar_root",
-			"wide-in": "telosSidebar_wide-in",
-			"footArea": "telosSidebar_footArea",
 			"logoRow": "telosSidebar_logoRow",
-			"brand": "telosSidebar_brand",
+			"railFish": "telosSidebar_railFish",
+			"settingsArea": "telosSidebar_settingsArea",
+			"footArea": "telosSidebar_footArea",
+			"regionArea": "telosSidebar_regionArea",
+			"quietBars": "telosSidebar_quietBars",
+			"rail-fade-in": "telosSidebar_rail-fade-in",
+			"newSessionLabel": "telosSidebar_newSessionLabel",
+			"newSession": "telosSidebar_newSession",
 			"collapsed": "telosSidebar_collapsed",
 			"wide": "telosSidebar_wide",
-			"newSession": "telosSidebar_newSession",
-			"rail-in": "telosSidebar_rail-in",
 			"iconButton": "telosSidebar_iconButton",
-			"settingsArea": "telosSidebar_settingsArea",
-			"quietBars": "telosSidebar_quietBars",
+			"toggle": "telosSidebar_toggle",
+			"rail-in": "telosSidebar_rail-in",
+			"railIn": "telosSidebar_railIn",
+			"footerActions": "telosSidebar_footerActions",
 			"fading": "telosSidebar_fading",
-			"regionArea": "telosSidebar_regionArea",
-			"railFish": "telosSidebar_railFish",
-			"footerActions": "telosSidebar_footerActions"
+			"brand": "telosSidebar_brand",
+			"wide-in": "telosSidebar_wide-in",
+			"root": "telosSidebar_root"
 		};
 		//#endregion
 		//#region lib/types/client/SidebarRoot.js
@@ -152,7 +152,7 @@ window.__ModuleLoader__.load({
 						className: SidebarRoot_module_css_default.logoRow,
 						children: [wide && (0, react_jsx_runtime.jsx)("div", {
 							className: clsx(SidebarRoot_module_css_default.brand, SidebarRoot_module_css_default.wide),
-							"aria-label": "Telos v0.1.4",
+							"aria-label": "Telos v0.1.5",
 							children: (0, react_jsx_runtime.jsxs)("span", {
 								style: { display: "inline-flex", alignItems: "baseline", gap: "6px" },
 								children: [(0, react_jsx_runtime.jsx)("span", {
@@ -160,7 +160,7 @@ window.__ModuleLoader__.load({
 									children: "Telos"
 								}), (0, react_jsx_runtime.jsx)("span", {
 									style: { fontSize: "13px", lineHeight: "18px", fontWeight: 450 },
-									children: "v0.1.4"
+									children: "v0.1.5"
 								})]
 							})
 						}), (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {

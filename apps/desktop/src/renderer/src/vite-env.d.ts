@@ -48,6 +48,7 @@ declare global {
         showMenu: () => void
         focusWorkbench: () => void
         reportRendererError: (message: string) => void
+        reportIntrinsicSize: (width: number, height: number) => void
         getSettings: () => Promise<CompanionSettingsView>
         updateSettings: (patch: CompanionSettingsPatch) => Promise<CompanionSettingsView>
         importPet: (kind: CompanionImportKind) => Promise<CompanionSettingsView>

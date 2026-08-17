@@ -34,6 +34,9 @@ export function CompanionSettingsSection({ controller }: CompanionInjected) {
   }
 
   const customPets = view.pets.filter(pet => pet.removable)
+  const displayedSizePercent = draftSizePercent ?? view.sizePercent
+  const displayedWindowWidth = Math.round(view.windowWidth * displayedSizePercent / view.sizePercent)
+  const displayedWindowHeight = Math.round(view.windowHeight * displayedSizePercent / view.sizePercent)
   return <section aria-label="桌面宠物设置" className="telosCompanionSettings">
     <header className="telosCompanionHeader">
       <div>
@@ -77,9 +80,9 @@ export function CompanionSettingsSection({ controller }: CompanionInjected) {
             onChange={event => setDraftSizePercent(event.currentTarget.valueAsNumber)}
             step={view.stepSizePercent}
             type="range"
-            value={draftSizePercent ?? view.sizePercent}
+            value={displayedSizePercent}
           />
-          <output>{draftSizePercent ?? view.sizePercent}%</output>
+          <output>{displayedSizePercent}% · {displayedWindowWidth}×{displayedWindowHeight}px</output>
         </span>
       </label>
       <label className="telosCompanionSwitch">
@@ -88,6 +91,17 @@ export function CompanionSettingsSection({ controller }: CompanionInjected) {
           checked={view.locked}
           disabled={state.loading}
           onChange={event => { void controller.updateSettings({ locked: event.target.checked }) }}
+          type="checkbox"
+        />
+      </label>
+      <label className="telosCompanionSwitch">
+        <span><strong>Live2D 声音</strong><small>播放 Live2D 动作自带的音频</small></span>
+        <input
+          checked={view.live2dSoundEnabled}
+          disabled={state.loading}
+          onChange={event => {
+            void controller.updateSettings({ live2dSoundEnabled: event.target.checked })
+          }}
           type="checkbox"
         />
       </label>

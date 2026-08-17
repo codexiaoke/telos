@@ -13,16 +13,20 @@ export interface CompanionSettingsView {
   connected: boolean
   pet: CompanionPetId
   locked: boolean
+  live2dSoundEnabled: boolean
   sizePercent: number
   minSizePercent: number
   maxSizePercent: number
   stepSizePercent: number
+  windowWidth: number
+  windowHeight: number
   pets: readonly CompanionPetOption[]
 }
 
 export interface CompanionSettingsPatch {
   visible?: boolean
   locked?: boolean
+  live2dSoundEnabled?: boolean
   sizePercent?: number
   pet?: CompanionPetId
 }

@@ -29,6 +29,8 @@ import {
   COMPANION_SIZE_PERCENT_MAX,
   COMPANION_SIZE_PERCENT_MIN,
   COMPANION_SIZE_PERCENT_STEP,
+  companionWindowSize,
+  normalizeCompanionAspectRatio,
   normalizeCompanionSizePercent,
   type CompanionConfig,
   type CompanionImportKind,
@@ -39,16 +41,6 @@ import {
 } from '../../shared/companion.js'
 import { IPC_CHANNELS } from '../ipc/channels.js'
 import { CompanionConversationTracker } from './conversation-tracker.js'
-
-const PET_BASE_SIZE = { width: 300, height: 380 } as const
-
-function petWindowSize(sizePercent: number): { width: number; height: number } {
-  const scale = sizePercent / 100
-  return {
-    width: Math.round(PET_BASE_SIZE.width * scale),
-    height: Math.round(PET_BASE_SIZE.height * scale),
-  }
-}
 
 const LIVE2D_PROPRIETARY_LICENSE_URL =
   'https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_cn.html'
@@ -80,6 +72,8 @@ export class CompanionController {
   private readonly pets: CustomPetStore
   private settings: PetSettings
   private sizePercent: number
+  private live2dSoundEnabled: boolean
+  private aspectRatio = 1
   private customPets: CustomPetRecord[]
   private tracker = new PetStateTracker()
   private readonly conversations = new CompanionConversationTracker()
@@ -106,6 +100,7 @@ export class CompanionController {
     const persisted = this.loadSettings()
     this.settings = persisted.settings
     this.sizePercent = persisted.sizePercent
+    this.live2dSoundEnabled = persisted.live2dSoundEnabled
     if (
       this.settings.pet.startsWith('custom:')
       && !this.customPets.some(pet => pet.id === this.settings.pet)
@@ -117,6 +112,7 @@ export class CompanionController {
     ipcMain.on(IPC_CHANNELS.companionMenu, this.handleMenu)
     ipcMain.on(IPC_CHANNELS.companionFocusWorkbench, this.handleFocusWorkbench)
     ipcMain.on(IPC_CHANNELS.companionRendererError, this.handleRendererError)
+    ipcMain.on(IPC_CHANNELS.companionIntrinsicSize, this.handleIntrinsicSize)
     ipcMain.handle(IPC_CHANNELS.companionSettingsGet, this.handleSettingsGet)
     ipcMain.handle(IPC_CHANNELS.companionSettingsUpdate, this.handleSettingsUpdate)
     ipcMain.handle(IPC_CHANNELS.companionSettingsImport, this.handleSettingsImport)
@@ -161,6 +157,7 @@ export class CompanionController {
     ipcMain.removeListener(IPC_CHANNELS.companionMenu, this.handleMenu)
     ipcMain.removeListener(IPC_CHANNELS.companionFocusWorkbench, this.handleFocusWorkbench)
     ipcMain.removeListener(IPC_CHANNELS.companionRendererError, this.handleRendererError)
+    ipcMain.removeListener(IPC_CHANNELS.companionIntrinsicSize, this.handleIntrinsicSize)
     ipcMain.removeHandler(IPC_CHANNELS.companionSettingsGet)
     ipcMain.removeHandler(IPC_CHANNELS.companionSettingsUpdate)
     ipcMain.removeHandler(IPC_CHANNELS.companionSettingsImport)
@@ -171,18 +168,27 @@ export class CompanionController {
     this.observers.clear()
   }
 
-  private loadSettings(): { settings: PetSettings; sizePercent: number } {
+  private loadSettings(): {
+    settings: PetSettings
+    sizePercent: number
+    live2dSoundEnabled: boolean
+  } {
     try {
-      const value = JSON.parse(readFileSync(this.settingsPath, 'utf8')) as { sizePercent?: unknown }
+      const value = JSON.parse(readFileSync(this.settingsPath, 'utf8')) as {
+        sizePercent?: unknown
+        live2dSoundEnabled?: unknown
+      }
       const settings = normalizePetSettings(value)
       return {
         settings,
         sizePercent: normalizeCompanionSizePercent(value.sizePercent, settings.size),
+        live2dSoundEnabled: value.live2dSoundEnabled !== false,
       }
     } catch {
       return {
         settings: { ...DEFAULT_PET_SETTINGS },
         sizePercent: COMPANION_SIZE_PERCENT_DEFAULT,
+        live2dSoundEnabled: true,
       }
     }
   }
@@ -190,7 +196,11 @@ export class CompanionController {
   private saveSettings(): void {
     try {
       mkdirSync(this.rootPath, { recursive: true })
-      writeFileSync(this.settingsPath, JSON.stringify({ ...this.settings, sizePercent: this.sizePercent }, null, 2))
+      writeFileSync(this.settingsPath, JSON.stringify({
+        ...this.settings,
+        sizePercent: this.sizePercent,
+        live2dSoundEnabled: this.live2dSoundEnabled,
+      }, null, 2))
     } catch (error) {
       this.options.logger.error('Failed to persist companion settings', error)
     }
@@ -221,7 +231,7 @@ export class CompanionController {
   private openWindow(): BrowserWindow {
     if (this.window !== undefined && !this.window.isDestroyed()) return this.window
     const position = this.loadPosition()
-    const size = petWindowSize(this.sizePercent)
+    const size = companionWindowSize(this.sizePercent, this.aspectRatio)
     const window = new BrowserWindow({
       ...size,
       ...position,
@@ -377,6 +387,7 @@ export class CompanionController {
     const custom = this.customPets.find(pet => pet.id === this.settings.pet)
     return {
       ...this.settings,
+      live2dSoundEnabled: this.live2dSoundEnabled,
       ...(custom === undefined ? {} : { customPet: this.pets.rendererConfig(custom) }),
     }
   }
@@ -416,6 +427,13 @@ export class CompanionController {
     this.notify()
   }
 
+  private setLive2DSoundEnabled(enabled: boolean): void {
+    this.live2dSoundEnabled = enabled
+    this.saveSettings()
+    this.pushConfig()
+    this.notify()
+  }
+
   private setSizePercent(value: number): void {
     const sizePercent = normalizeCompanionSizePercent(value)
     this.sizePercent = sizePercent
@@ -426,7 +444,7 @@ export class CompanionController {
     this.saveSettings()
     const window = this.window
     if (window !== undefined && !window.isDestroyed()) {
-      const size = petWindowSize(sizePercent)
+      const size = companionWindowSize(sizePercent, this.aspectRatio)
       window.setSize(size.width, size.height)
     }
     this.pushConfig()
@@ -436,12 +454,19 @@ export class CompanionController {
   private setPet(pet: PetChoiceId): void {
     if (pet.startsWith('custom:') && !this.customPets.some(candidate => candidate.id === pet)) return
     this.settings = { ...this.settings, pet }
+    this.aspectRatio = 1
     this.saveSettings()
+    const window = this.window
+    if (window !== undefined && !window.isDestroyed()) {
+      const size = companionWindowSize(this.sizePercent, this.aspectRatio)
+      window.setSize(size.width, size.height)
+    }
     this.pushConfig()
     this.notify()
   }
 
   private settingsView(): CompanionSettingsView {
+    const windowSize = companionWindowSize(this.sizePercent, this.aspectRatio)
     const customById = new Map<PetChoiceId, CustomPetRecord>(this.customPets.map(pet => [pet.id, pet]))
     const pets: CompanionPetOption[] = petMenuOptions(this.settings.pet, this.customPets).map((option) => {
       const custom = customById.get(option.id)
@@ -457,10 +482,13 @@ export class CompanionController {
       connected: this.connected,
       pet: this.settings.pet,
       locked: this.settings.locked,
+      live2dSoundEnabled: this.live2dSoundEnabled,
       sizePercent: this.sizePercent,
       minSizePercent: COMPANION_SIZE_PERCENT_MIN,
       maxSizePercent: COMPANION_SIZE_PERCENT_MAX,
       stepSizePercent: COMPANION_SIZE_PERCENT_STEP,
+      windowWidth: windowSize.width,
+      windowHeight: windowSize.height,
       pets,
     }
   }
@@ -477,10 +505,13 @@ export class CompanionController {
       throw new TypeError('Companion settings patch must be an object')
     }
     const input = value as Record<string, unknown>
-    const allowed = new Set(['visible', 'locked', 'sizePercent', 'pet'])
+    const allowed = new Set(['visible', 'locked', 'live2dSoundEnabled', 'sizePercent', 'pet'])
     if (Object.keys(input).some(key => !allowed.has(key))) throw new TypeError('Unknown companion setting')
     if (input.visible !== undefined && typeof input.visible !== 'boolean') throw new TypeError('Invalid visibility')
     if (input.locked !== undefined && typeof input.locked !== 'boolean') throw new TypeError('Invalid lock state')
+    if (input.live2dSoundEnabled !== undefined && typeof input.live2dSoundEnabled !== 'boolean') {
+      throw new TypeError('Invalid Live2D sound state')
+    }
     if (
       input.sizePercent !== undefined
       && (
@@ -509,6 +540,7 @@ export class CompanionController {
     const patch = this.parseSettingsPatch(value)
     if (patch.visible !== undefined) this.setVisible(patch.visible)
     if (patch.locked !== undefined) this.setLocked(patch.locked)
+    if (patch.live2dSoundEnabled !== undefined) this.setLive2DSoundEnabled(patch.live2dSoundEnabled)
     if (patch.sizePercent !== undefined) this.setSizePercent(patch.sizePercent)
     if (patch.pet !== undefined) this.setPet(patch.pet)
     return this.settingsView()
@@ -655,6 +687,22 @@ export class CompanionController {
     if (this.settings.pet !== 'orb') this.setPet('orb')
   }
 
+  private readonly handleIntrinsicSize = (
+    event: IpcMainEvent,
+    width: unknown,
+    height: unknown,
+  ): void => {
+    const window = this.window
+    if (window === undefined || window.isDestroyed() || event.sender.id !== window.webContents.id) return
+    if (typeof width !== 'number' || typeof height !== 'number') return
+    const aspectRatio = normalizeCompanionAspectRatio(width, height)
+    if (Math.abs(aspectRatio - this.aspectRatio) < 0.001) return
+    this.aspectRatio = aspectRatio
+    const size = companionWindowSize(this.sizePercent, aspectRatio)
+    window.setSize(size.width, size.height)
+    this.notify()
+  }
+
   private installLive2DProtocol(): void {
     void protocol.handle('petwhale-live2d', (request) => {
       try {
@@ -687,6 +735,10 @@ function live2DContentType(path: string): string {
     case 'wav': return 'audio/wav'
     case 'mp3': return 'audio/mpeg'
     case 'ogg': return 'audio/ogg'
+    case 'm4a': return 'audio/mp4'
+    case 'aac': return 'audio/aac'
+    case 'flac': return 'audio/flac'
+    case 'webm': return 'audio/webm'
     default: return 'application/octet-stream'
   }
 }

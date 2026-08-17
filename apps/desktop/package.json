@@ -14,6 +14,7 @@
   "dependencies": {
     "@petwhale/core": "workspace:*",
     "@petwhale/electron-host": "workspace:*",
+    "@petwhale/renderer-live2d": "workspace:*",
     "@petwhale/renderer-orb": "workspace:*",
     "@petwhale/renderer-sprite": "workspace:*",
     "@shikijs/engine-javascript": "4.4.3",

@@ -32,6 +32,9 @@ importers:
       '@petwhale/electron-host':
         specifier: workspace:*
         version: link:../../third_party/petwhale/packages/electron-host
+      '@petwhale/renderer-live2d':
+        specifier: workspace:*
+        version: link:../../third_party/petwhale/packages/renderer-live2d
       '@petwhale/renderer-orb':
         specifier: workspace:*
         version: link:../../third_party/petwhale/packages/renderer-orb

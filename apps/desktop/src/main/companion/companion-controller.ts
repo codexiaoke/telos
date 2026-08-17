@@ -3,6 +3,8 @@ import {
   Menu,
   dialog,
   ipcMain,
+  protocol,
+  shell,
   type IpcMainEvent,
   type MenuItemConstructorOptions,
 } from 'electron'
@@ -17,7 +19,7 @@ import {
   type PetChoiceId,
   type PetSettings,
 } from '@petwhale/electron-host'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DshWebSupervisor } from '../application/dsh-web-supervisor.js'
 import type { CompanionConfig, CompanionSnapshot } from '../../shared/companion.js'
@@ -27,6 +29,11 @@ const PET_SIZES: Record<PetSettings['size'], { width: number; height: number }> 
   small: { width: 200, height: 253 },
   large: { width: 300, height: 380 },
 }
+
+const LIVE2D_PROPRIETARY_LICENSE_URL =
+  'https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_cn.html'
+const LIVE2D_OPEN_LICENSE_URL =
+  'https://www.live2d.com/eula/live2d-open-software-license-agreement_cn.html'
 
 interface CompanionLogger {
   info(message: string, ...args: unknown[]): void
@@ -45,8 +52,10 @@ export interface CompanionControllerOptions {
  * tray, updater, or quit authority: those remain in the Telos main lifecycle.
  */
 export class CompanionController {
+  private readonly rootPath: string
   private readonly settingsPath: string
   private readonly positionPath: string
+  private readonly live2dLicensePath: string
   private readonly pets: CustomPetStore
   private settings: PetSettings
   private customPets: CustomPetRecord[]
@@ -62,8 +71,10 @@ export class CompanionController {
 
   constructor(private readonly options: CompanionControllerOptions) {
     const root = join(options.userDataPath, 'petwhale')
+    this.rootPath = root
     this.settingsPath = join(root, 'settings.json')
     this.positionPath = join(root, 'position.json')
+    this.live2dLicensePath = join(root, 'live2d-license.json')
     this.pets = new CustomPetStore(join(root, 'custom-pets'))
     this.customPets = this.pets.load()
     this.settings = this.loadSettings()
@@ -74,6 +85,7 @@ export class CompanionController {
       this.settings = { ...this.settings, pet: 'orb' }
       this.saveSettings()
     }
+    this.installLive2DProtocol()
     ipcMain.on(IPC_CHANNELS.companionMenu, this.handleMenu)
     ipcMain.on(IPC_CHANNELS.companionRendererError, this.handleRendererError)
   }
@@ -114,6 +126,7 @@ export class CompanionController {
     this.disconnect()
     ipcMain.removeListener(IPC_CHANNELS.companionMenu, this.handleMenu)
     ipcMain.removeListener(IPC_CHANNELS.companionRendererError, this.handleRendererError)
+    protocol.unhandle('petwhale-live2d')
     this.window?.destroy()
     this.window = undefined
     this.observers.clear()
@@ -129,7 +142,7 @@ export class CompanionController {
 
   private saveSettings(): void {
     try {
-      mkdirSync(join(this.options.userDataPath, 'petwhale'), { recursive: true })
+      mkdirSync(this.rootPath, { recursive: true })
       writeFileSync(this.settingsPath, JSON.stringify(this.settings, null, 2))
     } catch (error) {
       this.options.logger.error('Failed to persist companion settings', error)
@@ -151,7 +164,7 @@ export class CompanionController {
     if (window === undefined || window.isDestroyed()) return
     const [x, y] = window.getPosition()
     try {
-      mkdirSync(join(this.options.userDataPath, 'petwhale'), { recursive: true })
+      mkdirSync(this.rootPath, { recursive: true })
       writeFileSync(this.positionPath, JSON.stringify({ x, y }))
     } catch (error) {
       this.options.logger.error('Failed to persist companion position', error)
@@ -328,6 +341,54 @@ export class CompanionController {
     }
   }
 
+  private async confirmLive2DLicense(): Promise<boolean> {
+    if (existsSync(this.live2dLicensePath)) return true
+    while (true) {
+      const result = await dialog.showMessageBox({
+        type: 'info',
+        title: '启用 Live2D Cubism',
+        message: '导入 Live2D 模型需要使用 Live2D Cubism Core。',
+        detail:
+          '继续即表示你已阅读并同意 Live2D Proprietary Software License Agreement 和 '
+          + 'Live2D Open Software License Agreement，并确认拥有所导入模型及素材的使用权。'
+          + 'Telos 会从 Live2D 官方固定版本地址加载 Cubism Core。',
+        buttons: ['取消', '查看许可', '同意并继续'],
+        defaultId: 0,
+        cancelId: 0,
+      })
+      if (result.response === 0) return false
+      if (result.response === 1) {
+        await shell.openExternal(LIVE2D_PROPRIETARY_LICENSE_URL)
+        await shell.openExternal(LIVE2D_OPEN_LICENSE_URL)
+        continue
+      }
+      mkdirSync(this.rootPath, { recursive: true })
+      writeFileSync(this.live2dLicensePath, JSON.stringify({
+        acceptedAt: new Date().toISOString(),
+        cubismCore: '5.3-hosted',
+      }))
+      return true
+    }
+  }
+
+  private async importLive2D(): Promise<void> {
+    if (!(await this.confirmLive2DLicense())) return
+    const result = await dialog.showOpenDialog({
+      title: '导入 Live2D 模型包',
+      properties: ['openFile'],
+      filters: [{ name: 'Live2D ZIP 模型包', extensions: ['zip'] }],
+    })
+    const source = result.filePaths[0]
+    if (result.canceled || source === undefined) return
+    try {
+      const imported = this.pets.importLive2D(source)
+      this.customPets = this.pets.load()
+      this.setPet(imported.id)
+    } catch (error) {
+      dialog.showErrorBox('无法导入 Live2D 宠物', error instanceof Error ? error.message : String(error))
+    }
+  }
+
   private async removePet(pet: CustomPetRecord): Promise<void> {
     const result = await dialog.showMessageBox({
       type: 'warning',
@@ -371,6 +432,7 @@ export class CompanionController {
           })),
           { type: 'separator' as const },
           { label: '导入图片宠物…', click: () => void this.importImage() },
+          { label: '导入 Live2D 宠物…', click: () => void this.importLive2D() },
         ],
       },
       ...(this.customPets.length === 0
@@ -397,5 +459,40 @@ export class CompanionController {
     if (typeof message !== 'string' || message.length === 0 || message.length > 500) return
     this.options.logger.error('Companion renderer failed', message)
     if (this.settings.pet !== 'orb') this.setPet('orb')
+  }
+
+  private installLive2DProtocol(): void {
+    void protocol.handle('petwhale-live2d', (request) => {
+      try {
+        const url = new URL(request.url)
+        const requestPath = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
+        const resource = this.pets.resolveLive2DResource(url.hostname, requestPath)
+        if (resource === null) return new Response('Not found', { status: 404 })
+        return new Response(readFileSync(resource), {
+          headers: {
+            'Content-Type': live2DContentType(resource),
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'private, max-age=3600',
+          },
+        })
+      } catch {
+        return new Response('Bad request', { status: 400 })
+      }
+    })
+  }
+}
+
+function live2DContentType(path: string): string {
+  const extension = path.toLocaleLowerCase('en-US').split('.').pop()
+  switch (extension) {
+    case 'json': return 'application/json; charset=utf-8'
+    case 'png': return 'image/png'
+    case 'webp': return 'image/webp'
+    case 'jpg':
+    case 'jpeg': return 'image/jpeg'
+    case 'wav': return 'audio/wav'
+    case 'mp3': return 'audio/mpeg'
+    case 'ogg': return 'audio/ogg'
+    default: return 'application/octet-stream'
   }
 }

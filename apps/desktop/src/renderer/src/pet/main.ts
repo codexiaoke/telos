@@ -1,5 +1,6 @@
 import { CompanionEngine, type CompanionRenderer } from '@petwhale/core'
 import { isPetChoiceId, type PetChoiceId } from '@petwhale/electron-host/settings'
+import { Live2DRenderer, isLive2DPetManifest } from '@petwhale/renderer-live2d'
 import { OrbRenderer } from '@petwhale/renderer-orb'
 import {
   SpriteRenderer,
@@ -32,12 +33,17 @@ async function applyConfig(config: CompanionConfig): Promise<void> {
   const custom = isCustomPetManifest(config.customPet) && config.customPet.id === requested
     ? config.customPet
     : undefined
-  const pet = isCustomPetId(requested) && custom === undefined ? 'orb' : requested
+  const live2d = isLive2DPetManifest(config.customPet) && config.customPet.id === requested
+    ? config.customPet
+    : undefined
+  const pet = isCustomPetId(requested) && custom === undefined && live2d === undefined ? 'orb' : requested
   if (pet === selected) return
   selected = pet
   const currentGeneration = ++generation
-  const renderer: CompanionRenderer = custom !== undefined
-    ? new SpriteRenderer(custom)
+  const renderer: CompanionRenderer = live2d !== undefined
+    ? new Live2DRenderer(live2d)
+    : custom !== undefined
+      ? new SpriteRenderer(custom)
     : isSpritePetId(pet)
       ? new SpriteRenderer(spritePetById(pet))
       : new OrbRenderer()

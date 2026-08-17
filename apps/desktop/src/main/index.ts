@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { app, BrowserWindow, dialog, protocol, shell } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -35,6 +35,17 @@ import { installApplicationMenu } from './shell/application-menu.js'
 import { createMainWindow, loadDshWeb } from './shell/main-window.js'
 import { createManualUpdateFeedback } from './update/manual-update-feedback.js'
 import { UpdateService } from './update/update-service.js'
+
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'petwhale-live2d',
+  privileges: {
+    standard: true,
+    secure: true,
+    supportFetchAPI: true,
+    corsEnabled: true,
+    stream: true,
+  },
+}])
 
 app.setName('Telos')
 const applicationProfile = configureApplicationProfile(app)

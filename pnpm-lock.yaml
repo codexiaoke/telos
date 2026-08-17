@@ -26,21 +26,6 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@petwhale/core':
-        specifier: workspace:*
-        version: link:../../third_party/petwhale/packages/core
-      '@petwhale/electron-host':
-        specifier: workspace:*
-        version: link:../../third_party/petwhale/packages/electron-host
-      '@petwhale/renderer-live2d':
-        specifier: workspace:*
-        version: link:../../third_party/petwhale/packages/renderer-live2d
-      '@petwhale/renderer-orb':
-        specifier: workspace:*
-        version: link:../../third_party/petwhale/packages/renderer-orb
-      '@petwhale/renderer-sprite':
-        specifier: workspace:*
-        version: link:../../third_party/petwhale/packages/renderer-sprite
       '@shikijs/engine-javascript':
         specifier: 4.4.3
         version: 4.4.3
@@ -93,6 +78,21 @@ importers:
         specifier: 3.6.0
         version: 3.6.0
     devDependencies:
+      '@petwhale/core':
+        specifier: workspace:*
+        version: link:../../third_party/petwhale/packages/core
+      '@petwhale/electron-host':
+        specifier: workspace:*
+        version: link:../../third_party/petwhale/packages/electron-host
+      '@petwhale/renderer-live2d':
+        specifier: workspace:*
+        version: link:../../third_party/petwhale/packages/renderer-live2d
+      '@petwhale/renderer-orb':
+        specifier: workspace:*
+        version: link:../../third_party/petwhale/packages/renderer-orb
+      '@petwhale/renderer-sprite':
+        specifier: workspace:*
+        version: link:../../third_party/petwhale/packages/renderer-sprite
       '@tailwindcss/vite':
         specifier: 4.3.3
         version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.25.12)(jiti@2.7.0)(yaml@2.9.0))

@@ -12,6 +12,10 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
+    "@petwhale/core": "workspace:*",
+    "@petwhale/electron-host": "workspace:*",
+    "@petwhale/renderer-orb": "workspace:*",
+    "@petwhale/renderer-sprite": "workspace:*",
     "@shikijs/engine-javascript": "4.4.3",
     "@shikijs/monaco": "4.4.3",
     "@telos/runtime-contracts": "workspace:*",

@@ -8,6 +8,10 @@ export interface ApplicationTrayActions {
   quit: () => void
   getUpdateSnapshot: () => UpdateSnapshot
   subscribeToUpdates: (observer: (snapshot: UpdateSnapshot) => void) => () => void
+  companion?: {
+    menuItem: () => MenuItemConstructorOptions
+    subscribe: (observer: () => void) => () => void
+  }
 }
 
 export interface ApplicationTrayHandle {
@@ -45,6 +49,7 @@ export function createApplicationTray(actions: ApplicationTrayActions): Applicat
     const update = actions.getUpdateSnapshot()
     const template: MenuItemConstructorOptions[] = [
       { label: '打开 Telos', click: actions.showMainWindow },
+      ...(actions.companion === undefined ? [] : [actions.companion.menuItem()]),
       { type: 'separator' },
       { label: describeUpdate(update), enabled: false },
       {
@@ -64,10 +69,12 @@ export function createApplicationTray(actions: ApplicationTrayActions): Applicat
   tray.on('click', actions.showMainWindow)
   rebuildMenu()
   const unsubscribe = actions.subscribeToUpdates(rebuildMenu)
+  const unsubscribeCompanion = actions.companion?.subscribe(rebuildMenu)
 
   return {
     destroy: () => {
       unsubscribe()
+      unsubscribeCompanion?.()
       tray.destroy()
     },
   }

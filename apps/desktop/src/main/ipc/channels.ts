@@ -8,4 +8,8 @@ export const IPC_CHANNELS = {
   runtimeEvent: 'telos:runtime:event',
   workbenchEditorPanelsGet: 'telos:workbench:get-editor-panels',
   workbenchEditorPanelsSet: 'telos:workbench:set-editor-panels',
+  companionState: 'telos:companion:state',
+  companionConfig: 'telos:companion:config',
+  companionMenu: 'telos:companion:menu',
+  companionRendererError: 'telos:companion:renderer-error',
 } as const

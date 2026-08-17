@@ -2,6 +2,7 @@ packages:
   - apps/*
   - packages/*
   - plugins/*
+  - third_party/petwhale/packages/*
 
 allowBuilds:
   electron: true

@@ -21,6 +21,15 @@ export const COMPANION_SIZE_PERCENT_MAX = 150
 export const COMPANION_SIZE_PERCENT_STEP = 5
 export const COMPANION_SIZE_PERCENT_DEFAULT = 100
 export const COMPANION_SIZE_PERCENT_LEGACY_SMALL = 67
+export const COMPANION_WINDOW_BASE_SIZE = { width: 300, height: 320 } as const
+
+export function companionWindowSize(sizePercent: number): { width: number; height: number } {
+  const scale = sizePercent / 100
+  return {
+    width: Math.round(COMPANION_WINDOW_BASE_SIZE.width * scale),
+    height: Math.round(COMPANION_WINDOW_BASE_SIZE.height * scale),
+  }
+}
 
 export function normalizeCompanionSizePercent(
   value: unknown,
@@ -60,6 +69,8 @@ export interface CompanionSettingsView extends CompanionStatus {
   minSizePercent: number
   maxSizePercent: number
   stepSizePercent: number
+  windowWidth: number
+  windowHeight: number
   pets: readonly CompanionPetOption[]
 }
 

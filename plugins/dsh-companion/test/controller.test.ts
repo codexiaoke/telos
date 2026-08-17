@@ -10,6 +10,8 @@ const view: CompanionSettingsView = {
   minSizePercent: 50,
   maxSizePercent: 150,
   stepSizePercent: 5,
+  windowWidth: 300,
+  windowHeight: 320,
   pet: 'orb',
   pets: [{ id: 'orb', label: 'Orb', kind: 'orb', removable: false }],
 }

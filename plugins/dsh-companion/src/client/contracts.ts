@@ -17,6 +17,8 @@ export interface CompanionSettingsView {
   minSizePercent: number
   maxSizePercent: number
   stepSizePercent: number
+  windowWidth: number
+  windowHeight: number
   pets: readonly CompanionPetOption[]
 }
 

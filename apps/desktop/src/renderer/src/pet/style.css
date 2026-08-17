@@ -11,7 +11,7 @@ body {
 
 #pet {
   position: absolute;
-  inset: 14% 0;
+  inset: 7% 0;
   cursor: grab;
   -webkit-app-region: drag;
 }
@@ -71,7 +71,7 @@ body.has-conversation:not(.conversation-collapsed) #conversation {
   position: absolute;
   z-index: 4;
   right: 0;
-  bottom: 12px;
+  top: 72%;
   left: 0;
   display: flex;
   justify-content: center;

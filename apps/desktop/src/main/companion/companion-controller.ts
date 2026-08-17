@@ -29,6 +29,7 @@ import {
   COMPANION_SIZE_PERCENT_MAX,
   COMPANION_SIZE_PERCENT_MIN,
   COMPANION_SIZE_PERCENT_STEP,
+  companionWindowSize,
   normalizeCompanionSizePercent,
   type CompanionConfig,
   type CompanionImportKind,
@@ -39,16 +40,6 @@ import {
 } from '../../shared/companion.js'
 import { IPC_CHANNELS } from '../ipc/channels.js'
 import { CompanionConversationTracker } from './conversation-tracker.js'
-
-const PET_BASE_SIZE = { width: 300, height: 380 } as const
-
-function petWindowSize(sizePercent: number): { width: number; height: number } {
-  const scale = sizePercent / 100
-  return {
-    width: Math.round(PET_BASE_SIZE.width * scale),
-    height: Math.round(PET_BASE_SIZE.height * scale),
-  }
-}
 
 const LIVE2D_PROPRIETARY_LICENSE_URL =
   'https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_cn.html'
@@ -221,7 +212,7 @@ export class CompanionController {
   private openWindow(): BrowserWindow {
     if (this.window !== undefined && !this.window.isDestroyed()) return this.window
     const position = this.loadPosition()
-    const size = petWindowSize(this.sizePercent)
+    const size = companionWindowSize(this.sizePercent)
     const window = new BrowserWindow({
       ...size,
       ...position,
@@ -426,7 +417,7 @@ export class CompanionController {
     this.saveSettings()
     const window = this.window
     if (window !== undefined && !window.isDestroyed()) {
-      const size = petWindowSize(sizePercent)
+      const size = companionWindowSize(sizePercent)
       window.setSize(size.width, size.height)
     }
     this.pushConfig()
@@ -442,6 +433,7 @@ export class CompanionController {
   }
 
   private settingsView(): CompanionSettingsView {
+    const windowSize = companionWindowSize(this.sizePercent)
     const customById = new Map<PetChoiceId, CustomPetRecord>(this.customPets.map(pet => [pet.id, pet]))
     const pets: CompanionPetOption[] = petMenuOptions(this.settings.pet, this.customPets).map((option) => {
       const custom = customById.get(option.id)
@@ -461,6 +453,8 @@ export class CompanionController {
       minSizePercent: COMPANION_SIZE_PERCENT_MIN,
       maxSizePercent: COMPANION_SIZE_PERCENT_MAX,
       stepSizePercent: COMPANION_SIZE_PERCENT_STEP,
+      windowWidth: windowSize.width,
+      windowHeight: windowSize.height,
       pets,
     }
   }

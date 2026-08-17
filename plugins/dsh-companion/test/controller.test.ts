@@ -6,6 +6,7 @@ const view: CompanionSettingsView = {
   visible: false,
   connected: true,
   locked: false,
+  live2dSoundEnabled: true,
   sizePercent: 100,
   minSizePercent: 50,
   maxSizePercent: 150,
@@ -32,6 +33,9 @@ describe('CompanionClientController', () => {
     await controller.updateSettings({ visible: true })
     expect(api.updateSettings).toHaveBeenCalledWith({ visible: true })
     expect(controller.getSnapshot().view?.visible).toBe(true)
+    await controller.updateSettings({ live2dSoundEnabled: false })
+    expect(api.updateSettings).toHaveBeenCalledWith({ live2dSoundEnabled: false })
+    expect(controller.getSnapshot().view?.live2dSoundEnabled).toBe(false)
   })
 
   it('reports a clear desktop-only message when the bridge is absent', async () => {

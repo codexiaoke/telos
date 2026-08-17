@@ -72,6 +72,7 @@ export class CompanionController {
   private readonly pets: CustomPetStore
   private settings: PetSettings
   private sizePercent: number
+  private live2dSoundEnabled: boolean
   private aspectRatio = 1
   private customPets: CustomPetRecord[]
   private tracker = new PetStateTracker()
@@ -99,6 +100,7 @@ export class CompanionController {
     const persisted = this.loadSettings()
     this.settings = persisted.settings
     this.sizePercent = persisted.sizePercent
+    this.live2dSoundEnabled = persisted.live2dSoundEnabled
     if (
       this.settings.pet.startsWith('custom:')
       && !this.customPets.some(pet => pet.id === this.settings.pet)
@@ -166,18 +168,27 @@ export class CompanionController {
     this.observers.clear()
   }
 
-  private loadSettings(): { settings: PetSettings; sizePercent: number } {
+  private loadSettings(): {
+    settings: PetSettings
+    sizePercent: number
+    live2dSoundEnabled: boolean
+  } {
     try {
-      const value = JSON.parse(readFileSync(this.settingsPath, 'utf8')) as { sizePercent?: unknown }
+      const value = JSON.parse(readFileSync(this.settingsPath, 'utf8')) as {
+        sizePercent?: unknown
+        live2dSoundEnabled?: unknown
+      }
       const settings = normalizePetSettings(value)
       return {
         settings,
         sizePercent: normalizeCompanionSizePercent(value.sizePercent, settings.size),
+        live2dSoundEnabled: value.live2dSoundEnabled !== false,
       }
     } catch {
       return {
         settings: { ...DEFAULT_PET_SETTINGS },
         sizePercent: COMPANION_SIZE_PERCENT_DEFAULT,
+        live2dSoundEnabled: true,
       }
     }
   }
@@ -185,7 +196,11 @@ export class CompanionController {
   private saveSettings(): void {
     try {
       mkdirSync(this.rootPath, { recursive: true })
-      writeFileSync(this.settingsPath, JSON.stringify({ ...this.settings, sizePercent: this.sizePercent }, null, 2))
+      writeFileSync(this.settingsPath, JSON.stringify({
+        ...this.settings,
+        sizePercent: this.sizePercent,
+        live2dSoundEnabled: this.live2dSoundEnabled,
+      }, null, 2))
     } catch (error) {
       this.options.logger.error('Failed to persist companion settings', error)
     }
@@ -372,6 +387,7 @@ export class CompanionController {
     const custom = this.customPets.find(pet => pet.id === this.settings.pet)
     return {
       ...this.settings,
+      live2dSoundEnabled: this.live2dSoundEnabled,
       ...(custom === undefined ? {} : { customPet: this.pets.rendererConfig(custom) }),
     }
   }
@@ -406,6 +422,13 @@ export class CompanionController {
 
   private setLocked(locked: boolean): void {
     this.settings = { ...this.settings, locked }
+    this.saveSettings()
+    this.pushConfig()
+    this.notify()
+  }
+
+  private setLive2DSoundEnabled(enabled: boolean): void {
+    this.live2dSoundEnabled = enabled
     this.saveSettings()
     this.pushConfig()
     this.notify()
@@ -459,6 +482,7 @@ export class CompanionController {
       connected: this.connected,
       pet: this.settings.pet,
       locked: this.settings.locked,
+      live2dSoundEnabled: this.live2dSoundEnabled,
       sizePercent: this.sizePercent,
       minSizePercent: COMPANION_SIZE_PERCENT_MIN,
       maxSizePercent: COMPANION_SIZE_PERCENT_MAX,
@@ -481,10 +505,13 @@ export class CompanionController {
       throw new TypeError('Companion settings patch must be an object')
     }
     const input = value as Record<string, unknown>
-    const allowed = new Set(['visible', 'locked', 'sizePercent', 'pet'])
+    const allowed = new Set(['visible', 'locked', 'live2dSoundEnabled', 'sizePercent', 'pet'])
     if (Object.keys(input).some(key => !allowed.has(key))) throw new TypeError('Unknown companion setting')
     if (input.visible !== undefined && typeof input.visible !== 'boolean') throw new TypeError('Invalid visibility')
     if (input.locked !== undefined && typeof input.locked !== 'boolean') throw new TypeError('Invalid lock state')
+    if (input.live2dSoundEnabled !== undefined && typeof input.live2dSoundEnabled !== 'boolean') {
+      throw new TypeError('Invalid Live2D sound state')
+    }
     if (
       input.sizePercent !== undefined
       && (
@@ -513,6 +540,7 @@ export class CompanionController {
     const patch = this.parseSettingsPatch(value)
     if (patch.visible !== undefined) this.setVisible(patch.visible)
     if (patch.locked !== undefined) this.setLocked(patch.locked)
+    if (patch.live2dSoundEnabled !== undefined) this.setLive2DSoundEnabled(patch.live2dSoundEnabled)
     if (patch.sizePercent !== undefined) this.setSizePercent(patch.sizePercent)
     if (patch.pet !== undefined) this.setPet(patch.pet)
     return this.settingsView()

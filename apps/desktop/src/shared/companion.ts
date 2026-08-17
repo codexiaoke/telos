@@ -64,6 +64,7 @@ export function normalizeCompanionSizePercent(
 }
 
 export interface CompanionConfig extends PetSettings {
+  live2dSoundEnabled: boolean
   customPet?: CustomPetRendererConfig
 }
 
@@ -82,6 +83,7 @@ export interface CompanionPetOption {
 
 export interface CompanionSettingsView extends CompanionStatus {
   locked: boolean
+  live2dSoundEnabled: boolean
   sizePercent: number
   minSizePercent: number
   maxSizePercent: number
@@ -94,6 +96,7 @@ export interface CompanionSettingsView extends CompanionStatus {
 export interface CompanionSettingsPatch {
   visible?: boolean
   locked?: boolean
+  live2dSoundEnabled?: boolean
   sizePercent?: number
   pet?: PetChoiceId
 }

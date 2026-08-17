@@ -154,6 +154,23 @@ function CompanionSettingsSection({ controller }) {
             type: "checkbox"
           }
         )
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "telosCompanionSwitch", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Live2D \u58F0\u97F3" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { children: "\u64AD\u653E Live2D \u52A8\u4F5C\u81EA\u5E26\u7684\u97F3\u9891" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            checked: view.live2dSoundEnabled,
+            disabled: state.loading,
+            onChange: (event) => {
+              void controller.updateSettings({ live2dSoundEnabled: event.target.checked });
+            },
+            type: "checkbox"
+          }
+        )
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "telosCompanionImport", children: [

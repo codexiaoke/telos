@@ -38,10 +38,13 @@ const engine = new CompanionEngine(source, {
   behaviorPolicy: { sleepAfterMs: 3 * 60_000 },
 })
 let selected: PetChoiceId | undefined
+let currentRenderer: CompanionRenderer | undefined
+let live2dSoundEnabled = true
 let generation = 0
 
 async function applyConfig(config: CompanionConfig): Promise<void> {
   document.body.classList.toggle('locked', config.locked)
+  live2dSoundEnabled = config.live2dSoundEnabled !== false
   const requested = isPetChoiceId(config.pet) ? config.pet : 'orb'
   const custom = isCustomPetManifest(config.customPet) && config.customPet.id === requested
     ? config.customPet
@@ -50,8 +53,14 @@ async function applyConfig(config: CompanionConfig): Promise<void> {
     ? config.customPet
     : undefined
   const pet = isCustomPetId(requested) && custom === undefined && live2d === undefined ? 'orb' : requested
-  if (pet === selected) return
+  if (pet === selected) {
+    if (currentRenderer instanceof Live2DRenderer) {
+      currentRenderer.setSoundEnabled(live2dSoundEnabled)
+    }
+    return
+  }
   selected = pet
+  currentRenderer = undefined
   const currentGeneration = ++generation
   const renderer: CompanionRenderer = live2d !== undefined
     ? new Live2DRenderer(live2d)
@@ -60,17 +69,23 @@ async function applyConfig(config: CompanionConfig): Promise<void> {
     : isSpritePetId(pet)
       ? new SpriteRenderer(spritePetById(pet))
       : new OrbRenderer()
+  if (renderer instanceof Live2DRenderer) renderer.setSoundEnabled(live2dSoundEnabled)
   try {
     await engine.setRenderer(renderer, petContainer, {
       scale: pet === 'orb' ? 1.5 : 1,
       onIntrinsicSize: size => window.telos.companion.reportIntrinsicSize(size.width, size.height),
     })
     if (currentGeneration !== generation) renderer.dispose()
+    else {
+      currentRenderer = renderer
+      if (renderer instanceof Live2DRenderer) renderer.setSoundEnabled(live2dSoundEnabled)
+    }
   } catch (error) {
     renderer.dispose()
     window.telos.companion.reportRendererError(error instanceof Error ? error.message : String(error))
     if (currentGeneration === generation && pet !== 'orb') {
       selected = undefined
+      currentRenderer = undefined
       await applyConfig({ ...config, pet: 'orb', customPet: undefined })
     }
   }
@@ -78,7 +93,7 @@ async function applyConfig(config: CompanionConfig): Promise<void> {
 
 source.start()
 engine.start()
-void applyConfig({ locked: false, size: 'large', pet: 'orb' })
+void applyConfig({ locked: false, size: 'large', pet: 'orb', live2dSoundEnabled: true })
 window.telos.companion.onConfig(config => void applyConfig(config))
 
 engine.onUpdate(() => {

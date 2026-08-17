@@ -94,6 +94,17 @@ export function CompanionSettingsSection({ controller }: CompanionInjected) {
           type="checkbox"
         />
       </label>
+      <label className="telosCompanionSwitch">
+        <span><strong>Live2D 声音</strong><small>播放 Live2D 动作自带的音频</small></span>
+        <input
+          checked={view.live2dSoundEnabled}
+          disabled={state.loading}
+          onChange={event => {
+            void controller.updateSettings({ live2dSoundEnabled: event.target.checked })
+          }}
+          type="checkbox"
+        />
+      </label>
     </div>
 
     <div className="telosCompanionImport">

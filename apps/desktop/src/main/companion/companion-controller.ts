@@ -707,6 +707,10 @@ function live2DContentType(path: string): string {
     case 'wav': return 'audio/wav'
     case 'mp3': return 'audio/mpeg'
     case 'ogg': return 'audio/ogg'
+    case 'm4a': return 'audio/mp4'
+    case 'aac': return 'audio/aac'
+    case 'flac': return 'audio/flac'
+    case 'webm': return 'audio/webm'
     default: return 'application/octet-stream'
   }
 }

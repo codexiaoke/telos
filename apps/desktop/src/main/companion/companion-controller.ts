@@ -30,6 +30,7 @@ import {
   COMPANION_SIZE_PERCENT_MIN,
   COMPANION_SIZE_PERCENT_STEP,
   companionWindowSize,
+  normalizeCompanionAspectRatio,
   normalizeCompanionSizePercent,
   type CompanionConfig,
   type CompanionImportKind,
@@ -71,6 +72,7 @@ export class CompanionController {
   private readonly pets: CustomPetStore
   private settings: PetSettings
   private sizePercent: number
+  private aspectRatio = 1
   private customPets: CustomPetRecord[]
   private tracker = new PetStateTracker()
   private readonly conversations = new CompanionConversationTracker()
@@ -108,6 +110,7 @@ export class CompanionController {
     ipcMain.on(IPC_CHANNELS.companionMenu, this.handleMenu)
     ipcMain.on(IPC_CHANNELS.companionFocusWorkbench, this.handleFocusWorkbench)
     ipcMain.on(IPC_CHANNELS.companionRendererError, this.handleRendererError)
+    ipcMain.on(IPC_CHANNELS.companionIntrinsicSize, this.handleIntrinsicSize)
     ipcMain.handle(IPC_CHANNELS.companionSettingsGet, this.handleSettingsGet)
     ipcMain.handle(IPC_CHANNELS.companionSettingsUpdate, this.handleSettingsUpdate)
     ipcMain.handle(IPC_CHANNELS.companionSettingsImport, this.handleSettingsImport)
@@ -152,6 +155,7 @@ export class CompanionController {
     ipcMain.removeListener(IPC_CHANNELS.companionMenu, this.handleMenu)
     ipcMain.removeListener(IPC_CHANNELS.companionFocusWorkbench, this.handleFocusWorkbench)
     ipcMain.removeListener(IPC_CHANNELS.companionRendererError, this.handleRendererError)
+    ipcMain.removeListener(IPC_CHANNELS.companionIntrinsicSize, this.handleIntrinsicSize)
     ipcMain.removeHandler(IPC_CHANNELS.companionSettingsGet)
     ipcMain.removeHandler(IPC_CHANNELS.companionSettingsUpdate)
     ipcMain.removeHandler(IPC_CHANNELS.companionSettingsImport)
@@ -212,7 +216,7 @@ export class CompanionController {
   private openWindow(): BrowserWindow {
     if (this.window !== undefined && !this.window.isDestroyed()) return this.window
     const position = this.loadPosition()
-    const size = companionWindowSize(this.sizePercent)
+    const size = companionWindowSize(this.sizePercent, this.aspectRatio)
     const window = new BrowserWindow({
       ...size,
       ...position,
@@ -417,7 +421,7 @@ export class CompanionController {
     this.saveSettings()
     const window = this.window
     if (window !== undefined && !window.isDestroyed()) {
-      const size = companionWindowSize(sizePercent)
+      const size = companionWindowSize(sizePercent, this.aspectRatio)
       window.setSize(size.width, size.height)
     }
     this.pushConfig()
@@ -427,13 +431,19 @@ export class CompanionController {
   private setPet(pet: PetChoiceId): void {
     if (pet.startsWith('custom:') && !this.customPets.some(candidate => candidate.id === pet)) return
     this.settings = { ...this.settings, pet }
+    this.aspectRatio = 1
     this.saveSettings()
+    const window = this.window
+    if (window !== undefined && !window.isDestroyed()) {
+      const size = companionWindowSize(this.sizePercent, this.aspectRatio)
+      window.setSize(size.width, size.height)
+    }
     this.pushConfig()
     this.notify()
   }
 
   private settingsView(): CompanionSettingsView {
-    const windowSize = companionWindowSize(this.sizePercent)
+    const windowSize = companionWindowSize(this.sizePercent, this.aspectRatio)
     const customById = new Map<PetChoiceId, CustomPetRecord>(this.customPets.map(pet => [pet.id, pet]))
     const pets: CompanionPetOption[] = petMenuOptions(this.settings.pet, this.customPets).map((option) => {
       const custom = customById.get(option.id)
@@ -647,6 +657,22 @@ export class CompanionController {
     if (typeof message !== 'string' || message.length === 0 || message.length > 500) return
     this.options.logger.error('Companion renderer failed', message)
     if (this.settings.pet !== 'orb') this.setPet('orb')
+  }
+
+  private readonly handleIntrinsicSize = (
+    event: IpcMainEvent,
+    width: unknown,
+    height: unknown,
+  ): void => {
+    const window = this.window
+    if (window === undefined || window.isDestroyed() || event.sender.id !== window.webContents.id) return
+    if (typeof width !== 'number' || typeof height !== 'number') return
+    const aspectRatio = normalizeCompanionAspectRatio(width, height)
+    if (Math.abs(aspectRatio - this.aspectRatio) < 0.001) return
+    this.aspectRatio = aspectRatio
+    const size = companionWindowSize(this.sizePercent, aspectRatio)
+    window.setSize(size.width, size.height)
+    this.notify()
   }
 
   private installLive2DProtocol(): void {

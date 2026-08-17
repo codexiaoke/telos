@@ -21,13 +21,30 @@ export const COMPANION_SIZE_PERCENT_MAX = 150
 export const COMPANION_SIZE_PERCENT_STEP = 5
 export const COMPANION_SIZE_PERCENT_DEFAULT = 100
 export const COMPANION_SIZE_PERCENT_LEGACY_SMALL = 67
-export const COMPANION_WINDOW_BASE_SIZE = { width: 300, height: 320 } as const
+export const COMPANION_WINDOW_BASE_LONG_EDGE = 320
+export const COMPANION_ASPECT_RATIO_MIN = 0.5
+export const COMPANION_ASPECT_RATIO_MAX = 2
 
-export function companionWindowSize(sizePercent: number): { width: number; height: number } {
-  const scale = sizePercent / 100
+export function normalizeCompanionAspectRatio(width: number, height: number): number {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return 1
+  return Math.min(COMPANION_ASPECT_RATIO_MAX, Math.max(COMPANION_ASPECT_RATIO_MIN, width / height))
+}
+
+export function companionWindowSize(
+  sizePercent: number,
+  aspectRatio = 1,
+): { width: number; height: number } {
+  const longEdge = Math.round(COMPANION_WINDOW_BASE_LONG_EDGE * sizePercent / 100)
+  const normalizedAspectRatio = normalizeCompanionAspectRatio(aspectRatio, 1)
+  if (normalizedAspectRatio <= 1) {
+    return {
+      width: Math.round(longEdge * normalizedAspectRatio),
+      height: longEdge,
+    }
+  }
   return {
-    width: Math.round(COMPANION_WINDOW_BASE_SIZE.width * scale),
-    height: Math.round(COMPANION_WINDOW_BASE_SIZE.height * scale),
+    width: longEdge,
+    height: Math.round(longEdge / normalizedAspectRatio),
   }
 }
 

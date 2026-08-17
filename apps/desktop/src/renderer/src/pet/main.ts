@@ -61,7 +61,10 @@ async function applyConfig(config: CompanionConfig): Promise<void> {
       ? new SpriteRenderer(spritePetById(pet))
       : new OrbRenderer()
   try {
-    await engine.setRenderer(renderer, petContainer, { scale: pet === 'orb' ? 1.5 : 1 })
+    await engine.setRenderer(renderer, petContainer, {
+      scale: pet === 'orb' ? 1.5 : 1,
+      onIntrinsicSize: size => window.telos.companion.reportIntrinsicSize(size.width, size.height),
+    })
     if (currentGeneration !== generation) renderer.dispose()
   } catch (error) {
     renderer.dispose()

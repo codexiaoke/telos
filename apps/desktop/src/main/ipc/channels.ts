@@ -13,6 +13,7 @@ export const IPC_CHANNELS = {
   companionMenu: 'telos:companion:menu',
   companionFocusWorkbench: 'telos:companion:focus-workbench',
   companionRendererError: 'telos:companion:renderer-error',
+  companionIntrinsicSize: 'telos:companion:intrinsic-size',
   companionSettingsGet: 'telos:companion:settings:get',
   companionSettingsUpdate: 'telos:companion:settings:update',
   companionSettingsImport: 'telos:companion:settings:import',

@@ -3,6 +3,7 @@ import {
   COMPANION_SIZE_PERCENT_DEFAULT,
   COMPANION_SIZE_PERCENT_LEGACY_SMALL,
   companionWindowSize,
+  normalizeCompanionAspectRatio,
   normalizeCompanionSizePercent,
 } from './companion.js'
 
@@ -18,8 +19,15 @@ describe('companion size percentage', () => {
     expect(normalizeCompanionSizePercent(undefined, 'large')).toBe(COMPANION_SIZE_PERCENT_DEFAULT)
   })
 
-  it('reports the compact physical window boundary', () => {
-    expect(companionWindowSize(100)).toEqual({ width: 300, height: 320 })
-    expect(companionWindowSize(150)).toEqual({ width: 450, height: 480 })
+  it('preserves the pet aspect ratio in the physical window boundary', () => {
+    expect(companionWindowSize(100)).toEqual({ width: 320, height: 320 })
+    expect(companionWindowSize(100, 512 / 1024)).toEqual({ width: 160, height: 320 })
+    expect(companionWindowSize(150, 1024 / 512)).toEqual({ width: 480, height: 240 })
+  })
+
+  it('normalizes invalid and extreme intrinsic dimensions', () => {
+    expect(normalizeCompanionAspectRatio(512, 1024)).toBe(0.5)
+    expect(normalizeCompanionAspectRatio(0, 1024)).toBe(1)
+    expect(normalizeCompanionAspectRatio(10_000, 1)).toBe(2)
   })
 })

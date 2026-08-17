@@ -46,6 +46,7 @@ declare global {
         onState: (observer: (snapshot: CompanionSnapshot) => void) => () => void
         onConfig: (observer: (config: CompanionConfig) => void) => () => void
         showMenu: () => void
+        focusWorkbench: () => void
         reportRendererError: (message: string) => void
         getSettings: () => Promise<CompanionSettingsView>
         updateSettings: (patch: CompanionSettingsPatch) => Promise<CompanionSettingsView>

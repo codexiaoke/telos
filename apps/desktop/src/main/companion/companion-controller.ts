@@ -26,7 +26,6 @@ import { join } from 'node:path'
 import type { DshWebSupervisor } from '../application/dsh-web-supervisor.js'
 import {
   COMPANION_SIZE_PERCENT_DEFAULT,
-  COMPANION_SIZE_PERCENT_LEGACY_SMALL,
   COMPANION_SIZE_PERCENT_MAX,
   COMPANION_SIZE_PERCENT_MIN,
   COMPANION_SIZE_PERCENT_STEP,
@@ -39,6 +38,7 @@ import {
   type CompanionSnapshot,
 } from '../../shared/companion.js'
 import { IPC_CHANNELS } from '../ipc/channels.js'
+import { CompanionConversationTracker } from './conversation-tracker.js'
 
 const PET_BASE_SIZE = { width: 300, height: 380 } as const
 
@@ -82,10 +82,14 @@ export class CompanionController {
   private sizePercent: number
   private customPets: CustomPetRecord[]
   private tracker = new PetStateTracker()
+  private readonly conversations = new CompanionConversationTracker()
   private window: BrowserWindow | undefined
-  private socket: WebSocket | undefined
+  private hostSocket: WebSocket | undefined
+  private muxSocket: WebSocket | undefined
   private dshUrl: string | undefined
-  private reconnectTimer: NodeJS.Timeout | undefined
+  private hostReconnectTimer: NodeJS.Timeout | undefined
+  private muxReconnectTimer: NodeJS.Timeout | undefined
+  private statePushTimer: NodeJS.Timeout | undefined
   private unsubscribeDsh: (() => void) | undefined
   private readonly observers = new Set<() => void>()
   private disposed = false
@@ -111,6 +115,7 @@ export class CompanionController {
     }
     this.installLive2DProtocol()
     ipcMain.on(IPC_CHANNELS.companionMenu, this.handleMenu)
+    ipcMain.on(IPC_CHANNELS.companionFocusWorkbench, this.handleFocusWorkbench)
     ipcMain.on(IPC_CHANNELS.companionRendererError, this.handleRendererError)
     ipcMain.handle(IPC_CHANNELS.companionSettingsGet, this.handleSettingsGet)
     ipcMain.handle(IPC_CHANNELS.companionSettingsUpdate, this.handleSettingsUpdate)
@@ -128,6 +133,7 @@ export class CompanionController {
       this.disconnect()
       this.dshUrl = nextUrl
       this.tracker = new PetStateTracker()
+      this.conversations.clear()
       this.pushState()
       if (nextUrl !== undefined) this.connect(nextUrl)
     })
@@ -153,6 +159,7 @@ export class CompanionController {
     this.dshUrl = undefined
     this.disconnect()
     ipcMain.removeListener(IPC_CHANNELS.companionMenu, this.handleMenu)
+    ipcMain.removeListener(IPC_CHANNELS.companionFocusWorkbench, this.handleFocusWorkbench)
     ipcMain.removeListener(IPC_CHANNELS.companionRendererError, this.handleRendererError)
     ipcMain.removeHandler(IPC_CHANNELS.companionSettingsGet)
     ipcMain.removeHandler(IPC_CHANNELS.companionSettingsUpdate)
@@ -260,54 +267,108 @@ export class CompanionController {
 
   private connect(baseUrl: string): void {
     if (this.disposed || this.dshUrl !== baseUrl) return
+    this.connectHost(baseUrl)
+    this.connectMux(baseUrl)
+  }
+
+  private connectHost(baseUrl: string): void {
+    if (this.disposed || this.dshUrl !== baseUrl || this.hostSocket !== undefined) return
     const socket = new WebSocket(`${baseUrl.replace(/^http/, 'ws')}/api/events.host`)
-    this.socket = socket
+    this.hostSocket = socket
     socket.onopen = () => {
-      if (this.socket !== socket) return
+      if (this.hostSocket !== socket) return
       this.connected = true
       this.notify()
     }
     socket.onmessage = (event) => {
-      if (this.socket !== socket) return
+      if (this.hostSocket !== socket) return
       const frame = parseHostFrame(event.data)
       if (frame === null) return
       this.tracker.ingest(frame)
+      this.conversations.ingestHost(frame)
       this.pushState()
     }
     socket.onclose = () => {
-      if (this.socket !== socket) return
-      this.socket = undefined
+      if (this.hostSocket !== socket) return
+      this.hostSocket = undefined
       this.connected = false
       this.notify()
-      this.scheduleReconnect(baseUrl)
+      this.scheduleHostReconnect(baseUrl)
     }
     socket.onerror = () => socket.close()
   }
 
-  private scheduleReconnect(baseUrl: string): void {
-    if (this.disposed || this.dshUrl !== baseUrl || this.reconnectTimer !== undefined) return
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = undefined
-      this.connect(baseUrl)
+  private connectMux(baseUrl: string): void {
+    if (this.disposed || this.dshUrl !== baseUrl || this.muxSocket !== undefined) return
+    const socket = new WebSocket(`${baseUrl.replace(/^http/, 'ws')}/api/events.mux`)
+    this.muxSocket = socket
+    socket.onmessage = (event) => {
+      if (this.muxSocket !== socket) return
+      const frame = parseHostFrame(event.data)
+      if (frame !== null && this.conversations.ingestMux(frame)) this.schedulePushState()
+    }
+    socket.onclose = () => {
+      if (this.muxSocket !== socket) return
+      this.muxSocket = undefined
+      this.scheduleMuxReconnect(baseUrl)
+    }
+    socket.onerror = () => socket.close()
+  }
+
+  private scheduleHostReconnect(baseUrl: string): void {
+    if (this.disposed || this.dshUrl !== baseUrl || this.hostReconnectTimer !== undefined) return
+    this.hostReconnectTimer = setTimeout(() => {
+      this.hostReconnectTimer = undefined
+      this.connectHost(baseUrl)
+    }, 2_000)
+  }
+
+  private scheduleMuxReconnect(baseUrl: string): void {
+    if (this.disposed || this.dshUrl !== baseUrl || this.muxReconnectTimer !== undefined) return
+    this.muxReconnectTimer = setTimeout(() => {
+      this.muxReconnectTimer = undefined
+      this.connectMux(baseUrl)
     }, 2_000)
   }
 
   private disconnect(): void {
-    if (this.reconnectTimer !== undefined) clearTimeout(this.reconnectTimer)
-    this.reconnectTimer = undefined
-    const socket = this.socket
-    this.socket = undefined
-    socket?.close()
+    if (this.hostReconnectTimer !== undefined) clearTimeout(this.hostReconnectTimer)
+    if (this.muxReconnectTimer !== undefined) clearTimeout(this.muxReconnectTimer)
+    if (this.statePushTimer !== undefined) clearTimeout(this.statePushTimer)
+    this.hostReconnectTimer = undefined
+    this.muxReconnectTimer = undefined
+    this.statePushTimer = undefined
+    const hostSocket = this.hostSocket
+    const muxSocket = this.muxSocket
+    this.hostSocket = undefined
+    this.muxSocket = undefined
+    hostSocket?.close()
+    muxSocket?.close()
     this.connected = false
     this.notify()
+  }
+
+  private schedulePushState(): void {
+    if (this.statePushTimer !== undefined) return
+    this.statePushTimer = setTimeout(() => {
+      this.statePushTimer = undefined
+      this.pushState()
+    }, 80)
   }
 
   private pushState(): void {
     const window = this.window
     if (window === undefined || window.isDestroyed() || window.webContents.isDestroyed()) return
+    const tracked = this.tracker.getSnapshot()
+    const conversation = this.conversations.snapshot(tracked.activity?.label)
     const snapshot: CompanionSnapshot = {
-      ...this.tracker.getSnapshot(),
-      context: { ...this.tracker.getSnapshot().context, host: 'telos' },
+      ...tracked,
+      context: {
+        ...tracked.context,
+        host: 'telos',
+        ...(conversation === undefined ? {} : { sessionId: conversation.sessionId }),
+      },
+      ...(conversation === undefined ? {} : { conversation }),
     }
     window.webContents.send(IPC_CHANNELS.companionState, snapshot)
   }
@@ -353,13 +414,6 @@ export class CompanionController {
     this.saveSettings()
     this.pushConfig()
     this.notify()
-  }
-
-  private toggleSize(): void {
-    const size = this.settings.size === 'large' ? 'small' : 'large'
-    this.setSizePercent(
-      size === 'small' ? COMPANION_SIZE_PERCENT_LEGACY_SMALL : COMPANION_SIZE_PERCENT_DEFAULT,
-    )
   }
 
   private setSizePercent(value: number): void {
@@ -576,41 +630,22 @@ export class CompanionController {
         checked: this.settings.locked,
         click: item => this.setLocked(item.checked),
       },
-      {
-        label: this.settings.size === 'large' ? '切换为小尺寸' : '切换为大尺寸',
-        click: () => this.toggleSize(),
-      },
-      {
-        label: '更换宠物',
-        submenu: [
-          ...petMenuOptions(this.settings.pet, this.customPets).map(option => ({
-            label: option.label,
-            type: 'radio' as const,
-            checked: option.checked,
-            click: () => this.setPet(option.id),
-          })),
-          { type: 'separator' as const },
-          { label: '导入图片宠物…', click: () => void this.importImage() },
-          { label: '导入 Live2D 宠物…', click: () => void this.importLive2D() },
-        ],
-      },
-      ...(this.customPets.length === 0
-        ? []
-        : [{
-            label: '删除自定义宠物',
-            submenu: this.customPets.map(pet => ({
-              label: pet.label,
-              click: () => void this.removePet(pet),
-            })),
-          } satisfies MenuItemConstructorOptions]),
-      { type: 'separator' },
-      { label: this.connected ? '已连接 Agent 状态' : '等待 Agent Runtime', enabled: false },
     ]
   }
 
   private readonly handleMenu = (event: IpcMainEvent): void => {
     if (this.window === undefined || this.window.isDestroyed() || event.sender.id !== this.window.webContents.id) return
     Menu.buildFromTemplate(this.menuItems()).popup({ window: this.window })
+  }
+
+  private readonly handleFocusWorkbench = (event: IpcMainEvent): void => {
+    if (this.window === undefined || this.window.isDestroyed() || event.sender.id !== this.window.webContents.id) return
+    const workbench = this.options.getWorkbenchWebContents()
+    if (workbench === undefined || workbench.isDestroyed()) return
+    const window = BrowserWindow.fromWebContents(workbench)
+    if (window?.isMinimized()) window.restore()
+    window?.show()
+    window?.focus()
   }
 
   private readonly handleRendererError = (event: IpcMainEvent, message: unknown): void => {

@@ -28,6 +28,7 @@ const CHANNELS = {
   companionState: 'telos:companion:state',
   companionConfig: 'telos:companion:config',
   companionMenu: 'telos:companion:menu',
+  companionFocusWorkbench: 'telos:companion:focus-workbench',
   companionRendererError: 'telos:companion:renderer-error',
   companionSettingsGet: 'telos:companion:settings:get',
   companionSettingsUpdate: 'telos:companion:settings:update',
@@ -84,6 +85,7 @@ const api = {
       return () => ipcRenderer.removeListener(CHANNELS.companionConfig, listener)
     },
     showMenu: (): void => ipcRenderer.send(CHANNELS.companionMenu),
+    focusWorkbench: (): void => ipcRenderer.send(CHANNELS.companionFocusWorkbench),
     reportRendererError: (message: string): void => ipcRenderer.send(CHANNELS.companionRendererError, message),
     getSettings: (): Promise<CompanionSettingsView> => ipcRenderer.invoke(CHANNELS.companionSettingsGet),
     updateSettings: (patch: CompanionSettingsPatch): Promise<CompanionSettingsView> => (

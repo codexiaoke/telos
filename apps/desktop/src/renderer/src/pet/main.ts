@@ -14,8 +14,21 @@ import { TelosIpcCompanionSource } from './pet-source'
 import './style.css'
 
 const container = document.getElementById('pet')
-const label = document.getElementById('label')
-if (!(container instanceof HTMLElement) || !(label instanceof HTMLElement)) {
+const conversation = document.getElementById('conversation')
+const conversationTitle = document.getElementById('conversation-title')
+const conversationMessage = document.getElementById('conversation-message')
+const conversationCount = document.getElementById('conversation-count')
+const focusWorkbench = document.getElementById('focus-workbench')
+const toggleConversation = document.getElementById('toggle-conversation')
+if (
+  !(container instanceof HTMLElement)
+  || !(conversation instanceof HTMLElement)
+  || !(conversationTitle instanceof HTMLElement)
+  || !(conversationMessage instanceof HTMLElement)
+  || !(conversationCount instanceof HTMLElement)
+  || !(focusWorkbench instanceof HTMLButtonElement)
+  || !(toggleConversation instanceof HTMLButtonElement)
+) {
   throw new Error('Telos companion renderer surface is incomplete')
 }
 const petContainer = container
@@ -66,11 +79,20 @@ void applyConfig({ locked: false, size: 'large', pet: 'orb' })
 window.telos.companion.onConfig(config => void applyConfig(config))
 
 engine.onUpdate(() => {
-  const snapshot = engine.getLastSnapshot()
-  const text = snapshot?.activity?.label
-    ?? (snapshot !== null && snapshot.state !== 'idle' && snapshot.state !== 'sleeping' ? snapshot.state : '')
-  label.textContent = text
-  label.style.opacity = text.length > 0 ? '1' : '0'
+  const message = source.getConversation()
+  document.body.classList.toggle('has-conversation', message !== undefined)
+  conversationTitle.textContent = message === undefined
+    ? ''
+    : `${message.title} (${message.activeCount})`
+  conversationMessage.textContent = message?.message ?? ''
+  conversationCount.textContent = String(message?.activeCount ?? 0)
+  toggleConversation.disabled = message === undefined
+})
+
+focusWorkbench.addEventListener('click', () => window.telos.companion.focusWorkbench())
+toggleConversation.addEventListener('click', () => {
+  const collapsed = document.body.classList.toggle('conversation-collapsed')
+  toggleConversation.setAttribute('aria-label', collapsed ? '展开会话消息' : '收起会话消息')
 })
 
 container.addEventListener('contextmenu', (event) => {

@@ -5,7 +5,16 @@ import type {
   PetSnapshot,
 } from '@petwhale/electron-host'
 
-export type CompanionSnapshot = PetSnapshot
+export interface CompanionConversation {
+  sessionId: string
+  title: string
+  message: string
+  activeCount: number
+}
+
+export interface CompanionSnapshot extends PetSnapshot {
+  conversation?: CompanionConversation
+}
 
 export const COMPANION_SIZE_PERCENT_MIN = 50
 export const COMPANION_SIZE_PERCENT_MAX = 150

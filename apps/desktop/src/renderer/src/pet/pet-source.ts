@@ -1,4 +1,5 @@
-import type { CompanionSnapshot, CompanionSource } from '@petwhale/core'
+import type { CompanionSnapshot as CoreCompanionSnapshot, CompanionSource } from '@petwhale/core'
+import type { CompanionConversation, CompanionSnapshot } from '../../../shared/companion'
 
 export class TelosIpcCompanionSource implements CompanionSource {
   private snapshot: CompanionSnapshot = {
@@ -10,8 +11,12 @@ export class TelosIpcCompanionSource implements CompanionSource {
   private readonly listeners = new Set<() => void>()
   private unsubscribe: (() => void) | undefined
 
-  getSnapshot(): CompanionSnapshot {
-    return this.snapshot
+  getSnapshot(): CoreCompanionSnapshot {
+    return this.snapshot as CoreCompanionSnapshot
+  }
+
+  getConversation(): CompanionConversation | undefined {
+    return this.snapshot.conversation
   }
 
   subscribe(listener: () => void): () => void {

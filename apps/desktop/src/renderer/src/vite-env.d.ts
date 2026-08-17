@@ -8,6 +8,13 @@ import type {
 } from '@telos/runtime-contracts'
 import type { DshWebSnapshot } from '../../shared/dsh-web'
 import type { EditorPanelPreferences } from '../../shared/workbench-preferences'
+import type {
+  CompanionConfig,
+  CompanionImportKind,
+  CompanionSettingsPatch,
+  CompanionSettingsView,
+  CompanionSnapshot,
+} from '../../shared/companion'
 
 interface TelosAppInfo {
   name: string
@@ -34,6 +41,18 @@ declare global {
       workbench: {
         getEditorPanels: (workspace: string) => Promise<EditorPanelPreferences | undefined>
         setEditorPanels: (workspace: string, value: EditorPanelPreferences) => Promise<void>
+      }
+      companion: {
+        onState: (observer: (snapshot: CompanionSnapshot) => void) => () => void
+        onConfig: (observer: (config: CompanionConfig) => void) => () => void
+        showMenu: () => void
+        focusWorkbench: () => void
+        reportRendererError: (message: string) => void
+        getSettings: () => Promise<CompanionSettingsView>
+        updateSettings: (patch: CompanionSettingsPatch) => Promise<CompanionSettingsView>
+        importPet: (kind: CompanionImportKind) => Promise<CompanionSettingsView>
+        removePet: (id: string) => Promise<CompanionSettingsView>
+        onSettingsChanged: (observer: (view: CompanionSettingsView) => void) => () => void
       }
     }
   }

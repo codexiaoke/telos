@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'unsafe-eval' https://cubism.live2d.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' petwhale-live2d:; img-src 'self' data: blob: file: petwhale-live2d:; media-src 'self' data: blob: petwhale-live2d:"
+    />
+    <title>Telos Companion</title>
+  </head>
+  <body>
+    <div id="conversation" aria-live="polite" role="status">
+      <strong id="conversation-title"></strong>
+      <span id="conversation-message"></span>
+    </div>
+    <div id="pet"></div>
+    <div id="pet-controls" aria-label="宠物操作">
+      <button id="focus-workbench" aria-label="回到 Telos 会话" title="回到 Telos 会话" type="button">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M5 9v6M9 5v14M13 8v8M17 4v16M21 9v6" />
+        </svg>
+      </button>
+      <button id="toggle-conversation" aria-label="收起会话消息" title="展开或收起会话消息" type="button">
+        <span id="conversation-count">0</span>
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+    </div>
+    <script type="module" src="/src/pet/main.ts"></script>
+  </body>
+</html>

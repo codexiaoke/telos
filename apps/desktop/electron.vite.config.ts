@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin({
-      exclude: ['@telos/runtime-contracts', '@telos/runtime-dsh']
+      exclude: ['@telos/runtime-contracts', '@telos/runtime-dsh', '@petwhale/electron-host']
     })]
   },
   preload: {
@@ -14,6 +14,14 @@ export default defineConfig({
     })]
   },
   renderer: {
-    plugins: [react({}), tailwindcss({})]
+    plugins: [react({}), tailwindcss({})],
+    build: {
+      rollupOptions: {
+        input: {
+          index: 'src/renderer/index.html',
+          pet: 'src/renderer/pet.html'
+        }
+      }
+    }
   }
 })

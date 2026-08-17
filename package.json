@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "pnpm run build:packages && pnpm --filter @telos/desktop dev",
     "build": "pnpm run build:packages && pnpm --filter @telos/desktop build",
-    "build:packages": "pnpm --filter @telos/personal-core --filter @telos/runtime-contracts --filter @telos/continuity-bench --filter @telos/runtime-dsh build && pnpm --filter @telos/dsh-computer-use --filter @telos/dsh-continuity --filter @telos/dsh-mcp-manager --filter @telos/dsh-multimodal --filter @telos/dsh-personalization --filter @telos/dsh-multi-root-workspace --filter @telos/dsh-workbench-files --filter @telos/dsh-work-report build",
+    "build:packages": "pnpm --filter @petwhale/core --filter @petwhale/electron-host --filter @petwhale/renderer-live2d --filter @petwhale/renderer-orb --filter @petwhale/renderer-sprite build && pnpm --filter @telos/personal-core --filter @telos/runtime-contracts --filter @telos/continuity-bench --filter @telos/runtime-dsh build && pnpm --filter @telos/dsh-companion --filter @telos/dsh-computer-use --filter @telos/dsh-continuity --filter @telos/dsh-mcp-manager --filter @telos/dsh-multimodal --filter @telos/dsh-personalization --filter @telos/dsh-multi-root-workspace --filter @telos/dsh-workbench-files --filter @telos/dsh-work-report build",
     "typecheck": "pnpm run build:packages && pnpm --filter @telos/desktop typecheck",
     "test": "vitest run --dir packages && vitest run --dir plugins && vitest run --dir apps/desktop && vitest run --dir scripts",
     "lint": "oxlint .",

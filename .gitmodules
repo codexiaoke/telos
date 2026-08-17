@@ -1,3 +1,6 @@
 [submodule "deepseek-harness"]
 	path = third_party/deepseek-harness
 	url = https://github.com/codexiaoke/deepseek-harness.git
+[submodule "third_party/petwhale"]
+	path = third_party/petwhale
+	url = https://github.com/chenrgSix/PetWhale.git

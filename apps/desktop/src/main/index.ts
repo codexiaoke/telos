@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { app, BrowserWindow, dialog, protocol, shell } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -13,6 +13,7 @@ import {
   resolveTelosDshMcpManagerPackageRoot,
   resolveTelosDshMultimodalPackageRoot,
   resolveTelosDshPersonalizationPackageRoot,
+  resolveTelosDshCompanionPackageRoot,
   resolveTelosDshMultiRootWorkspacePackageRoot,
   resolveTelosDshWorkbenchFilesPackageRoot,
   resolveTelosDshWorkReportPackageRoot,
@@ -28,12 +29,24 @@ import { registerSystemHandlers } from './ipc/register-system-handlers.js'
 import { registerWorkbenchPreferencesHandlers } from './ipc/register-workbench-preferences-handlers.js'
 import { configureApplicationLogger } from './logging/application-logger.js'
 import { WorkbenchPreferencesStore } from './preferences/workbench-preferences-store.js'
+import { CompanionController } from './companion/companion-controller.js'
 import { installApplicationIcon } from './shell/application-icon.js'
 import { createApplicationTray, type ApplicationTrayHandle } from './shell/application-tray.js'
 import { installApplicationMenu } from './shell/application-menu.js'
 import { createMainWindow, loadDshWeb } from './shell/main-window.js'
 import { createManualUpdateFeedback } from './update/manual-update-feedback.js'
 import { UpdateService } from './update/update-service.js'
+
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'petwhale-live2d',
+  privileges: {
+    standard: true,
+    secure: true,
+    supportFetchAPI: true,
+    corsEnabled: true,
+    stream: true,
+  },
+}])
 
 app.setName('Telos')
 const applicationProfile = configureApplicationProfile(app)
@@ -61,6 +74,7 @@ const updateService = new UpdateService({
 let dshWeb: DshWebSupervisor | undefined
 let mainWindow: BrowserWindow | undefined
 let tray: ApplicationTrayHandle | undefined
+let companion: CompanionController | undefined
 let quitRequested = false
 let shutdownStarted = false
 let shutdownPromise: Promise<void> | undefined
@@ -161,6 +175,7 @@ async function startApplication(): Promise<void> {
     mcpManagerPackageRoot: resolveTelosDshMcpManagerPackageRoot(),
     multimodalPackageRoot: resolveTelosDshMultimodalPackageRoot(),
     personalizationPackageRoot: resolveTelosDshPersonalizationPackageRoot(),
+    companionPackageRoot: resolveTelosDshCompanionPackageRoot(),
     multiRootWorkspacePackageRoot: resolveTelosDshMultiRootWorkspacePackageRoot(),
     workbenchFilesPackageRoot: resolveTelosDshWorkbenchFilesPackageRoot(),
     workReportPackageRoot: resolveTelosDshWorkReportPackageRoot(),
@@ -173,6 +188,18 @@ async function startApplication(): Promise<void> {
     executablePath: resolveDshNodeExecutable(),
     patchPaths: [telosPatch],
   })
+  companion = new CompanionController({
+    userDataPath: app.getPath('userData'),
+    preloadPath: join(__dirname, '../preload/index.js'),
+    rendererPath: join(__dirname, '../renderer/pet.html'),
+    logger,
+    getWorkbenchWebContents: () => (
+      mainWindow !== undefined && !mainWindow.isDestroyed()
+        ? mainWindow.webContents
+        : undefined
+    ),
+  })
+  companion.start(dshWeb)
   registerDshWebHandlers({
     getSnapshot: () => dshWeb?.getSnapshot() ?? {
       state: 'idle',
@@ -196,6 +223,10 @@ async function startApplication(): Promise<void> {
     quit: requestQuit,
     getUpdateSnapshot: () => updateService.getSnapshot(),
     subscribeToUpdates: observer => updateService.subscribe(observer),
+    companion: {
+      menuItem: () => companion?.trayMenuItem() ?? { label: '桌面宠物', enabled: false },
+      subscribe: observer => companion?.subscribe(observer) ?? (() => undefined),
+    },
   })
   updateService.start()
 
@@ -227,12 +258,16 @@ if (!app.requestSingleInstanceLock()) {
 app.on('before-quit', (event) => {
   quitRequested = true
   updateService.stop()
+  companion?.dispose()
+  companion = undefined
   if (dshWeb === undefined || shutdownStarted) return
   event.preventDefault()
   void stopDshRuntime().finally(() => app.quit())
 })
 
 app.on('will-quit', () => {
+  companion?.dispose()
+  companion = undefined
   tray?.destroy()
   tray = undefined
 })

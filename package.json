@@ -1,6 +1,6 @@
 {
   "name": "telos",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "A local-first personal intelligence system built on the DeepSeek Harness agent runtime.",
   "packageManager": "pnpm@11.17.0",

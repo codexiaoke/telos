@@ -1,6 +1,6 @@
 {
   "name": "@telos/desktop",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "author": "Telos contributors",
   "description": "Telos desktop application",
